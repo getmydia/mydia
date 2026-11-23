@@ -256,7 +256,7 @@ defmodule Mydia.Config.Loader do
       server: load_server_env(),
       database: load_database_env(),
       auth: load_auth_env(),
-      media: load_media_env(),
+      media: Mydia.Config.Env.MediaEnv.load(),
       metadata: Mydia.Config.Env.MetadataEnv.load(),
       ui: Mydia.Config.Env.UiEnv.load(),
       downloads: load_downloads_env(),
@@ -324,30 +324,6 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(:oidc_default_role, System.get_env("OIDC_DEFAULT_ROLE"))
     |> put_if_present(:jwt_ttl_days, System.get_env("JWT_TTL_DAYS"), &parse_integer/1)
     |> put_if_present(:jwt_allowed_drift, System.get_env("JWT_ALLOWED_DRIFT"), &parse_integer/1)
-  end
-
-  defp load_media_env do
-    %{}
-    |> put_if_present(:movies_path, System.get_env("MOVIES_PATH"))
-    |> put_if_present(:tv_path, System.get_env("TV_PATH"))
-    |> put_if_present(
-      :movies_auto_organize,
-      System.get_env("MOVIES_AUTO_ORGANIZE"),
-      &parse_boolean/1
-    )
-    |> put_if_present(:tv_auto_organize, System.get_env("TV_AUTO_ORGANIZE"), &parse_boolean/1)
-    |> put_if_present(:auto_search_on_add, System.get_env("AUTO_SEARCH_ON_ADD"), &parse_boolean/1)
-    |> put_if_present(:monitor_by_default, System.get_env("MONITOR_BY_DEFAULT"), &parse_boolean/1)
-    |> put_if_present(
-      :default_season_monitoring,
-      System.get_env("DEFAULT_SEASON_MONITORING"),
-      &{:ok, String.downcase(&1)}
-    )
-    |> put_if_present(
-      :trash_retention_days,
-      System.get_env("TRASH_RETENTION_DAYS"),
-      &parse_integer/1
-    )
   end
 
   defp load_downloads_env do

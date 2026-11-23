@@ -40,6 +40,82 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
     end
   end
 
+  describe "release availability dates" do
+    test "takes the earliest digital and physical dates across regions" do
+      body = %{
+        "id" => 9101,
+        "title" => "Copper Weather",
+        "release_date" => "2031-03-01",
+        "release_dates" => %{
+          "results" => [
+            %{
+              "iso_3166_1" => "US",
+              "release_dates" => [
+                %{"type" => 3, "release_date" => "2031-03-01T00:00:00.000Z"},
+                %{"type" => 4, "release_date" => "2031-05-20T00:00:00.000Z"}
+              ]
+            },
+            %{
+              "iso_3166_1" => "GB",
+              "release_dates" => [
+                %{"type" => 4, "release_date" => "2031-05-12T00:00:00.000Z"},
+                %{"type" => 5, "release_date" => "2031-07-01T00:00:00.000Z"}
+              ]
+            }
+          ]
+        }
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "9101")
+
+      assert metadata.digital_release_date == ~D[2031-05-12]
+      assert metadata.physical_release_date == ~D[2031-07-01]
+    end
+
+    test "nil when the types are absent or malformed" do
+      body = %{
+        "id" => 9102,
+        "title" => "Copper Weather II",
+        "release_dates" => %{
+          "results" => [
+            %{
+              "iso_3166_1" => "US",
+              "release_dates" => [
+                %{"type" => 3, "release_date" => "2032-03-01T00:00:00.000Z"},
+                %{"type" => 4, "release_date" => "garbage"}
+              ]
+            }
+          ]
+        }
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :movie, "9102")
+
+      assert metadata.digital_release_date == nil
+      assert metadata.physical_release_date == nil
+    end
+
+    test "nil for tv shows" do
+      body = %{
+        "id" => 9103,
+        "name" => "Copper Weather Stories",
+        "release_dates" => %{
+          "results" => [
+            %{
+              "iso_3166_1" => "US",
+              "release_dates" => [%{"type" => 4, "release_date" => "2031-05-12T00:00:00.000Z"}]
+            }
+          ]
+        }
+      }
+
+      metadata = MediaMetadata.from_api_response(body, :tv_show, "9103")
+
+      assert metadata.digital_release_date == nil
+      assert metadata.physical_release_date == nil
+    end
+  end
+
   describe "content_rating for movies" do
     test "picks the US certification when present" do
       body = %{
@@ -141,7 +217,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
       metadata = MediaMetadata.from_api_response(body, :movie, "603")
 
       assert [%CastMember{tmdb_person_id: 4242, name: "Odhran Pike"}] = metadata.cast
-      assert metadata.schema_version == 2
+      assert metadata.schema_version >= 2
     end
   end
 

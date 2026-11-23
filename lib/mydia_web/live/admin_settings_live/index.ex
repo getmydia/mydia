@@ -3,6 +3,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
   alias Mydia.Settings
   alias MydiaWeb.AdminSettingsLive.Components
+  alias MydiaWeb.AdminSettingsLive.Labels
   alias MydiaWeb.AdminSettingsLive.LanguageSettings
   alias MydiaWeb.AdminSettingsLive.ProxyComponents
   alias MydiaWeb.AdminSettingsLive.ProxySettings
@@ -545,7 +546,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           key: "auth.oidc_default_role",
           type: :select,
           value: config.auth.oidc_default_role,
-          options: oidc_default_role_options(),
+          options: Labels.oidc_default_role_options(),
           source:
             Settings.config_source(
               "OIDC_DEFAULT_ROLE",
@@ -566,6 +567,18 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           type: :string,
           value: config.media.tv_path,
           source: Settings.config_source("TV_PATH", "media.tv_path", all_db_settings)
+        },
+        %{
+          key: "media.minimum_availability",
+          type: :select,
+          value: config.media.minimum_availability,
+          options: MydiaWeb.MinimumAvailabilityLabels.options(),
+          source:
+            Settings.config_source(
+              "MINIMUM_AVAILABILITY",
+              "media.minimum_availability",
+              all_db_settings
+            )
         }
       ],
       "Downloads" => [
@@ -756,20 +769,6 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     {%{}, types}
     |> Ecto.Changeset.cast(attrs_with_string_category, Map.keys(types))
     |> Ecto.Changeset.validate_required([:key, :category])
-  end
-
-  # Labels for AuthChangeset.oidc_default_roles/0, in the same order.
-  defp oidc_default_role_options do
-    labels = %{
-      "guest" => gettext("Guest"),
-      "readonly" => gettext("Read Only"),
-      "user" => gettext("User")
-    }
-
-    Enum.map(
-      Mydia.Config.Schema.AuthChangeset.oidc_default_roles(),
-      &{&1, Map.fetch!(labels, &1)}
-    )
   end
 
   defp category_string_to_atom(category_string) do

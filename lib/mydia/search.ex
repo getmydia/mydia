@@ -345,15 +345,22 @@ defmodule Mydia.Search do
   Callers are expected to have filtered the list already, typically with
   `Mydia.Media.partition_for_auto_search/1`.
 
+  Pass `ignore_availability: true` when the user clicked Search (the bulk
+  action, GraphQL): the movie is searched even before its minimum
+  availability (`Mydia.Media.MinimumAvailability`). Search on add omits it
+  and waits.
+
   Returns `{:ok, count}` with the number of jobs inserted, or `{:error,
   reason}` if any insert failed.
   """
-  @spec queue_auto_searches([MediaItem.t()]) :: {:ok, non_neg_integer()} | {:error, term()}
-  def queue_auto_searches([]), do: {:ok, 0}
+  @spec queue_auto_searches([MediaItem.t()], keyword()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def queue_auto_searches(items, opts \\ [])
+  def queue_auto_searches([], _opts), do: {:ok, 0}
 
-  def queue_auto_searches(items) when is_list(items) do
+  def queue_auto_searches(items, opts) when is_list(items) do
     items
-    |> Enum.map(&auto_search_job/1)
+    |> Enum.map(&auto_search_job(&1, opts[:ignore_availability] == true))
     |> Enum.reject(&is_nil/1)
     |> insert_jobs(0)
   rescue
@@ -379,15 +386,17 @@ defmodule Mydia.Search do
 
   # Every caller is a search a person asked for (search on add, the bulk
   # Search action, GraphQL), so it skips the profile's grab delay.
-  defp auto_search_job(%MediaItem{type: "movie", id: id}) do
-    Mydia.Jobs.MovieSearch.new(%{mode: "specific", media_item_id: id, bypass_delay: true})
+  defp auto_search_job(%MediaItem{type: "movie", id: id}, ignore_availability?) do
+    %{mode: "specific", media_item_id: id, bypass_delay: true}
+    |> then(&if(ignore_availability?, do: Map.put(&1, :ignore_availability, true), else: &1))
+    |> Mydia.Jobs.MovieSearch.new()
   end
 
-  defp auto_search_job(%MediaItem{type: "tv_show", id: id}) do
+  defp auto_search_job(%MediaItem{type: "tv_show", id: id}, _ignore_availability?) do
     Mydia.Jobs.TVShowSearch.new(%{mode: "show", media_item_id: id, bypass_delay: true})
   end
 
-  defp auto_search_job(%MediaItem{id: id, type: type}) do
+  defp auto_search_job(%MediaItem{id: id, type: type}, _ignore_availability?) do
     Logger.warning("Skipping auto search for unsupported media type",
       media_item_id: id,
       type: type

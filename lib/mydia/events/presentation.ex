@@ -17,6 +17,7 @@ defmodule Mydia.Events.Presentation do
   """
 
   alias Mydia.Events.Event
+  alias Mydia.Events.Presentation.RelativeTime
 
   defstruct [:type, :icon, :color, :title, :detail, feed?: true]
 
@@ -241,6 +242,12 @@ defmodule Mydia.Events.Presentation do
       title: "All results filtered out"
     },
     %{type: "search.deferred", icon: "hero-clock", color: "text-info", title: "Grab delayed"},
+    %{
+      type: "search.skipped_unavailable",
+      icon: "hero-calendar",
+      color: "text-info",
+      title: "Waiting for release"
+    },
     # Recorded only by v0.15.x, which ran the identity check in shadow beside
     # the old title gate. Nothing records it now; kept so those rows render.
     %{
@@ -554,7 +561,12 @@ defmodule Mydia.Events.Presentation do
 
   def detail(%Event{type: "search.deferred", metadata: metadata}) do
     "#{search_subject(metadata)}, waiting for better releases, " <>
-      "grab #{next_eligible(metadata["grab_after"])}"
+      "grab #{RelativeTime.describe(metadata["grab_after"])}"
+  end
+
+  def detail(%Event{type: "search.skipped_unavailable", metadata: metadata}) do
+    "#{search_subject(metadata)}, not searched until #{metadata["eligible_on"] || "released"} " <>
+      "(minimum availability: #{metadata["level"]})"
   end
 
   def detail(%Event{type: "search.identity_shadow", metadata: metadata}) do
@@ -569,7 +581,7 @@ defmodule Mydia.Events.Presentation do
   def detail(%Event{type: "search.backoff_applied", metadata: metadata}) do
     "#{search_subject(metadata)} (#{backoff_resource_type(metadata)}), " <>
       "#{backoff_reason(metadata["reason"])}, attempt ##{metadata["failure_count"] || 1}, " <>
-      "next search #{next_eligible(metadata["next_eligible_at"])}"
+      "next search #{RelativeTime.describe(metadata["next_eligible_at"])}"
   end
 
   def detail(%Event{type: "search.backoff_reset", metadata: metadata}) do
@@ -816,41 +828,6 @@ defmodule Mydia.Events.Presentation do
 
       true ->
         "show"
-    end
-  end
-
-  defp next_eligible(nil), do: "unknown"
-
-  defp next_eligible(iso_string) when is_binary(iso_string) do
-    case DateTime.from_iso8601(iso_string) do
-      {:ok, dt, _offset} -> relative_future_time(dt)
-      _ -> iso_string
-    end
-  end
-
-  defp next_eligible(_), do: "unknown"
-
-  defp relative_future_time(dt) do
-    diff_seconds = DateTime.diff(dt, DateTime.utc_now())
-
-    cond do
-      diff_seconds <= 0 -> "now"
-      diff_seconds < 60 -> "in #{pluralize_unit(diff_seconds, "second")}"
-      diff_seconds < 3600 -> "in #{pluralize_unit(div(diff_seconds, 60), "minute")}"
-      diff_seconds < 86_400 -> "in #{format_hours(diff_seconds / 3600)}"
-      true -> "in #{pluralize_unit(div(diff_seconds, 86_400), "day")}"
-    end
-  end
-
-  # Whole hours read better without the decimal ("in 2 hours", not "in 2.0
-  # hours"), and one hour needs the singular. Fractional hours keep one place.
-  defp format_hours(hours) do
-    rounded = Float.round(hours, 1)
-
-    if rounded == trunc(rounded) do
-      pluralize_unit(trunc(rounded), "hour")
-    else
-      "#{rounded} hours"
     end
   end
 

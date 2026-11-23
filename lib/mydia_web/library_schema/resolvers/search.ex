@@ -7,8 +7,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
   for 60 seconds on their arguments, so a repeat inside that window is merged by
   Oban and still reports true.
 
-  Every search queued here skips the quality profile's grab delay: the caller
-  asked for it now.
+  Every search queued here skips the quality profile's grab delay and a movie's
+  minimum availability: the caller asked for it now.
   """
 
   alias Mydia.Jobs.TVShowSearch
@@ -20,7 +20,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
           {:ok, map()} | {:error, String.t()}
   def search_media_item(_parent, %{id: id}, _resolution) do
     with {:ok, item} <- Loaders.item(id, ["id"]),
-         {:ok, _count} <- Search.queue_auto_searches([item]) do
+         {:ok, _count} <- Search.queue_auto_searches([item], ignore_availability: true) do
       # Any successful insert (including a repeat merged by Oban's uniqueness
       # constraint) should report queued: true. queue_auto_searches returns
       # count: 0 when the job was deduped (conflict?: true), but the job is

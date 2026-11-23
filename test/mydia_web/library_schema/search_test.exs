@@ -42,7 +42,12 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
 
       assert_enqueued(
         worker: Mydia.Jobs.MovieSearch,
-        args: %{"mode" => "specific", "media_item_id" => movie.id, "bypass_delay" => true}
+        args: %{
+          "mode" => "specific",
+          "media_item_id" => movie.id,
+          "bypass_delay" => true,
+          "ignore_availability" => true
+        }
       )
     end
 

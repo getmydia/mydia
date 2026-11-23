@@ -370,6 +370,52 @@ defmodule Mydia.Media.MetadataTypeTest do
     end
   end
 
+  describe "digital and physical release dates" do
+    test "load back as dates, and as nil from blobs written before they existed" do
+      {:ok, current} =
+        Media.create_media_item(
+          Scope.unrestricted(),
+          %{
+            type: "movie",
+            title: "Copper Weather",
+            year: 2031,
+            metadata: %{
+              "provider_id" => "9101",
+              "provider" => "tmdb",
+              "media_type" => "movie",
+              "title" => "Copper Weather",
+              "digital_release_date" => "2031-05-12",
+              "physical_release_date" => "2031-07-01"
+            }
+          }
+        )
+
+      {:ok, legacy} =
+        Media.create_media_item(
+          Scope.unrestricted(),
+          %{
+            type: "movie",
+            title: "Copper Weather II",
+            year: 2032,
+            metadata: %{
+              "provider_id" => "9102",
+              "provider" => "tmdb",
+              "media_type" => "movie",
+              "title" => "Copper Weather II"
+            }
+          }
+        )
+
+      current = Media.get_media_item!(Scope.unrestricted(), current.id)
+      legacy = Media.get_media_item!(Scope.unrestricted(), legacy.id)
+
+      assert current.metadata.digital_release_date == ~D[2031-05-12]
+      assert current.metadata.physical_release_date == ~D[2031-07-01]
+      assert legacy.metadata.digital_release_date == nil
+      assert legacy.metadata.physical_release_date == nil
+    end
+  end
+
   describe "cast tmdb_person_id" do
     test "round-trips tmdb_person_id" do
       metadata = %MediaMetadata{

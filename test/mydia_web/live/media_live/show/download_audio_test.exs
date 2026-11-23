@@ -87,7 +87,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioTest do
 
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
 
-    render_hook(view, "set_download_audio_language", %{})
+    render_hook(view, "download_audio:set", %{})
 
     assert Mydia.Repo.get!(MediaItem, show.id).download_audio_language == "en"
   end

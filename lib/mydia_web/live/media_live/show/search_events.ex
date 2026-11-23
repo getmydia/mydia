@@ -135,7 +135,12 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
       case media_item.type do
         "movie" ->
-          %{mode: "specific", media_item_id: media_item.id, bypass_delay: true}
+          %{
+            mode: "specific",
+            media_item_id: media_item.id,
+            bypass_delay: true,
+            ignore_availability: true
+          }
           |> Mydia.Jobs.MovieSearch.new()
           |> Oban.insert()
 

@@ -1105,6 +1105,131 @@ defmodule Mydia.Jobs.MovieSearchTest do
     end
   end
 
+  describe "minimum availability" do
+    setup %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [IndexerMock.movie_result(%{title: "Copper Weather", year: 2031, seeders: 40})]
+      )
+
+      original = Application.get_env(:mydia, :runtime_config)
+
+      on_exit(fn ->
+        if original do
+          Application.put_env(:mydia, :runtime_config, original)
+        else
+          Application.delete_env(:mydia, :runtime_config)
+        end
+      end)
+
+      :ok
+    end
+
+    # The theatrical date is what makes it unreleased.
+    defp unreleased_movie(attrs \\ %{}) do
+      release_date = Date.add(Date.utc_today(), 30)
+
+      movie =
+        media_item_fixture(
+          Map.merge(
+            %{
+              type: "movie",
+              title: "Copper Weather",
+              year: 2031,
+              metadata: %Mydia.Metadata.Structs.MediaMetadata{
+                provider_id: "9101",
+                provider: :tmdb,
+                media_type: :movie,
+                title: "Copper Weather",
+                release_date: release_date
+              }
+            },
+            attrs
+          )
+        )
+
+      {movie, release_date}
+    end
+
+    defp put_minimum_availability(level) do
+      config = Mydia.Config.get()
+      media = struct(config.media, minimum_availability: level)
+      Application.put_env(:mydia, :runtime_config, %{config | media: media})
+    end
+
+    test "the sweep skips a movie that is not available yet" do
+      put_minimum_availability("released")
+      {movie, _} = unreleased_movie()
+
+      refute movie.id in Enum.map(MovieSearch.load_monitored_movies_without_files(), & &1.id)
+    end
+
+    test "the sweep includes it under announced" do
+      put_minimum_availability("announced")
+      {movie, _} = unreleased_movie()
+
+      assert movie.id in Enum.map(MovieSearch.load_monitored_movies_without_files(), & &1.id)
+    end
+
+    test "a specific search waits and records why, without touching indexers" do
+      put_minimum_availability("released")
+      {movie, release_date} = unreleased_movie()
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      refute_receive {:search_completed, _id, _stats}, 200
+      assert Mydia.Downloads.list_downloads() == []
+
+      [event] = Mydia.Events.list_events(type: "search.skipped_unavailable")
+      assert event.resource_id == movie.id
+      assert event.metadata["level"] == "released"
+      assert event.metadata["eligible_on"] == Date.to_iso8601(Date.add(release_date, 90))
+    end
+
+    test "the movie's own level overrides the global one" do
+      put_minimum_availability("announced")
+      {movie, release_date} = unreleased_movie(%{minimum_availability: "in_cinemas"})
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      [event] = Mydia.Events.list_events(type: "search.skipped_unavailable")
+      assert event.metadata["level"] == "in_cinemas"
+      assert event.metadata["eligible_on"] == Date.to_iso8601(release_date)
+    end
+
+    test "a grab-delay re-check of an unavailable movie is skipped too" do
+      put_minimum_availability("released")
+      {movie, _} = unreleased_movie()
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "specific",
+                 "media_item_id" => movie.id,
+                 "recheck" => true
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+      assert [_event] = Mydia.Events.list_events(type: "search.skipped_unavailable")
+    end
+
+    test "ignore_availability searches anyway" do
+      put_minimum_availability("released")
+      {movie, _} = unreleased_movie()
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "specific",
+                 "media_item_id" => movie.id,
+                 "ignore_availability" => true
+               })
+
+      assert_receive {:search_completed, _id, %{results_found: found}}
+      assert found > 0
+      assert Mydia.Events.list_events(type: "search.skipped_unavailable") == []
+    end
+  end
+
   describe "release identity" do
     test "does not grab a release that only starts with the title", %{bypass: bypass} do
       junk = "2031-05-12 Lantern Vale (Harbor Chapter 1 Arrival) 1080p.mkv"

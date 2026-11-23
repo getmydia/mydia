@@ -59,6 +59,7 @@ defmodule Mydia.Config.LoaderTest do
         "DOWNLOAD_SUBTITLE_LANGUAGE",
         "SUBTITLE_PLAYBACK_LANGUAGE",
         "DEFAULT_SEASON_MONITORING",
+        "MINIMUM_AVAILABILITY",
         "HWACCEL",
         "HWACCEL_DEVICE",
         "ENABLE_REMOTE_ACCESS",
@@ -1489,6 +1490,30 @@ defmodule Mydia.Config.LoaderTest do
       {:ok, config} = Mydia.Config.Loader.load(sources: [:env])
 
       assert config.media.default_season_monitoring == "first"
+    end
+  end
+
+  describe "media minimum_availability (MINIMUM_AVAILABILITY)" do
+    test "defaults to released" do
+      assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.media.minimum_availability == "released"
+    end
+
+    test "loads from MINIMUM_AVAILABILITY, case-insensitively" do
+      System.put_env("MINIMUM_AVAILABILITY", "IN_CINEMAS")
+
+      {:ok, config} = Loader.load(sources: [:env])
+
+      assert config.media.minimum_availability == "in_cinemas"
+    end
+
+    test "rejects a value outside the three levels" do
+      changeset =
+        Mydia.Config.Schema.changeset(%Mydia.Config.Schema{}, %{
+          media: %{minimum_availability: "sometime"}
+        })
+
+      refute changeset.valid?
     end
   end
 

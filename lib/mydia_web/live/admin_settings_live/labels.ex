@@ -38,6 +38,10 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   def label("auth.oidc_default_role"), do: gettext("Default Role for New SSO Users")
   def label("media.movies_path"), do: gettext("Movies Path")
   def label("media.tv_path"), do: gettext("TV Path")
+
+  def label("media.minimum_availability"),
+    do: gettext("Minimum Availability (automatic movie search)")
+
   def label("downloads.monitor_interval_minutes"), do: gettext("Monitor Interval (minutes)")
   def label("downloads.min_seeders"), do: gettext("Minimum Seeders (automatic search)")
   def label("streaming.max_transcode_height"), do: gettext("Max Transcode Height")
@@ -55,6 +59,12 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
     do:
       gettext(
         "Role given to an account created by its first SSO sign-in when the identity provider's roles or groups claims grant none. Existing accounts keep their role. Admin is not offered: it would make everyone at the identity provider an admin."
+      )
+
+  def description("media.minimum_availability"),
+    do:
+      gettext(
+        "When automatic search may start looking for a movie. Announced searches as soon as it is added. In cinemas waits for its theatrical release date. Released waits for the earliest of its digital release, its physical release, and 90 days after its theatrical date. A movie with no dates waits while it is still unreleased. Releases offered before then are almost always fakes. Each movie can override this, and Search buttons you click ignore it."
       )
 
   def description("downloads.min_seeders"),
@@ -89,4 +99,18 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   @doc "The placeholder of an empty setting input; nil for none."
   def placeholder("streaming.max_transcode_height"), do: gettext("no limit")
   def placeholder(_key), do: nil
+
+  @doc "`{role, label}` pairs for `AuthChangeset.oidc_default_roles/0`, in the same order."
+  def oidc_default_role_options do
+    labels = %{
+      "guest" => gettext("Guest"),
+      "readonly" => gettext("Read Only"),
+      "user" => gettext("User")
+    }
+
+    Enum.map(
+      Mydia.Config.Schema.AuthChangeset.oidc_default_roles(),
+      &{&1, Map.fetch!(labels, &1)}
+    )
+  end
 end

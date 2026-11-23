@@ -208,14 +208,8 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
         <%!-- Info Cards --%>
         <div class="rounded-box bg-base-200/50 p-2 space-y-1 mt-3">
-          <%!-- Quality Profile. A button opening a page-level modal
-                (PickerModals.quality_profile_modal/1) rather than an anchored
-                dropdown, for the same reason as the Collection button above:
-                the hero column's overflow-y-auto wrapper clips a
-                `.dropdown-content` list once it runs past the column's
-                remaining headroom, which a real quality-profile list (a
-                handful of profiles) reliably does. Measured, not assumed:
-                see the UI polish fix wave report. --%>
+          <%!-- Quality Profile: a page-level modal (PickerModals.quality_profile_modal/1),
+                not a dropdown; see LibraryComponents.target_library_row/1. --%>
           <HeroRow.row_button
             phx-click="show_quality_profile_modal"
             title={gettext("Click to change quality profile")}
@@ -240,6 +234,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           </HeroRow.row_button>
 
           <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_row media_item={@media_item} />
+
+          <MydiaWeb.MediaLive.Show.AvailabilityComponents.availability_row
+            :if={@media_item.type == "movie"}
+            media_item={@media_item}
+          />
 
           <LibraryComponents.target_library_row
             media_item={@media_item}

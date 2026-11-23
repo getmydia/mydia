@@ -25,7 +25,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioComponents do
     ~H"""
     <HeroRow.row_button
       id="download-audio-row"
-      phx-click="show_download_audio_modal"
+      phx-click="download_audio:show"
       title={gettext("Click to change which audio search prefers")}
     >
       <div class="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
@@ -94,12 +94,12 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioComponents do
           </.option>
         </ul>
         <div class="modal-action">
-          <button type="button" phx-click="hide_download_audio_modal" class="btn btn-ghost">
+          <button type="button" phx-click="download_audio:hide" class="btn btn-ghost">
             {gettext("Cancel")}
           </button>
         </div>
       </div>
-      <div class="modal-backdrop" phx-click="hide_download_audio_modal"></div>
+      <div class="modal-backdrop" phx-click="download_audio:hide"></div>
     </div>
     """
   end
@@ -115,7 +115,7 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioComponents do
       <button
         id={@id}
         type="button"
-        phx-click="set_download_audio_language"
+        phx-click="download_audio:set"
         phx-value-language={@value}
         class={["justify-between", @active? && "active"]}
       >

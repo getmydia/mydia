@@ -39,6 +39,7 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Indexers.{RankingOptions, ReleaseIdentity}
   alias Mydia.Indexers.GrabDelay
   alias Mydia.Jobs.{RateLimitDeferral, SearchDeferral}
+  alias Mydia.Jobs.MovieSearch.Args
   import RateLimitDeferral, only: [count_enabled_indexers: 0]
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
@@ -46,92 +47,12 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Library.MediaFile
   alias Mydia.Media.MediaItem
   alias Mydia.Media.AudioLanguagePolicy
+  alias Mydia.Media.MinimumAvailability
   alias Mydia.Settings.CustomFormats
   alias Mydia.Settings.QualityProfile
   alias Mydia.Upgrades
   alias Mydia.Upgrades.Reasons
   alias Phoenix.PubSub
-
-  defmodule Args do
-    @moduledoc false
-    defstruct [
-      :mode,
-      :media_item_id,
-      :media_file_id,
-      :min_seeders,
-      :size_range,
-      :blocked_tags,
-      :preferred_tags,
-      :reasons,
-      bypass_delay: false,
-      recheck: false
-    ]
-
-    @type t :: %__MODULE__{
-            mode: String.t() | nil,
-            media_item_id: String.t() | nil,
-            media_file_id: String.t() | nil,
-            min_seeders: integer() | nil,
-            size_range: term() | nil,
-            blocked_tags: [String.t()] | nil,
-            preferred_tags: [String.t()] | nil,
-            reasons: [:quality | :language] | nil,
-            bypass_delay: boolean(),
-            recheck: boolean()
-          }
-
-    # bypass_delay is set only by searches the user started (Search buttons,
-    # search on add, GraphQL); they skip the profile's grab delay. See
-    # Mydia.Indexers.GrabDelay. recheck is set only on the re-check a delayed
-    # grab schedules.
-    def parse(raw) do
-      %{
-        do_parse(raw)
-        | bypass_delay: Map.get(raw, "bypass_delay") == true,
-          recheck: Map.get(raw, "recheck") == true
-      }
-    end
-
-    defp do_parse(%{"mode" => "all_monitored"} = raw) do
-      %__MODULE__{
-        mode: "all_monitored",
-        min_seeders: Map.get(raw, "min_seeders"),
-        size_range: Map.get(raw, "size_range"),
-        blocked_tags: Map.get(raw, "blocked_tags"),
-        preferred_tags: Map.get(raw, "preferred_tags")
-      }
-    end
-
-    defp do_parse(%{"mode" => "specific", "media_item_id" => media_item_id} = raw) do
-      %__MODULE__{
-        mode: "specific",
-        media_item_id: media_item_id,
-        min_seeders: Map.get(raw, "min_seeders"),
-        size_range: Map.get(raw, "size_range"),
-        blocked_tags: Map.get(raw, "blocked_tags"),
-        preferred_tags: Map.get(raw, "preferred_tags")
-      }
-    end
-
-    defp do_parse(
-           %{
-             "mode" => "upgrade",
-             "media_item_id" => media_item_id,
-             "media_file_id" => media_file_id
-           } = raw
-         ) do
-      %__MODULE__{
-        mode: "upgrade",
-        media_item_id: media_item_id,
-        media_file_id: media_file_id,
-        min_seeders: Map.get(raw, "min_seeders"),
-        size_range: Map.get(raw, "size_range"),
-        blocked_tags: Map.get(raw, "blocked_tags"),
-        preferred_tags: Map.get(raw, "preferred_tags"),
-        reasons: Mydia.Upgrades.Reasons.decode(Map.get(raw, "reasons"))
-      }
-    end
-  end
 
   # Minimum seeders an automatic search result must report, resolved through
   # the layered runtime config (schema default < YAML < settings UI/DB <
@@ -228,7 +149,7 @@ defmodule Mydia.Jobs.MovieSearch do
             :skipped
 
           %MediaItem{type: "movie"} = movie ->
-            search_movie_with_stats(movie, args)
+            search_if_available(movie, args)
 
           %MediaItem{type: type} ->
             Logger.error("Invalid media type for movie search",
@@ -488,8 +409,31 @@ defmodule Mydia.Jobs.MovieSearch do
       |> Repo.all()
 
     movies
+    |> Enum.filter(&MinimumAvailability.available?/1)
     |> filter_movies_in_backoff()
     |> filter_movies_awaiting_recheck()
+  end
+
+  # Automatic searches wait for the movie's minimum availability; the Search
+  # button on its page sets ignore_availability.
+  defp search_if_available(movie, %Args{ignore_availability: true} = args),
+    do: search_movie_with_stats(movie, args)
+
+  defp search_if_available(movie, args) do
+    case MinimumAvailability.status(movie) do
+      %{available?: true} ->
+        search_movie_with_stats(movie, args)
+
+      status ->
+        Logger.info("Skipping search - movie is not available yet",
+          media_item_id: movie.id,
+          level: status.level,
+          eligible_on: status.eligible_on
+        )
+
+        MinimumAvailability.record_skip(movie, status)
+        :skipped
+    end
   end
 
   # media_item_ids with an in-flight download (still in client, not failed).

@@ -22,7 +22,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   #
   # 1: TVDB `characters` mapped into `cast` (3ac79ecd4).
   # 2: cast carries tmdb_person_id (people pages, #1346).
-  @schema_version 2
+  # 3: movies carry digital and physical release dates (minimum availability).
+  @schema_version 3
 
   @doc "The schema version `from_api_response/3` stamps on what it parses."
   @spec schema_version() :: pos_integer()
@@ -68,6 +69,10 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     # Franchise membership (movies only; TMDB never sends this for TV)
     :collection_id,
     :collection_name,
+    # Earliest TMDB digital (type 4) and physical (type 5) release dates across
+    # all regions (movies only). Mydia.Media.MinimumAvailability reads them.
+    :digital_release_date,
+    :physical_release_date,
     # TV show specific fields
     :number_of_seasons,
     :number_of_episodes,
@@ -120,6 +125,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           original_language: String.t() | nil,
           collection_id: integer() | nil,
           collection_name: String.t() | nil,
+          digital_release_date: Date.t() | nil,
+          physical_release_date: Date.t() | nil,
           schema_version: non_neg_integer(),
           number_of_seasons: integer() | nil,
           number_of_episodes: integer() | nil,
@@ -213,9 +220,36 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
         }
 
       :movie ->
-        base_metadata
+        %{
+          base_metadata
+          | digital_release_date: earliest_release_of_type(data, 4),
+            physical_release_date: earliest_release_of_type(data, 5)
+        }
     end
   end
+
+  # TMDB `release_dates` groups typed releases by region, with ISO timestamps.
+  # The earliest across every region is what matters: a digital release
+  # anywhere means real releases exist on trackers.
+  defp earliest_release_of_type(data, type) do
+    case data["release_dates"] do
+      %{"results" => results} when is_list(results) ->
+        results
+        |> Enum.flat_map(&List.wrap(&1["release_dates"]))
+        |> Enum.filter(&(is_map(&1) and &1["type"] == type))
+        |> Enum.map(&release_entry_date/1)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.min(Date, fn -> nil end)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp release_entry_date(%{"release_date" => date}) when is_binary(date),
+    do: parse_date(String.slice(date, 0, 10))
+
+  defp release_entry_date(_entry), do: nil
 
   defp get_title(data, :movie), do: data["title"] || data["name"]
   defp get_title(data, :tv_show), do: data["name"] || data["title"]

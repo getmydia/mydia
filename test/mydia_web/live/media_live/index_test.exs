@@ -869,6 +869,8 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       assert job.worker == "Mydia.Jobs.MovieSearch"
       assert job.args["mode"] == "specific"
       assert job.args["media_item_id"] == needs_search.id
+      # A Search the user clicked runs even before the movie's release.
+      assert job.args["ignore_availability"] == true
     end
 
     test "reports when nothing in the selection needs a search", %{conn: conn} do
