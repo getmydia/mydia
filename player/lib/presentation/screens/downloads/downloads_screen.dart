@@ -776,7 +776,10 @@ class DownloadsScreen extends ConsumerWidget {
               manager.cancelDownload(task.id);
               Navigator.pop(context);
             },
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: GlassDialog.liquidOnly(
+              context,
+              FilledButton.styleFrom(backgroundColor: AppColors.error),
+            ),
             child: Text(context.l10n.downloadsCancelDownloadAction),
           ),
         ],
@@ -964,7 +967,10 @@ class DownloadsScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: GlassDialog.liquidOnly(
+              context,
+              FilledButton.styleFrom(backgroundColor: AppColors.error),
+            ),
             child: Text(context.l10n.commonDelete),
           ),
         ],
@@ -1007,7 +1013,10 @@ class DownloadsScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: GlassDialog.liquidOnly(
+              context,
+              FilledButton.styleFrom(backgroundColor: AppColors.error),
+            ),
             child: Text(context.l10n.downloadsDeleteAllAction),
           ),
         ],
@@ -1042,7 +1051,10 @@ class DownloadsScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: GlassDialog.liquidOnly(
+              context,
+              FilledButton.styleFrom(backgroundColor: AppColors.error),
+            ),
             child: Text(context.l10n.downloadsCancelAllAction),
           ),
         ],
@@ -1687,7 +1699,10 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: GlassDialog.liquidOnly(
+              context,
+              FilledButton.styleFrom(backgroundColor: AppColors.error),
+            ),
             child: Text(context.l10n.downloadsDeleteAllAction),
           ),
         ],

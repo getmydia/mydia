@@ -28,6 +28,7 @@ Widget _host({required bool liquid}) => MaterialApp(
 void main() {
   _focusTests();
   _frostedLayoutTests();
+  _fixRoundTests();
   testWidgets('Liquid Glass: laid out on modal glass', (tester) async {
     await tester.pumpWidget(_host(liquid: true));
     expect(find.byType(AlertDialog), findsNothing);
@@ -395,5 +396,164 @@ void _frostedLayoutTests() {
       expect(_hasFocus(tester, _okKey), isTrue);
       expect(_fillOf(tester, _okKey), Colors.white);
     });
+  });
+}
+
+/// Opens [builder]'s dialog through a real route.
+Future<void> _openBuilt(
+  WidgetTester tester, {
+  required bool liquid,
+  required WidgetBuilder builder,
+  TextDirection textDirection = TextDirection.ltr,
+  double textScale = 1,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: _theme(liquid: liquid),
+      builder: (context, child) => Directionality(
+        textDirection: textDirection,
+        child: MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+      ),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showDialog<void>(context: context, builder: builder),
+          child: const Text('open'),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+}
+
+void _fixRoundTests() {
+  for (final liquid in [true, false]) {
+    final mode = liquid ? 'Liquid Glass' : 'Frosted';
+    testWidgets('$mode: a disabled primary hands focus to Cancel, and '
+        'enabling it later does not move focus', (tester) async {
+      final enabled = ValueNotifier(false);
+      addTearDown(enabled.dispose);
+      await _openBuilt(
+        tester,
+        liquid: liquid,
+        builder: (_) => ValueListenableBuilder<bool>(
+          valueListenable: enabled,
+          builder: (_, on, _) => GlassDialog(
+            title: const Text('Pick a quality'),
+            actions: [
+              TextButton(
+                key: _cancelKey,
+                onPressed: () {},
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                key: _okKey,
+                onPressed: on ? () {} : null,
+                child: const Text('Okay'),
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(_hasFocus(tester, _cancelKey), isTrue);
+      enabled.value = true;
+      await tester.pumpAndSettle();
+      expect(_hasFocus(tester, _cancelKey), isTrue);
+      expect(_hasFocus(tester, _okKey), isFalse);
+    });
+  }
+
+  Widget styledDestructive(BuildContext context) => GlassDialog(
+    destructive: true,
+    backgroundColor: Colors.purple,
+    title: const Text('Delete the download?'),
+    actions: [
+      TextButton(key: _cancelKey, onPressed: () {}, child: const Text('Keep')),
+      FilledButton(
+        key: _okKey,
+        onPressed: () {},
+        style: GlassDialog.liquidOnly(
+          context,
+          FilledButton.styleFrom(backgroundColor: AppColors.error),
+        ),
+        child: const Text('Delete'),
+      ),
+    ],
+  );
+
+  testWidgets('Frosted: liquidOnly drops a caller style; the tint shows and '
+      'backgroundColor is ignored', (tester) async {
+    await _openBuilt(tester, liquid: false, builder: styledDestructive);
+    expect(_fillOf(tester, _okKey), AppColors.error.withValues(alpha: 0.16));
+    expect(
+      tester.widget<Material>(_card).color,
+      Palettes.projectionBooth.surfaceHigh,
+    );
+  });
+
+  testWidgets('Liquid Glass: liquidOnly keeps the caller style', (
+    tester,
+  ) async {
+    await _openBuilt(tester, liquid: true, builder: styledDestructive);
+    expect(_fillOf(tester, _okKey), AppColors.error);
+  });
+
+  Widget wideDialog(BuildContext context, {String title = 'Export'}) =>
+      GlassDialog(
+        title: Text(title),
+        content: const SizedBox(width: 480, height: 20),
+        actions: [
+          TextButton(
+            key: _cancelKey,
+            onPressed: () {},
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: _okKey,
+            onPressed: () {},
+            child: const Text('Okay'),
+          ),
+        ],
+      );
+
+  testWidgets('Frosted: the action row mirrors under right-to-left', (
+    tester,
+  ) async {
+    await _openBuilt(
+      tester,
+      liquid: false,
+      textDirection: TextDirection.rtl,
+      builder: wideDialog,
+    );
+    final card = tester.getRect(_card);
+    final ok = tester.getRect(find.byKey(_okKey));
+    final cancel = tester.getRect(find.byKey(_cancelKey));
+    expect(ok.top, cancel.top);
+    expect(ok.left, card.left + 10);
+    expect(cancel.left, greaterThan(ok.right));
+  });
+
+  testWidgets('Frosted: a long title word at text scale 1.3 in row mode', (
+    tester,
+  ) async {
+    await _openBuilt(
+      tester,
+      liquid: false,
+      textScale: 1.3,
+      builder: (context) =>
+          wideDialog(context, title: 'Supercalifragilisticexpialidocious'),
+    );
+    expect(tester.takeException(), isNull);
+    final card = tester.getRect(_card);
+    expect(card.width, lessThanOrEqualTo(GlassDialog.frostedWideMaxWidth));
+    expect(
+      tester.getTopLeft(find.byKey(_okKey)).dy,
+      tester.getTopLeft(find.byKey(_cancelKey)).dy,
+    );
+    expect(tester.getRect(find.byKey(_okKey)).right, card.right - 10);
   });
 }

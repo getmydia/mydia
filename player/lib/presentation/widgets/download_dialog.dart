@@ -101,9 +101,12 @@ class _DownloadDialogState extends State<DownloadDialog> {
           onPressed: _selectedFile != null
               ? () => Navigator.of(context).pop(_selectedFile)
               : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: palette.primary,
-            foregroundColor: palette.onPrimary,
+          style: GlassDialog.liquidOnly(
+            context,
+            ElevatedButton.styleFrom(
+              backgroundColor: palette.primary,
+              foregroundColor: palette.onPrimary,
+            ),
           ),
           child: Text(context.l10n.commonDownload),
         ),

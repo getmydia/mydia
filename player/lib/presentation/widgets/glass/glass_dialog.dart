@@ -1,6 +1,3 @@
-import 'dart:math' as math;
-
-import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -12,13 +9,14 @@ import '../../../core/theme/palette.dart';
 import '../../../core/theme/surface_roles.dart';
 import '../controls/press_scale.dart';
 import '../glass_surface.dart';
+import 'glass_dialog_layout.dart';
 
 /// An alert dialog on Liquid Glass modal glass, and a Frosted card otherwise.
 ///
 /// [AlertDialog] paints its own Material and cannot put a backdrop behind
 /// it, so the glass path rebuilds its layout (icon, title, content,
 /// end-aligned actions) inside [GlassSurface.modal], as `OsdDialog` does for
-/// the OSD material. [backgroundColor] and [shape] only apply off Liquid Glass.
+/// the OSD material.
 ///
 /// The Frosted card is centred over the theme's scrim (`dialogTheme`'s
 /// barrier colour), [frostedMaxWidth] wide unless its content needs more (up
@@ -26,7 +24,9 @@ import '../glass_surface.dart';
 /// last; the card stacks them full width with the primary on top, or, on a
 /// card wider than 420 with exactly two actions that fit, in an end-aligned
 /// row in the caller's order. The caller's last action takes the filled
-/// style, or the error tint when [destructive].
+/// style, or the error tint when [destructive]. A style set on an action
+/// button itself beats that, so callers pass theirs through [liquidOnly].
+/// The card ignores [backgroundColor] and [shape].
 ///
 /// Either path gives the dialog a default focus target. A route opens with no
 /// focused descendant, so on a remote the first D-pad press lands nowhere.
@@ -57,12 +57,24 @@ class GlassDialog extends StatefulWidget {
   final Widget? title;
   final Widget? content;
   final List<Widget>? actions;
+
+  /// Liquid Glass ignores it, and so does the Frosted card, which is always
+  /// `surfaceHigh`.
   final Color? backgroundColor;
+
+  /// Ignored like [backgroundColor]: the Frosted card always takes the
+  /// modal radius.
   final ShapeBorder? shape;
 
   /// Focus the first action instead of the last. Set it on confirmations that
   /// delete or remove something, where the last action is the destructive one.
   final bool destructive;
+
+  /// [style] under Liquid Glass, and null in Frosted, where the dialog
+  /// styles its actions itself (filled primary, error tint when
+  /// [destructive]). For a caller's own `styleFrom(...)` on an action.
+  static ButtonStyle? liquidOnly(BuildContext context, ButtonStyle style) =>
+      GlassStyle.of(context) ? style : null;
 
   /// Frosted card width for ordinary content.
   static const double frostedMaxWidth = 340;
@@ -126,17 +138,22 @@ class _GlassDialogState extends State<GlassDialog> {
     // The nearest scope above this state is the route's.
     final routeScope = FocusScope.of(context);
     if (routeScope.focusedChild != null) return;
-    final frosted = !GlassStyle.of(context);
-    final targets = (frosted ? _defaultActionNode : _actionsNode)
-        .traversalDescendants
+    List<FocusNode> focusable(FocusNode group) => group.traversalDescendants
         .where((node) => node.canRequestFocus && !node.skipTraversal)
         .toList();
-    if (targets.isEmpty) return;
-    if (frosted) {
-      targets.first.requestFocus();
-    } else {
-      (widget.destructive ? targets.first : targets.last).requestFocus();
+    // Frosted reverses the actions visually, so its target is the wrapped
+    // action itself. When that action starts disabled (a primary that waits
+    // on a choice), fall back to the position pick both paths used before.
+    if (!GlassStyle.of(context)) {
+      final identity = focusable(_defaultActionNode);
+      if (identity.isNotEmpty) {
+        identity.first.requestFocus();
+        return;
+      }
     }
+    final targets = focusable(_actionsNode);
+    if (targets.isEmpty) return;
+    (widget.destructive ? targets.first : targets.last).requestFocus();
   }
 
   Widget _actionBar(List<Widget> actions) => Focus(
@@ -252,16 +269,14 @@ class _GlassDialogState extends State<GlassDialog> {
     const textInset = EdgeInsets.symmetric(horizontal: 14);
     final defaultIndex = widget.destructive ? 0 : actions.length - 1;
     return Dialog(
-      backgroundColor: widget.backgroundColor ?? palette.surfaceHigh,
+      backgroundColor: palette.surfaceHigh,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       clipBehavior: Clip.antiAlias,
-      shape:
-          widget.shape ??
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(roles.radiusModal),
-            side: BorderSide(color: roles.hairline),
-          ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(roles.radiusModal),
+        side: BorderSide(color: roles.hairline),
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
           _cardInset,
@@ -269,7 +284,9 @@ class _GlassDialogState extends State<GlassDialog> {
           _cardInset,
           _cardInset,
         ),
-        child: _FrostedBody(
+        child: FrostedDialogBody(
+          minWidth: GlassDialog.frostedMaxWidth - 2 * _cardInset,
+          maxWidth: GlassDialog.frostedWideMaxWidth - 2 * _cardInset,
           scrolling: content == null
               ? null
               : (icon == null ? 0 : 1) + (title == null ? 0 : 1),
@@ -330,7 +347,10 @@ class _GlassDialogState extends State<GlassDialog> {
                 ),
                 child: Focus(
                   focusNode: _actionsNode,
-                  child: _FrostedActions(
+                  child: FrostedDialogActions(
+                    gap: _actionGap,
+                    // The card, not the action row, is what must pass 420.
+                    rowMinWidth: 420 - 2 * _cardInset,
                     children: [
                       for (var i = 0; i < actions.length; i++)
                         Focus(
@@ -418,266 +438,5 @@ class _GlassDialogState extends State<GlassDialog> {
         ),
       ),
     );
-  }
-}
-
-/// Sizes and stacks the Frosted card's sections (icon, title, content,
-/// actions), each full width.
-///
-/// The width is [GlassDialog.frostedMaxWidth] for ordinary content, wider (up
-/// to [GlassDialog.frostedWideMaxWidth]) only when a section cannot be
-/// narrower, as a form or picker of fixed width. Text wraps rather than
-/// widening the card, because its minimum intrinsic width is its longest
-/// word. Only widths are measured: a [Flex] with a flexible child would ask
-/// that child for intrinsic heights, which a [LayoutBuilder] in the content
-/// refuses.
-///
-/// The [scrolling] child, the content's scroll view, takes whatever height
-/// the other sections leave, so tall content scrolls and the actions stay.
-class _FrostedBody extends MultiChildRenderObjectWidget {
-  const _FrostedBody({required this.scrolling, required super.children});
-
-  /// Index of the child that shrinks to fit, or null.
-  final int? scrolling;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderFrostedBody(scrolling);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderFrostedBody renderObject,
-  ) => renderObject.scrolling = scrolling;
-}
-
-class _FrostedParentData extends ContainerBoxParentData<RenderBox> {}
-
-/// Shared child bookkeeping for the two Frosted layouts.
-mixin _FrostedChildren on RenderBox
-    implements
-        ContainerRenderObjectMixin<RenderBox, _FrostedParentData>,
-        RenderBoxContainerDefaultsMixin<RenderBox, _FrostedParentData> {
-  @override
-  void setupParentData(RenderBox child) {
-    if (child.parentData is! _FrostedParentData) {
-      child.parentData = _FrostedParentData();
-    }
-  }
-
-  List<RenderBox> get childList {
-    final children = <RenderBox>[];
-    var child = firstChild;
-    while (child != null) {
-      children.add(child);
-      child = childAfter(child);
-    }
-    return children;
-  }
-
-  double widest(double Function(RenderBox child) width) =>
-      childList.fold(0, (w, child) => math.max(w, width(child)));
-
-  Size sizeChild(RenderBox child, BoxConstraints c, {required bool dry}) {
-    if (dry) return child.getDryLayout(c);
-    child.layout(c, parentUsesSize: true);
-    return child.size;
-  }
-
-  void place(RenderBox child, Offset offset, {required bool dry}) {
-    if (!dry) (child.parentData! as _FrostedParentData).offset = offset;
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) =>
-      defaultPaint(context, offset);
-
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
-      defaultHitTestChildren(result, position: position);
-}
-
-class _RenderFrostedBody extends RenderBox
-    with
-        ContainerRenderObjectMixin<RenderBox, _FrostedParentData>,
-        RenderBoxContainerDefaultsMixin<RenderBox, _FrostedParentData>,
-        _FrostedChildren {
-  _RenderFrostedBody(this._scrolling);
-
-  int? _scrolling;
-  set scrolling(int? value) {
-    if (value == _scrolling) return;
-    _scrolling = value;
-    markNeedsLayout();
-  }
-
-  static const double _inset = 2 * _GlassDialogState._cardInset;
-
-  /// The card's inner width for a body whose widest section needs
-  /// [needed], clamped between the card widths less the card's inset.
-  double _widthFor(double needed) => needed.clamp(
-    GlassDialog.frostedMaxWidth - _inset,
-    GlassDialog.frostedWideMaxWidth - _inset,
-  );
-
-  double _neededWidth() =>
-      widest((child) => child.getMinIntrinsicWidth(double.infinity));
-
-  Size _layout(BoxConstraints constraints, {required bool dry}) {
-    final children = childList;
-    final width = constraints.constrainWidth(_widthFor(_neededWidth()));
-    final scrolling = _scrolling;
-    final heights = List<double>.filled(children.length, 0);
-    var fixed = 0.0;
-    for (var i = 0; i < children.length; i++) {
-      if (i == scrolling) continue;
-      heights[i] = sizeChild(
-        children[i],
-        BoxConstraints.tightFor(width: width),
-        dry: dry,
-      ).height;
-      fixed += heights[i];
-    }
-    if (scrolling != null && scrolling < children.length) {
-      final room = math.max(0.0, constraints.maxHeight - fixed);
-      heights[scrolling] = sizeChild(
-        children[scrolling],
-        BoxConstraints(minWidth: width, maxWidth: width, maxHeight: room),
-        dry: dry,
-      ).height;
-    }
-    var y = 0.0;
-    for (var i = 0; i < children.length; i++) {
-      place(children[i], Offset(0, y), dry: dry);
-      y += heights[i];
-    }
-    return constraints.constrain(Size(width, y));
-  }
-
-  @override
-  double computeMinIntrinsicWidth(double height) => _widthFor(_neededWidth());
-
-  @override
-  double computeMaxIntrinsicWidth(double height) => _widthFor(_neededWidth());
-
-  double _height(double width) =>
-      childList.fold(0, (h, child) => h + child.getMinIntrinsicHeight(width));
-
-  @override
-  double computeMinIntrinsicHeight(double width) => _height(width);
-
-  @override
-  double computeMaxIntrinsicHeight(double width) => _height(width);
-
-  @override
-  Size computeDryLayout(BoxConstraints constraints) =>
-      _layout(constraints, dry: true);
-
-  @override
-  void performLayout() {
-    size = _layout(constraints, dry: false);
-  }
-}
-
-/// Lays out the Frosted actions, given in the caller's order (cancel first,
-/// primary last). Stacked full width with the last on top; on a card wider
-/// than [_rowMinWidth] with exactly two actions that fit side by side, in an
-/// end-aligned row in the caller's order.
-class _FrostedActions extends MultiChildRenderObjectWidget {
-  const _FrostedActions({required super.children});
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderFrostedActions();
-}
-
-class _RenderFrostedActions extends RenderBox
-    with
-        ContainerRenderObjectMixin<RenderBox, _FrostedParentData>,
-        RenderBoxContainerDefaultsMixin<RenderBox, _FrostedParentData>,
-        _FrostedChildren {
-  static const double _gap = _GlassDialogState._actionGap;
-  static const double _rowMinWidth = 420;
-
-  bool _inRow(double width) {
-    if (childCount != 2 || width <= _rowMinWidth) return false;
-    final natural = childList.fold<double>(
-      0,
-      (sum, child) => sum + child.getMaxIntrinsicWidth(double.infinity),
-    );
-    return natural + _gap <= width;
-  }
-
-  /// Lays the children out (or measures them when [dry]) and returns the
-  /// size; positions children only when not [dry].
-  Size _layout(BoxConstraints constraints, {required bool dry}) {
-    final children = childList;
-    if (children.isEmpty) return constraints.smallest;
-    final width = constraints.maxWidth;
-    Size sizeOf(RenderBox child, BoxConstraints c) =>
-        sizeChild(child, c, dry: dry);
-
-    if (_inRow(width)) {
-      final loose = BoxConstraints(maxWidth: width);
-      final sizes = [for (final child in children) sizeOf(child, loose)];
-      final height = math.max(sizes[0].height, sizes[1].height);
-      final primaryLeft = width - sizes[1].width;
-      place(
-        children[1],
-        Offset(primaryLeft, (height - sizes[1].height) / 2),
-        dry: dry,
-      );
-      place(
-        children[0],
-        Offset(
-          primaryLeft - _gap - sizes[0].width,
-          (height - sizes[0].height) / 2,
-        ),
-        dry: dry,
-      );
-      return constraints.constrain(Size(width, height));
-    }
-    final tight = BoxConstraints.tightFor(width: width);
-    var y = 0.0;
-    for (final child in children.reversed) {
-      if (y > 0) y += _gap;
-      final size = sizeOf(child, tight);
-      place(child, Offset(0, y), dry: dry);
-      y += size.height;
-    }
-    return constraints.constrain(Size(width, y));
-  }
-
-  @override
-  double computeMinIntrinsicWidth(double height) =>
-      widest((child) => child.getMinIntrinsicWidth(double.infinity));
-
-  @override
-  double computeMaxIntrinsicWidth(double height) =>
-      widest((child) => child.getMaxIntrinsicWidth(double.infinity));
-
-  double _stackedHeight(double width) {
-    final children = childList;
-    if (children.isEmpty) return 0;
-    return children.fold<double>(
-          0,
-          (h, child) => h + child.getMinIntrinsicHeight(width),
-        ) +
-        _gap * (children.length - 1);
-  }
-
-  @override
-  double computeMinIntrinsicHeight(double width) => _stackedHeight(width);
-
-  @override
-  double computeMaxIntrinsicHeight(double width) => _stackedHeight(width);
-
-  @override
-  Size computeDryLayout(BoxConstraints constraints) =>
-      _layout(constraints, dry: true);
-
-  @override
-  void performLayout() {
-    size = _layout(constraints, dry: false);
   }
 }
