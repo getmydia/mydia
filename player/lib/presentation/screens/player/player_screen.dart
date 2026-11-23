@@ -3157,8 +3157,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
     _player = player;
-    _exitRegistration?.unregister();
-    _exitRegistration = PlayerExitGuard.instance.register(_disposePlayer);
     MpvSurfaceBinding? surfaceBinding;
     if (videoOutput == VideoOutputPath.surface) {
       // No `VideoController` on the surface: it would put media_kit's own
@@ -3180,6 +3178,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ),
       );
     }
+    // After the binding or controller exists: a quit already under way
+    // releases this player at once, and that release must reach them.
+    _exitRegistration?.unregister();
+    _exitRegistration = PlayerExitGuard.instance.register(_disposePlayer);
 
     // Rebuilds this playback on the texture path: same source, same
     // position, a fresh `Player`. Nothing has played yet when it runs.

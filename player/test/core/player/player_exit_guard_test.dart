@@ -93,6 +93,37 @@ void main() {
     expect(lateReleased, isTrue);
   });
 
+  test('a player registered just as the last release finishes is still '
+      'waited for', () async {
+    final late = Completer<void>();
+    var lateDone = false;
+    final first = Completer<void>();
+    guard.register(() => first.future);
+    // Registers from the completion of the last pending release: after the
+    // wait for it resolves, before the exit answers.
+    unawaited(
+      first.future.then((_) {
+        guard.register(() async {
+          await late.future;
+          lateDone = true;
+        });
+      }),
+    );
+
+    var answered = false;
+    final response = guard.onExitRequested().then((r) {
+      answered = true;
+      return r;
+    });
+    first.complete();
+    await pumpEventQueue();
+    expect(answered, isFalse, reason: 'the late release is still running');
+
+    late.complete();
+    expect(await response, AppExitResponse.exit);
+    expect(lateDone, isTrue);
+  });
+
   test('a hung tracked dispose never blocks the exit', () async {
     guard = PlayerExitGuard(timeout: const Duration(milliseconds: 50));
     unawaited(guard.track(Completer<void>().future));
