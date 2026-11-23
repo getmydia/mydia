@@ -16,6 +16,26 @@ defmodule Mydia.SearchTest do
       )
     end
 
+    test "a movie queued without ignore_availability waits for its release" do
+      movie = insert(:media_item, type: "movie")
+
+      assert {:ok, 1} = Search.queue_auto_searches([movie])
+
+      [job] = all_enqueued(worker: Mydia.Jobs.MovieSearch)
+      refute Map.has_key?(job.args, "ignore_availability")
+    end
+
+    test "ignore_availability: true reaches the movie job" do
+      movie = insert(:media_item, type: "movie")
+
+      assert {:ok, 1} = Search.queue_auto_searches([movie], ignore_availability: true)
+
+      assert_enqueued(
+        worker: Mydia.Jobs.MovieSearch,
+        args: %{mode: "specific", media_item_id: movie.id, ignore_availability: true}
+      )
+    end
+
     test "queues a show-mode TVShowSearch for a TV show" do
       show = insert(:tv_show)
 

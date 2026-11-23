@@ -863,7 +863,7 @@ defmodule MydiaWeb.MediaLive.Index do
     ids = MapSet.to_list(socket.assigns.selected_ids)
     {items, skipped} = Media.partition_for_auto_search(ids)
 
-    case Search.queue_auto_searches(items) do
+    case Search.queue_auto_searches(items, ignore_availability: true) do
       {:ok, queued} ->
         socket
         |> put_flash(:info, auto_search_flash(queued, skipped))
