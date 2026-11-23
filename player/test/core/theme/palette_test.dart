@@ -12,27 +12,60 @@ import '../../test_utils/linux_accents.dart';
 import '../../test_utils/mac_accents.dart';
 
 void main() {
+  group('warm Projection Booth', () {
+    const p = Palettes.projectionBooth;
+    test('uses the spec hexes', () {
+      expect(p.background, const Color(0xFF0C0B0A));
+      expect(p.surfaceDim, const Color(0xFF0F0E0D));
+      expect(p.surfaceLow, const Color(0xFF121110));
+      expect(p.surface, const Color(0xFF151413));
+      expect(p.surfaceHigh, const Color(0xFF1B1A19));
+      expect(p.surfaceVariant, const Color(0xFF1F1E1D));
+      expect(p.surfaceBright, const Color(0xFF282726));
+      expect(p.cardHover, const Color(0xFF282726));
+      expect(p.shimmerHighlight, const Color(0xFF282726));
+      expect(p.divider, const Color(0xFF1E1D1C));
+      expect(p.border, const Color(0xFF2F2E2D));
+      expect(p.shimmerBase, const Color(0xFF1B1A19));
+    });
+
+    test('steps strictly increase', () {
+      final steps = [
+        p.background,
+        p.surfaceDim,
+        p.surfaceLow,
+        p.surface,
+        p.surfaceHigh,
+        p.surfaceVariant,
+        p.surfaceBright,
+      ].map((c) => c.computeLuminance()).toList();
+      for (var i = 1; i < steps.length; i++) {
+        expect(steps[i], greaterThan(steps[i - 1]));
+      }
+    });
+  });
+
   group('Projection Booth', () {
-    test('is exactly the pre-preset palette', () {
+    test('is the warm cinematic palette', () {
       const p = Palettes.projectionBooth;
-      expect(p.background, const Color(0xFF0B0B0C));
-      expect(p.surfaceDim, const Color(0xFF0E0E10));
-      expect(p.surfaceLow, const Color(0xFF111113));
-      expect(p.surface, const Color(0xFF141416));
-      expect(p.surfaceHigh, const Color(0xFF191A1D));
-      expect(p.surfaceVariant, const Color(0xFF1E1E21));
-      expect(p.surfaceBright, const Color(0xFF26272B));
+      expect(p.background, const Color(0xFF0C0B0A));
+      expect(p.surfaceDim, const Color(0xFF0F0E0D));
+      expect(p.surfaceLow, const Color(0xFF121110));
+      expect(p.surface, const Color(0xFF151413));
+      expect(p.surfaceHigh, const Color(0xFF1B1A19));
+      expect(p.surfaceVariant, const Color(0xFF1F1E1D));
+      expect(p.surfaceBright, const Color(0xFF282726));
       expect(p.primary, const Color(0xFFE9A23B));
       expect(p.primaryFocus, const Color(0xFFD08C24));
       expect(p.onPrimary, const Color(0xFF1A1205));
       expect(p.textPrimary, const Color(0xFFF0EFED));
       expect(p.textSecondary, const Color(0xFF9A9894));
       expect(p.textDisabled, const Color(0xFF7A7975));
-      expect(p.divider, const Color(0xFF1D1D21));
-      expect(p.border, const Color(0xFF2E2E33));
-      expect(p.cardHover, const Color(0xFF26272B));
-      expect(p.shimmerBase, const Color(0xFF1A1A1D));
-      expect(p.shimmerHighlight, const Color(0xFF26272B));
+      expect(p.divider, const Color(0xFF1E1D1C));
+      expect(p.border, const Color(0xFF2F2E2D));
+      expect(p.cardHover, const Color(0xFF282726));
+      expect(p.shimmerBase, const Color(0xFF1B1A19));
+      expect(p.shimmerHighlight, const Color(0xFF282726));
       expect(p.ambientTint, isTrue);
     });
   });
@@ -342,7 +375,7 @@ void main() {
     final mid = Palettes.projectionBooth.lerp(Palettes.oledBlack, 0.5);
     expect(
       mid.background,
-      Color.lerp(const Color(0xFF0B0B0C), const Color(0xFF000000), 0.5),
+      Color.lerp(const Color(0xFF0C0B0A), const Color(0xFF000000), 0.5),
     );
   });
 }

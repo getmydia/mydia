@@ -4,6 +4,7 @@ import '../player/input_capabilities.dart';
 import 'colors.dart';
 import 'liquid_glass/glass_style.dart';
 import 'palette.dart';
+import 'surface_roles.dart';
 
 /// Mydia Design System Theme
 ///
@@ -68,6 +69,7 @@ class AppTheme {
       extensions: [
         p,
         GlassStyle(liquid: liquid),
+        SurfaceRoles.fromPalette(p),
       ],
 
       // Font family - matches web app
