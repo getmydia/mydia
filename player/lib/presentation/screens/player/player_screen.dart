@@ -107,6 +107,7 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
+import '../../../core/player/player_exit_guard.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
@@ -373,6 +374,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [VideoOutputPath.surface]. Null on the texture path, which has
   /// `_videoController` instead; never both.
   MpvSurfaceBinding? _surfaceBinding;
+
+  /// This screen's place in [PlayerExitGuard]: quitting the app disposes the
+  /// current player first. See that class for the crash it prevents.
+  PlayerExitRegistration? _exitRegistration;
 
   /// Set once the surface failed to start in this screen: later playbacks
   /// here take the texture path whatever storage says.
@@ -3152,6 +3157,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
     _player = player;
+    _exitRegistration?.unregister();
+    _exitRegistration = PlayerExitGuard.instance.register(_disposePlayer);
     MpvSurfaceBinding? surfaceBinding;
     if (videoOutput == VideoOutputPath.surface) {
       // No `VideoController` on the surface: it would put media_kit's own
@@ -5726,6 +5733,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // second call reached the same already-disposed `Player` and tripped
     // media_kit's own `Assertion failed: "[Player] has been disposed"`.
     // Clearing it makes the late call a no-op instead.
+    _exitRegistration?.unregister();
+    _exitRegistration = null;
     final player = _player;
     _player = null;
     _videoController = null;
@@ -6135,6 +6144,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `_stopStatsCollector` is idempotent, so calling it again here on a
   /// path that already stopped the collector is a no-op.
   Future<void> _disposePlayer() async {
+    _exitRegistration?.unregister();
+    _exitRegistration = null;
     _scrub.reset();
     final player = _player;
     _player = null;
