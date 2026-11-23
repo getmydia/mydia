@@ -435,7 +435,7 @@
 
       relayNpmDeps = pkgs.fetchNpmDeps {
         src = relayDir + "/assets";
-        hash = "sha256-iq742G5J4bF9SConMSczdYei1VlihwKobYhAQA47BlQ=";
+        hash = "sha256-3jkJoZ4OZ6aPANNs+A/uwZyksrga+22B+m1IFBjVWW8=";
       };
 
       metadataRelay = ciRelay.beamPackages.mixRelease {
