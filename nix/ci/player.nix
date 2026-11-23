@@ -233,8 +233,8 @@
       # X11 and Xi, but Flutter runs hooks with PKG_CONFIG_PATH stripped, so
       # this pkg-config carries the search path itself. It must come before
       # pkgs.pkg-config on PATH, which nativeBuildInputs order gives it. Every
-      # check that runs `flutter test` or `flutter build linux` needs it and
-      # clang.
+      # check that runs `flutter test` (browser runs too) or `flutter build
+      # linux` needs it and clang.
       nativeapiPkgConfig = import ../../player/nativeapi-pkg-config.nix { inherit pkgs; };
       nativeapiBuildInputs = [ nativeapiPkgConfig pkgs.clang ];
 
@@ -500,7 +500,9 @@
       #
       playerTestWeb = mkPlayerCheck {
         name = "player-test-web";
-        nativeBuildInputs = [ pkgs.chromium ];
+        # A browser run still builds the host's code assets first, nativeapi's
+        # included.
+        nativeBuildInputs = nativeapiBuildInputs ++ [ pkgs.chromium ];
         script = ''
           export CHROME_EXECUTABLE=${pkgs.chromium}/bin/chromium
           mapfile -t files < <(find test -name '*_web_test.dart' | sort)
