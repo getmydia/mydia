@@ -36,8 +36,10 @@ metadata runtime (a separate defence against the same fake).
 
 ### Global
 
-`media.minimum_availability` in `Mydia.Config.Schema`, an `Ecto.Enum`, schema
-default `:released`. It follows the layered config like every other media
+`media.minimum_availability` in `Mydia.Config.Schema`, a `:string` validated
+with `validate_inclusion/3` against the three values (the pattern of
+`auth.oidc_default_role`, since the DB overlay stores strings), schema default
+`"released"`. It follows the layered config like every other media
 field: schema default, YAML, the settings UI (DB overlay), then the
 `MINIMUM_AVAILABILITY` env var, parsed in `Mydia.Config.Loader` next to
 `AUTO_SEARCH_ON_ADD`. The admin settings page shows it as a select beside the
@@ -77,9 +79,12 @@ Both are `Date.t() | nil`, parsed from the ISO timestamps TMDB sends. The
 struct's `schema_version` goes from 2 to 3. Earliest across regions is
 deliberate: a digital release anywhere means real releases exist on trackers.
 
-Movies pick the new dates up on their next scheduled metadata refresh. Until
-then, and for movies TMDB has no digital or physical date for, the fallback
-below applies.
+`MetadataBackfill`'s `@required_versions` entry for `{:tmdb, "movie"}` goes to
+3, so the daily backfill refreshes every stored movie, staggered 15 seconds
+apart, and the dates arrive within hours of upgrading. Until then, and for
+movies TMDB has no digital or physical date for, the fallback below applies.
+`Mydia.Media.MetadataType` loads the two new fields back from stored JSON as
+`Date`s, like `release_date`.
 
 ## Eligibility rule
 
