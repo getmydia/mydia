@@ -154,7 +154,7 @@ defmodule Mydia.Media.MediaItem do
     |> validate_download_audio_language()
     |> validate_inclusion(
       :minimum_availability,
-      Mydia.Config.Schema.minimum_availability_levels()
+      Mydia.Config.Schema.MediaChangeset.minimum_availability_levels()
     )
     # Named after the partial composite indexes in
     # `20260905143012_scope_provider_id_uniqueness_by_type.exs`. A bare

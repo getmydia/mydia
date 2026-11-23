@@ -69,6 +69,29 @@ defmodule Mydia.Media.MinimumAvailability do
   @spec available?(MediaItem.t()) :: boolean()
   def available?(%MediaItem{} = item), do: status(item).available?
 
+  @doc """
+  Records a `search.skipped_unavailable` event: an automatic search for `item`
+  waited because of `status` (from `status/1`).
+  """
+  @spec record_skip(MediaItem.t(), status()) :: :ok
+  def record_skip(%MediaItem{} = item, %{level: level, eligible_on: eligible_on}) do
+    Mydia.Events.create_event_async(%{
+      category: "search",
+      type: "search.skipped_unavailable",
+      actor_type: :job,
+      actor_id: "movie_search",
+      resource_type: "media_item",
+      resource_id: item.id,
+      severity: :info,
+      metadata: %{
+        "title" => item.title,
+        "media_type" => item.type,
+        "level" => level,
+        "eligible_on" => eligible_on && Date.to_iso8601(eligible_on)
+      }
+    })
+  end
+
   @doc "The configured `media.minimum_availability`."
   @spec global_level() :: level()
   def global_level do

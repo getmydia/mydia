@@ -10,6 +10,15 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioEvents do
   alias Mydia.Upgrades
   alias MydiaWeb.Live.Authorization
 
+  def handle_event("download_audio:show", params, socket),
+    do: show_download_audio_modal(params, socket)
+
+  def handle_event("download_audio:hide", params, socket),
+    do: hide_download_audio_modal(params, socket)
+
+  def handle_event("download_audio:set", params, socket),
+    do: set_download_audio_language(params, socket)
+
   def show_download_audio_modal(_params, socket) do
     {:noreply, assign(socket, :show_download_audio_modal, true)}
   end

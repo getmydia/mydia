@@ -60,7 +60,7 @@ defmodule Mydia.Config.Schema.Paths do
   @allowed_values %{
     "auth.oidc_default_role" => AuthChangeset.oidc_default_roles(),
     "media.default_season_monitoring" => [nil | Schema.season_monitoring_values()],
-    "media.minimum_availability" => Schema.minimum_availability_levels()
+    "media.minimum_availability" => Schema.MediaChangeset.minimum_availability_levels()
   }
 
   # Built at compile time from the schema itself. A hand-maintained list drifts

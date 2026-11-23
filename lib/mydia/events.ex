@@ -1617,31 +1617,6 @@ defmodule Mydia.Events do
   end
 
   @doc """
-  Records a search.skipped_unavailable event when an automatic movie search
-  waits because the movie is not available yet under its minimum availability
-  level (see `Mydia.Media.MinimumAvailability`).
-
-  `status` carries the effective `:level` and the `:eligible_on` date.
-  """
-  def search_skipped_unavailable(media_item, %{level: level, eligible_on: eligible_on}) do
-    create_event_async(%{
-      category: "search",
-      type: "search.skipped_unavailable",
-      actor_type: :job,
-      actor_id: search_actor_id(media_item),
-      resource_type: "media_item",
-      resource_id: media_item.id,
-      severity: :info,
-      metadata: %{
-        "title" => media_item.title,
-        "media_type" => media_item.type,
-        "level" => level,
-        "eligible_on" => eligible_on && Date.to_iso8601(eligible_on)
-      }
-    })
-  end
-
-  @doc """
   Records a search.error event when a search encounters an error.
 
   ## Parameters

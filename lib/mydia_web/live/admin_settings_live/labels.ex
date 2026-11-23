@@ -99,4 +99,18 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   @doc "The placeholder of an empty setting input; nil for none."
   def placeholder("streaming.max_transcode_height"), do: gettext("no limit")
   def placeholder(_key), do: nil
+
+  @doc "`{role, label}` pairs for `AuthChangeset.oidc_default_roles/0`, in the same order."
+  def oidc_default_role_options do
+    labels = %{
+      "guest" => gettext("Guest"),
+      "readonly" => gettext("Read Only"),
+      "user" => gettext("User")
+    }
+
+    Enum.map(
+      Mydia.Config.Schema.AuthChangeset.oidc_default_roles(),
+      &{&1, Map.fetch!(labels, &1)}
+    )
+  end
 end

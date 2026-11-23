@@ -9,7 +9,13 @@ defmodule Mydia.Config.Schema do
 
   require Logger
 
-  alias Mydia.Config.Schema.{AuthChangeset, DownloadClientChangeset, PathMappingChangeset}
+  alias Mydia.Config.Schema.{
+    AuthChangeset,
+    DownloadClientChangeset,
+    MediaChangeset,
+    PathMappingChangeset
+  }
+
   alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Plugins.Index.Signature
 
@@ -45,15 +51,6 @@ defmodule Mydia.Config.Schema do
   same list this schema does, rather than each keeping its own copy.
   """
   def season_monitoring_values, do: @season_monitoring_values
-
-  @minimum_availability_levels ~w(announced in_cinemas released)
-
-  @doc """
-  Valid `media.minimum_availability` levels, also accepted as a movie's own
-  override. See `Mydia.Media.MinimumAvailability`.
-  """
-  @spec minimum_availability_levels() :: [String.t()]
-  def minimum_availability_levels, do: @minimum_availability_levels
 
   @type t :: %__MODULE__{
           server: __MODULE__.Server.t() | nil,
@@ -480,7 +477,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:server, with: &server_changeset/2)
     |> cast_embed(:database, with: &database_changeset/2)
     |> cast_embed(:auth, with: &AuthChangeset.changeset/2)
-    |> cast_embed(:media, with: &media_changeset/2)
+    |> cast_embed(:media, with: &MediaChangeset.changeset/2)
     |> cast_embed(:metadata)
     |> cast_embed(:ui)
     |> cast_embed(:downloads, with: &downloads_changeset/2)
@@ -528,35 +525,6 @@ defmodule Mydia.Config.Schema do
     |> cast(attrs, [:path, :pool_size])
     |> validate_required([:path, :pool_size])
     |> validate_number(:pool_size, greater_than: 0)
-  end
-
-  defp media_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [
-      :movies_path,
-      :tv_path,
-      :movies_auto_organize,
-      :tv_auto_organize,
-      :auto_search_on_add,
-      :minimum_availability,
-      :default_season_monitoring,
-      :monitor_by_default,
-      :season_refresh_threshold_hours,
-      :completed_show_refresh_threshold_hours,
-      :trash_retention_days
-    ])
-    |> validate_required([:minimum_availability])
-    |> validate_inclusion(:minimum_availability, @minimum_availability_levels)
-    # movies_path and tv_path are optional legacy fields
-    |> validate_number(:season_refresh_threshold_hours, greater_than: 0)
-    |> validate_number(:completed_show_refresh_threshold_hours, greater_than: 0)
-    |> validate_inclusion(:default_season_monitoring, @season_monitoring_values)
-    # Required as well as non-negative: `validate_number/3` skips nil, and an
-    # explicit null in the YAML or the overlay would reach
-    # `Library.purge_old_trashed_media_files/1`, where `-nil` crashes the
-    # daily `TrashCleanup` run rather than failing at config load.
-    |> validate_required([:trash_retention_days])
-    |> validate_number(:trash_retention_days, greater_than_or_equal_to: 0)
   end
 
   defp downloads_changeset(schema, attrs) do

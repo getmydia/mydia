@@ -25,7 +25,7 @@ defmodule MydiaWeb.MediaLive.Show.AvailabilityComponents do
     ~H"""
     <HeroRow.row_button
       id="availability-row"
-      phx-click="show_availability_modal"
+      phx-click="availability:show"
       title={gettext("Click to change when automatic search starts")}
     >
       <div class="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center flex-shrink-0">
@@ -83,12 +83,12 @@ defmodule MydiaWeb.MediaLive.Show.AvailabilityComponents do
           </.option>
         </ul>
         <div class="modal-action">
-          <button type="button" phx-click="hide_availability_modal" class="btn btn-ghost">
+          <button type="button" phx-click="availability:hide" class="btn btn-ghost">
             {gettext("Cancel")}
           </button>
         </div>
       </div>
-      <div class="modal-backdrop" phx-click="hide_availability_modal"></div>
+      <div class="modal-backdrop" phx-click="availability:hide"></div>
     </div>
     """
   end
@@ -104,7 +104,7 @@ defmodule MydiaWeb.MediaLive.Show.AvailabilityComponents do
       <button
         id={@id}
         type="button"
-        phx-click="set_minimum_availability"
+        phx-click="availability:set"
         phx-value-level={@value}
         class={["justify-between", @active? && "active"]}
       >
