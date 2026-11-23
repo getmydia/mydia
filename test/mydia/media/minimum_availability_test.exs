@@ -49,6 +49,12 @@ defmodule Mydia.Media.MinimumAvailabilityTest do
                ~D[2031-05-30]
     end
 
+    test "released never waits past theatrical plus 90 days for a late reissue" do
+      item = movie(%{release_date: ~D[1984-06-01], physical_release_date: ~D[2027-03-01]})
+
+      assert MinimumAvailability.eligible_on(item, "released") == ~D[1984-08-30]
+    end
+
     test "released with no dates at all does not wait" do
       assert MinimumAvailability.eligible_on(movie(%{}), "released") == nil
     end
@@ -80,6 +86,27 @@ defmodule Mydia.Media.MinimumAvailabilityTest do
                MinimumAvailability.status(item, "released", ~D[2031-02-28])
 
       assert %{available?: true} = MinimumAvailability.status(item, "released", ~D[2031-03-01])
+    end
+
+    test "an unreleased movie TMDB has no date for waits until one is known" do
+      item = movie(%{status: "Post Production"})
+
+      assert %{eligible_on: nil, available?: false} =
+               MinimumAvailability.status(item, "released", ~D[2031-01-01])
+
+      assert %{eligible_on: nil, available?: false} =
+               MinimumAvailability.status(item, "in_cinemas", ~D[2031-01-01])
+
+      assert %{available?: true} = MinimumAvailability.status(item, "announced", ~D[2031-01-01])
+    end
+
+    test "a released movie TMDB has no date for does not wait" do
+      assert %{available?: true} =
+               MinimumAvailability.status(
+                 movie(%{status: "Released"}),
+                 "released",
+                 ~D[2031-01-01]
+               )
     end
 
     test "a movie with nothing to wait for is available" do

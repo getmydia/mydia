@@ -9,13 +9,14 @@ defmodule Mydia.Media.MinimumAvailability do
 
     * `"announced"` - never waits.
     * `"in_cinemas"` - until the theatrical `release_date`.
-    * `"released"` - until the earlier of the TMDB digital and physical
-      release dates, or the theatrical date plus 90 days when TMDB has
-      neither (the rule Radarr uses, so long-released films without those
-      dates stay searchable).
+    * `"released"` - until the earliest of the TMDB digital and physical
+      release dates and the theatrical date plus 90 days. The 90 days are a
+      ceiling as well as a fallback, so an old film whose only typed release
+      is a recent reissue stays searchable.
 
-  A movie with no usable date never waits: missing metadata must not leave it
-  silently unsearched forever.
+  A movie with no usable date waits only while TMDB says it is unreleased
+  (`Rumored`, `Planned`, `In Production`, `Post Production`); otherwise it is
+  eligible now, so missing metadata never leaves it silently unsearched.
 
   `Mydia.Jobs.MovieSearch` enforces this for automatic searches; the Search
   button on a movie's page bypasses it.
@@ -24,6 +25,7 @@ defmodule Mydia.Media.MinimumAvailability do
   alias Mydia.Media.MediaItem
 
   @fallback_days 90
+  @unreleased_statuses ["Rumored", "Planned", "In Production", "Post Production"]
 
   @type level :: String.t()
   @type status :: %{level: level(), eligible_on: Date.t() | nil, available?: boolean()}
@@ -40,10 +42,11 @@ defmodule Mydia.Media.MinimumAvailability do
   def eligible_on(%MediaItem{metadata: metadata}, "in_cinemas"), do: metadata.release_date
 
   def eligible_on(%MediaItem{metadata: metadata}, "released") do
-    case Enum.reject([metadata.digital_release_date, metadata.physical_release_date], &is_nil/1) do
-      [] -> metadata.release_date && Date.add(metadata.release_date, @fallback_days)
-      dates -> Enum.min(dates, Date)
-    end
+    theatrical_ceiling = metadata.release_date && Date.add(metadata.release_date, @fallback_days)
+
+    [metadata.digital_release_date, metadata.physical_release_date, theatrical_ceiling]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.min(Date, fn -> nil end)
   end
 
   def eligible_on(%MediaItem{}, _unknown_level), do: nil
@@ -58,12 +61,21 @@ defmodule Mydia.Media.MinimumAvailability do
     level = effective(item, global)
     eligible_on = eligible_on(item, level)
 
-    %{
-      level: level,
-      eligible_on: eligible_on,
-      available?: is_nil(eligible_on) or Date.compare(eligible_on, today) != :gt
-    }
+    available? =
+      if eligible_on,
+        do: Date.compare(eligible_on, today) != :gt,
+        else: not awaiting_date?(item, level)
+
+    %{level: level, eligible_on: eligible_on, available?: available?}
   end
+
+  # No date to wait for, but TMDB says the film is not out yet.
+  defp awaiting_date?(_item, "announced"), do: false
+
+  defp awaiting_date?(%MediaItem{metadata: %{status: status}}, _level),
+    do: status in @unreleased_statuses
+
+  defp awaiting_date?(_item, _level), do: false
 
   @doc "Whether automatic search may look for `item` today."
   @spec available?(MediaItem.t()) :: boolean()

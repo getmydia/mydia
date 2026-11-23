@@ -22638,7 +22638,7 @@ msgstr ""
 msgid "Now"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/availability_components.ex:121
+#: lib/mydia_web/live/media_live/show/availability_components.ex:122
 #, elixir-autogen, elixir-format
 msgid "On %{date}"
 msgstr ""
@@ -22672,4 +22672,9 @@ msgstr ""
 #: lib/mydia_web/live/admin_settings_live/labels.ex:66
 #, elixir-autogen, elixir-format
 msgid "When automatic search may start looking for a movie. Announced searches as soon as it is added. In cinemas waits for its theatrical release date. Released waits for its earliest digital or physical release, or 90 days after the theatrical date when neither is known. Releases offered before then are almost always fakes. Each movie can override this, and the Search button on a movie's page ignores it."
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/availability_components.ex:119
+#, elixir-autogen, elixir-format
+msgid "When a release date is known"
 msgstr ""

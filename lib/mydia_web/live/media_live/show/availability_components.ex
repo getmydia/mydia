@@ -116,6 +116,7 @@ defmodule MydiaWeb.MediaLive.Show.AvailabilityComponents do
   end
 
   defp when_label(%{available?: true}), do: gettext("Now")
+  defp when_label(%{eligible_on: nil}), do: gettext("When a release date is known")
 
   defp when_label(%{eligible_on: date}),
     do: gettext("On %{date}", date: Formatters.format_date(date))

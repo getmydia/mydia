@@ -1106,7 +1106,11 @@ defmodule Mydia.Jobs.MovieSearchTest do
   end
 
   describe "minimum availability" do
-    setup do
+    setup %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [IndexerMock.movie_result(%{title: "Copper Weather", year: 2031, seeders: 40})]
+      )
+
       original = Application.get_env(:mydia, :runtime_config)
 
       on_exit(fn ->
@@ -1120,8 +1124,7 @@ defmodule Mydia.Jobs.MovieSearchTest do
       :ok
     end
 
-    # The mocked indexer offers "The Matrix" 1999; the theatrical date is what
-    # makes it unreleased.
+    # The theatrical date is what makes it unreleased.
     defp unreleased_movie(attrs \\ %{}) do
       release_date = Date.add(Date.utc_today(), 30)
 
@@ -1130,13 +1133,13 @@ defmodule Mydia.Jobs.MovieSearchTest do
           Map.merge(
             %{
               type: "movie",
-              title: "The Matrix",
-              year: 1999,
+              title: "Copper Weather",
+              year: 2031,
               metadata: %Mydia.Metadata.Structs.MediaMetadata{
-                provider_id: "603",
+                provider_id: "9101",
                 provider: :tmdb,
                 media_type: :movie,
-                title: "The Matrix",
+                title: "Copper Weather",
                 release_date: release_date
               }
             },

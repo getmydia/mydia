@@ -32,7 +32,7 @@ metadata runtime (a separate defence against the same fake).
 | --- | --- |
 | `announced` | always (today's behaviour) |
 | `in_cinemas` | its theatrical release date |
-| `released` | its earliest digital or physical release date |
+| `released` | the earliest of its digital and physical release dates and its theatrical date + 90 days |
 
 ### Global
 
@@ -95,14 +95,17 @@ A new pure module, `Mydia.Media.MinimumAvailability`:
   "eligible now, no date to wait for".
   - `announced`: nil.
   - `in_cinemas`: the theatrical `release_date`.
-  - `released`: the earlier of `digital_release_date` and
-    `physical_release_date`; when both are nil, theatrical `release_date` plus
-    90 days (Radarr's rule, so long-released films without TMDB digital dates
-    stay searchable).
-  - Any level with no usable date at all: nil. A movie with no dates is never
-    silently stuck.
-- `available?(item, today)`: `eligible_on` is nil or not after `today`, using
-  the global value from `Mydia.Config.get()`.
+  - `released`: the earliest of `digital_release_date`,
+    `physical_release_date` and theatrical `release_date` plus 90 days. The 90
+    days are a ceiling as well as a fallback: an old film whose only typed
+    TMDB release is a recent 4K reissue would otherwise wait for the reissue.
+  - Any level with no usable date at all: nil.
+- `available?(item)`: `eligible_on` is not after today. When `eligible_on` is
+  nil the movie is available unless the level is not `announced` and TMDB's
+  `status` says it is unreleased (`Rumored`, `Planned`, `In Production`,
+  `Post Production`): far-future titles often have no date at all, and fakes
+  are the only releases that can match them. Any other dateless movie is
+  eligible, so missing metadata never leaves it silently stuck.
 
 Search, the skip event and the movie page all call this module, so the rule
 lives in one place.
@@ -117,18 +120,19 @@ All enforcement is in `Mydia.Jobs.MovieSearch`:
 - **`specific`**: before searching, an unavailable movie returns `:ok` without
   touching indexers and records a `search.skipped_unavailable` event carrying
   the effective level and the eligible date, so the event log explains the
-  wait. This covers search on add, the bulk Search action, import lists,
-  GraphQL, the grab-delay recheck and the client-selection requeue.
+  wait. This covers search on add, import lists, the grab-delay recheck and
+  the client-selection requeue.
 - **`upgrade`**: unchanged. The movie already has a file.
 
 A new job arg, `ignore_availability: true`, parsed in `MovieSearch.Args`,
-skips the check. Only the movie page's automatic search button
-(`MydiaWeb.MediaLive.Show.SearchEvents.auto_search_download/2`) sets it.
+skips the check. Searches the user clicks set it: the movie page's
+automatic search button, the bulk Search action and the GraphQL
+`searchMediaItem` mutation (through
+`Mydia.Search.queue_auto_searches(items, ignore_availability: true)`).
 Interactive search on the movie page does not go through the job and is
 unaffected.
 
-`Mydia.Search.queue_auto_searches/1` keeps `bypass_delay: true` and does not
-set `ignore_availability`: search on add is gated.
+Search on add calls `queue_auto_searches/2` without the option, so it waits.
 
 ## Testing
 

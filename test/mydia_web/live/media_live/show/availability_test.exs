@@ -67,6 +67,26 @@ defmodule MydiaWeb.MediaLive.Show.AvailabilityTest do
     assert has_element?(view, "#availability-row", eligible)
   end
 
+  test "an unreleased movie without a date says it waits for one", %{conn: conn} do
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Copper Weather III",
+        year: 2033,
+        metadata: %MediaMetadata{
+          provider_id: "9103",
+          provider: :tmdb,
+          media_type: :movie,
+          title: "Copper Weather III",
+          status: "Post Production"
+        }
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+
+    assert has_element?(view, "#availability-row", "When a release date is known")
+  end
+
   test "TV shows have no row", %{conn: conn} do
     show = media_item_fixture(%{type: "tv_show", title: "Copper Weather Stories"})
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
