@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -809,6 +810,14 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
     requestFocusCallback: FocusMemory.requestFocus,
   );
 
+  /// Stands in for [PlaybackChrome.chromeVisibility] when the owner passes
+  /// none, so the touch tier can still tell whether the chrome is up.
+  ChromeVisibilityController? _ownVisibility;
+
+  ChromeVisibilityController get _visibility =>
+      widget.chromeVisibility ??
+      (_ownVisibility ??= ChromeVisibilityController());
+
   @override
   void initState() {
     super.initState();
@@ -829,6 +838,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
   @override
   void dispose() {
     widget.scrub?.removeListener(_onScrubChanged);
+    _ownVisibility?.dispose();
     super.dispose();
   }
 
@@ -878,7 +888,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
           fit: StackFit.expand,
           children: [
             ChromeVisibility(
-              controller: widget.chromeVisibility,
+              controller: _visibility,
               isPlaying: snapshot.data ?? false,
               // A D-pad scrub holds the OSD up for the same reason a drag
               // does: the viewer is looking at the bar.
@@ -928,24 +938,36 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                     child: Stack(
                       key: PlaybackChrome.safeContentKey,
                       children: [
-                        // Touch only: the transport floats in the centre as
-                        // large discs, since a one-handed thumb reach to a
-                        // bar button is worse than a centre target. Pointer
-                        // and remote keep it in the bar.
+                        // Touch only: the transport floats as large discs,
+                        // since a one-handed thumb reach to a bar button is
+                        // worse than a centre target. Pointer and remote keep
+                        // it in the bar. Centred in the band between the two
+                        // bars rather than on the screen, so a short
+                        // landscape phone does not tuck it under either one.
                         if (touch)
-                          Center(
-                            child: TouchTransport(
-                              player: widget.player,
-                              playPauseFocusNode: widget.playPauseFocusNode,
-                              onBack10: () =>
-                                  _seekBy(const Duration(seconds: -10)),
-                              onForward10: () =>
-                                  _seekBy(const Duration(seconds: 10)),
-                              onPreviousEpisode: widget.onPreviousEpisode,
-                              onNextEpisode: widget.onNextEpisode,
-                              // A phone keeps the discs to seek and play; a
-                              // touch tablet has room for episode nav too.
-                              showEpisodeNav: !metrics.compactTransport,
+                          Positioned.fill(
+                            child: CustomSingleChildLayout(
+                              delegate: _BandCentreDelegate(
+                                top: math.max(
+                                  0,
+                                  PlayerTopBarSlot.bottomEdgeOf(context) -
+                                      MediaQuery.paddingOf(context).top,
+                                ),
+                                bottom: metrics.barHeight,
+                              ),
+                              child: TouchTransport(
+                                player: widget.player,
+                                playPauseFocusNode: widget.playPauseFocusNode,
+                                onBack10: () =>
+                                    _seekBy(const Duration(seconds: -10)),
+                                onForward10: () =>
+                                    _seekBy(const Duration(seconds: 10)),
+                                onPreviousEpisode: widget.onPreviousEpisode,
+                                onNextEpisode: widget.onNextEpisode,
+                                // A phone keeps the discs to seek and play; a
+                                // touch tablet has room for episode nav too.
+                                showEpisodeNav: !metrics.compactTransport,
+                              ),
                             ),
                           ),
                         Positioned(
@@ -1118,7 +1140,22 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
             // which is exactly where people tap. `BufferingIndicator`
             // already centres itself and collapses to `SizedBox.shrink()`
             // when not buffering, so no extra `Center` is needed here.
-            IgnorePointer(child: BufferingIndicator(player: widget.player)),
+            //
+            // On touch, while the chrome is up, the play disc shows its own
+            // dark spinner instead: this white one would land on that
+            // near-white disc and vanish. Once the chrome hides, this one
+            // takes over again.
+            if (touch)
+              ListenableBuilder(
+                listenable: _visibility,
+                builder: (context, _) => _visibility.visible
+                    ? const SizedBox.shrink()
+                    : IgnorePointer(
+                        child: BufferingIndicator(player: widget.player),
+                      ),
+              )
+            else
+              IgnorePointer(child: BufferingIndicator(player: widget.player)),
           ],
         );
         // Wraps the entire OSD so its owner can ask whether focus is anywhere
@@ -1135,6 +1172,34 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       },
     );
   }
+}
+
+/// Centres its child vertically in the band [top] logical pixels below the
+/// layout's top edge and [bottom] above its bottom edge, and horizontally in
+/// the whole width. The child keeps its own size; if the band is shorter than
+/// the child it still centres on the band.
+class _BandCentreDelegate extends SingleChildLayoutDelegate {
+  const _BandCentreDelegate({required this.top, required this.bottom});
+
+  final double top;
+  final double bottom;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final bandCentre = (top + (size.height - bottom)) / 2;
+    return Offset(
+      (size.width - childSize.width) / 2,
+      bandCentre - childSize.height / 2,
+    );
+  }
+
+  @override
+  bool shouldRelayout(_BandCentreDelegate old) =>
+      old.top != top || old.bottom != bottom;
 }
 
 /// The timecode row above the scrubber: elapsed on the left, remaining on

@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/core/player/subtitle_position.dart';
+import 'package:player/presentation/widgets/video_controls/buffering_indicator.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_subtitle_lift.dart';
@@ -1267,6 +1268,134 @@ void main() {
     },
     skip: InputCapabilities.directionalPrimary
         ? 'covers the pointer and touch tiers; '
+              'playback_chrome_tv_test.dart covers the remote one'
+        : false,
+  );
+
+  group(
+    'PlaybackChrome on the touch tier',
+    () {
+      late _FakePlatformPlayer platform;
+      late Player player;
+
+      setUp(() {
+        platform = _FakePlatformPlayer();
+        player = Player(platformPlayer: platform);
+        InputCapabilities.debugTouchPrimaryOverride = true;
+      });
+
+      tearDown(() {
+        InputCapabilities.debugTouchPrimaryOverride = null;
+        return player.dispose();
+      });
+
+      // No pumpAndSettle here: a buffering spinner animates forever.
+      Future<void> pump(
+        WidgetTester tester, {
+        required Size size,
+        EdgeInsets padding = EdgeInsets.zero,
+        ChromeVisibilityController? visibility,
+      }) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        tester.view.padding = FakeViewPadding(
+          left: padding.left,
+          top: padding.top,
+          right: padding.right,
+          bottom: padding.bottom,
+        );
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          _host(
+            PlaybackChrome(
+              player: player,
+              timeline: StreamTimeline.zero,
+              onSeekToReal: (_) async {},
+              onBack: () {},
+              onFullscreenTap: () {},
+              onPreviousEpisode: () {},
+              onNextEpisode: () {},
+              chromeVisibility: visibility,
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+
+      Finder globalSpinner() => find.descendant(
+        of: find.byType(BufferingIndicator),
+        matching: find.byType(CircularProgressIndicator),
+      );
+
+      for (final size in const [Size(390, 844), Size(1280, 800)]) {
+        testWidgets('buffering shows the dark disc spinner, not the global '
+            'one, while the chrome is up ($size)', (tester) async {
+          platform.state = platform.state.copyWith(buffering: true);
+          final visibility = ChromeVisibilityController();
+          await pump(tester, size: size, visibility: visibility);
+
+          expect(find.byKey(TouchTransport.bufferingKey), findsOneWidget);
+          final spinner = tester.widget<CircularProgressIndicator>(
+            find.descendant(
+              of: find.byKey(TouchTransport.bufferingKey),
+              matching: find.byType(CircularProgressIndicator),
+            ),
+          );
+          expect(spinner.color, TouchTransport.playGlyph);
+          expect(globalSpinner(), findsNothing);
+
+          visibility.hide();
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(globalSpinner(), findsOneWidget);
+        });
+      }
+
+      testWidgets('no spinner anywhere when not buffering', (tester) async {
+        await pump(tester, size: const Size(390, 844));
+
+        expect(find.byKey(TouchTransport.bufferingKey), findsNothing);
+        expect(globalSpinner(), findsNothing);
+      });
+
+      testWidgets('a phone drops the episode discs, a tablet keeps them', (
+        tester,
+      ) async {
+        await pump(tester, size: const Size(390, 844));
+        Finder inTransport(Key key) => find.descendant(
+          of: find.byType(TouchTransport),
+          matching: find.byKey(key),
+        );
+        expect(inTransport(TransportSurface.previousEpisodeKey), findsNothing);
+        expect(inTransport(TransportSurface.nextEpisodeKey), findsNothing);
+
+        await pump(tester, size: const Size(1280, 800));
+        expect(
+          inTransport(TransportSurface.previousEpisodeKey),
+          findsOneWidget,
+        );
+        expect(inTransport(TransportSurface.nextEpisodeKey), findsOneWidget);
+      });
+
+      for (final size in const [Size(844, 390), Size(640, 320)]) {
+        testWidgets('the transport sits clear of both bars on a short '
+            'landscape phone ($size)', (tester) async {
+          await pump(
+            tester,
+            size: size,
+            padding: const EdgeInsets.only(bottom: 21),
+          );
+
+          final transport = tester.getRect(find.byType(TouchTransport));
+          final bottomBar = tester.getRect(find.byType(ChromeBottomBar));
+          final topBar = tester.getRect(find.byType(ChromeTopBar));
+          expect(transport.overlaps(bottomBar), isFalse);
+          expect(transport.overlaps(topBar), isFalse);
+          expect(bottomBar.bottom, size.height - 21);
+        });
+      }
+    },
+    skip: InputCapabilities.directionalPrimary
+        ? 'covers the touch tier; '
               'playback_chrome_tv_test.dart covers the remote one'
         : false,
   );

@@ -123,7 +123,7 @@ Out of scope, each a possible follow-up:
   top bar and the bottom bar the scrim is `DepthTokens.osdTint` at
   `DepthTokens.osdFillOpacity` (0.85), the exact fill `osd_legibility_test`
   measures. Beyond each bar it fades to transparent over
-  `ChromeScrim.fadeExtent` (96 px). Bare glyphs and text on the scrim are then
+  `ChromeScrim.fadeExtentFor` (96 px, or 12 % of the viewport height on a short landscape phone). Bare glyphs and text on the scrim are then
   rated exactly as they are on the panel today.
 - **Text.** Title 15 / w600; timecodes 12 / w500 (remote tier 18) with
   tabular figures; both `osdTextColors` as today. No text shadows.

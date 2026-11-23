@@ -16,7 +16,9 @@ import 'transport_cluster.dart';
 /// [TransportSurface] keys, tooltips and focus-memory ids, so key lookups and
 /// keyboard behaviour match every other tier. Seek and episode discs are
 /// blur-free [GlassSurface.osdPill]s; the play disc is an opaque filled
-/// circle with a drop shadow.
+/// circle with a drop shadow. While the player buffers, the play disc swaps
+/// its glyph for a dark spinner ([bufferingKey]): the global white spinner
+/// would sit on this near-white disc and vanish.
 ///
 /// Episode buttons render only when [showEpisodeNav] is set and their callback
 /// is non-null.
@@ -64,6 +66,9 @@ class TouchTransport extends StatelessWidget {
 
   static const double _playIconSize = 36;
 
+  /// Key of the spinner the play disc shows while buffering.
+  static const Key bufferingKey = Key('touch-transport-buffering');
+
   Widget _disc({
     required Key key,
     required Object memoryId,
@@ -77,17 +82,17 @@ class TouchTransport extends StatelessWidget {
     return FocusMemoryItem(
       id: memoryId,
       index: index,
-      child: PressScale(
-        child: GlassSurface.osdPill(
-          borderRadius: BorderRadius.circular(size / 2),
-          child: ControlButton(
-            key: key,
-            icon: icon,
-            size: size,
-            iconSize: iconSize,
-            tooltip: tooltip,
-            onTap: onTap,
-          ),
+      // No PressScale: ControlButton already scales its own glyph on press,
+      // and two press animations would compound.
+      child: GlassSurface.osdPill(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: ControlButton(
+          key: key,
+          icon: icon,
+          size: size,
+          iconSize: iconSize,
+          tooltip: tooltip,
+          onTap: onTap,
         ),
       ),
     );
@@ -105,8 +110,11 @@ class TouchTransport extends StatelessWidget {
         child: Semantics(
           button: true,
           label: label,
+          // The Semantics label above already announces the action, so the
+          // tooltip stays out of the tree rather than reading it twice.
           child: Tooltip(
             message: label,
+            excludeFromSemantics: true,
             child: GestureDetector(
               key: TransportSurface.playPauseKey,
               behavior: HitTestBehavior.opaque,
@@ -129,10 +137,28 @@ class TouchTransport extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Icon(
-                    isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size: _playIconSize,
-                    color: playGlyph,
+                  child: StreamBuilder<bool>(
+                    stream: player.stream.buffering,
+                    initialData: player.state.buffering,
+                    builder: (context, buffering) => buffering.data == true
+                        ? const Center(
+                            child: SizedBox(
+                              key: bufferingKey,
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                color: playGlyph,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            size: _playIconSize,
+                            color: playGlyph,
+                          ),
                   ),
                 ),
               ),

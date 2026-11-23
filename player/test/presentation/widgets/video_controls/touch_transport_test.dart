@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/semantics.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/l10n/l10n.dart';
+import 'package:player/presentation/widgets/controls/press_scale.dart';
 import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/touch_transport.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
@@ -145,5 +147,75 @@ void main() {
     );
 
     expect(find.byType(BackdropFilter), findsNothing);
+  });
+
+  testWidgets('the play disc announces "Play" once, with a tap action', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(build()));
+
+    final labelled = find.bySemanticsLabel('Play');
+    expect(labelled, findsOneWidget);
+    final data = tester.getSemantics(labelled).getSemanticsData();
+    expect(data.hasAction(SemanticsAction.tap), isTrue);
+    expect(data.label, 'Play');
+    // The tooltip would merge into the same node and be read after the
+    // label, so it must contribute nothing.
+    expect(data.tooltip, isEmpty);
+    expect(
+      find.semantics.byPredicate((node) {
+        final d = node.getSemanticsData();
+        return d.label == 'Play' || d.tooltip == 'Play';
+      }),
+      findsOne,
+    );
+    handle.dispose();
+  });
+
+  testWidgets('buffering swaps the play glyph for a dark spinner', (
+    tester,
+  ) async {
+    platform.state = platform.state.copyWith(buffering: true);
+    await tester.pumpWidget(_host(build()));
+
+    expect(find.byKey(TouchTransport.bufferingKey), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+    final spinner = tester.widget<CircularProgressIndicator>(
+      find.descendant(
+        of: find.byKey(TouchTransport.bufferingKey),
+        matching: find.byType(CircularProgressIndicator),
+      ),
+    );
+    expect(spinner.color, TouchTransport.playGlyph);
+  });
+
+  testWidgets('each disc has exactly one press animation', (tester) async {
+    await tester.pumpWidget(
+      _host(build(showEpisodeNav: true, onPrevious: () {}, onNext: () {})),
+    );
+
+    // The seek and episode discs scale inside ControlButton, so no
+    // PressScale wraps them; the play disc is not a ControlButton and keeps
+    // its PressScale.
+    for (final key in const [
+      TransportSurface.previousEpisodeKey,
+      TransportSurface.back10Key,
+      TransportSurface.forward10Key,
+      TransportSurface.nextEpisodeKey,
+    ]) {
+      expect(
+        find.ancestor(of: find.byKey(key), matching: find.byType(PressScale)),
+        findsNothing,
+        reason: '$key',
+      );
+    }
+    expect(
+      find.ancestor(
+        of: find.byKey(TransportSurface.playPauseKey),
+        matching: find.byType(PressScale),
+      ),
+      findsOneWidget,
+    );
   });
 }
