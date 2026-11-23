@@ -2,7 +2,7 @@
 #
 # window_manager and screen_retriever sit on nativeapi, whose cnativeapi build
 # hook compiles a C++ core on every Linux `flutter test` and `flutter build
-# linux`, and asks `pkg-config` for gtk+-3.0, x11 and xi. Flutter runs build
+# linux`, and asks `pkg-config` for GTK 3, X11 and Xi. Flutter runs build
 # hooks with a filtered environment (hooks_runner keeps PATH, HOME, NIX_* and
 # a few others), so the PKG_CONFIG_PATH a Nix shell or derivation sets never
 # reaches it, and the hook fails with "No package 'gtk+-3.0' found".
