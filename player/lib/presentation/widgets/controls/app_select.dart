@@ -94,6 +94,9 @@ class _AppSelectState<T> extends State<AppSelect<T>> {
     final box = anchor.findRenderObject();
     if (position == null || box is! RenderBox) return;
     final width = box.size.width;
+    // The menu shows these rows; resolve the pick against them, not against
+    // whatever items the field has by the time it closes.
+    final items = List.of(widget.items);
     final selected = _selectedIndex;
     final palette = context.palette;
 
@@ -108,14 +111,14 @@ class _AppSelectState<T> extends State<AppSelect<T>> {
         maxWidth: math.max(width, 280),
       ),
       items: [
-        for (var i = 0; i < widget.items.length; i++)
+        for (var i = 0; i < items.length; i++)
           _AppSelectEntry(
             autofocus: i == (selected < 0 ? 0 : selected),
             child: PopupMenuItem<int>(
-              key: widget.items[i].key,
+              key: items[i].key,
               value: i,
               child: _MenuRow(
-                item: widget.items[i],
+                item: items[i],
                 checked: i == selected,
                 palette: palette,
               ),
@@ -124,9 +127,10 @@ class _AppSelectState<T> extends State<AppSelect<T>> {
       ],
     );
     _open = false;
-    if (!mounted || picked == null || picked == selected) return;
-    if (picked >= widget.items.length) return;
-    widget.onChanged(widget.items[picked].value);
+    if (!mounted || picked == null || picked >= items.length) return;
+    final value = items[picked].value;
+    if (value == widget.value) return;
+    widget.onChanged(value);
   }
 
   @override

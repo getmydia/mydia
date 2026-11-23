@@ -260,14 +260,6 @@ class _GlassDialogState extends State<GlassDialog> {
   Widget _frosted(BuildContext context) {
     final palette = context.palette;
     final roles = context.surfaceRoles;
-    final icon = widget.icon;
-    final title = widget.title;
-    final content = widget.content;
-    final actions = widget.actions ?? const <Widget>[];
-    final roleColor = widget.destructive ? AppColors.error : palette.primary;
-    // Title and content sit 24 from the card edge, the actions 10.
-    const textInset = EdgeInsets.symmetric(horizontal: 14);
-    final defaultIndex = widget.destructive ? 0 : actions.length - 1;
     return Dialog(
       backgroundColor: palette.surfaceHigh,
       surfaceTintColor: Colors.transparent,
@@ -284,96 +276,117 @@ class _GlassDialogState extends State<GlassDialog> {
           _cardInset,
           _cardInset,
         ),
-        child: FrostedDialogBody(
-          minWidth: GlassDialog.frostedMaxWidth - 2 * _cardInset,
-          maxWidth: GlassDialog.frostedWideMaxWidth - 2 * _cardInset,
-          scrolling: content == null
-              ? null
-              : (icon == null ? 0 : 1) + (title == null ? 0 : 1),
-          children: [
-            if (icon != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: Center(
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: roleColor.withValues(alpha: 0.16),
-                    ),
-                    child: IconTheme.merge(
-                      data: IconThemeData(color: roleColor, size: 22),
-                      child: icon,
-                    ),
-                  ),
-                ),
-              ),
-            if (title != null)
-              Padding(
-                padding: textInset,
-                child: DefaultTextStyle.merge(
-                  style: TextStyle(
-                    fontFamily: kAppFontFamily,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: palette.textPrimary,
-                  ),
-                  textAlign: TextAlign.center,
-                  child: title,
-                ),
-              ),
-            if (content != null)
-              SingleChildScrollView(
-                padding: textInset.copyWith(
-                  top: title == null ? 0 : _actionGap,
-                ),
-                child: DefaultTextStyle.merge(
-                  style: TextStyle(
-                    fontFamily: kAppFontFamily,
-                    fontSize: 13.5,
-                    height: 1.4,
-                    color: palette.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                  child: content,
-                ),
-              ),
-            if (actions.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.only(
-                  top: title == null && content == null ? 0 : 20,
-                ),
-                child: Focus(
-                  focusNode: _actionsNode,
-                  child: FrostedDialogActions(
-                    gap: _actionGap,
-                    // The card, not the action row, is what must pass 420.
-                    rowMinWidth: 420 - 2 * _cardInset,
-                    children: [
-                      for (var i = 0; i < actions.length; i++)
-                        Focus(
-                          focusNode: i == defaultIndex
-                              ? _defaultActionNode
-                              : null,
-                          canRequestFocus: false,
-                          skipTraversal: true,
-                          child: PressScale(
-                            child: _actionTheme(
-                              context,
-                              primary: i == actions.length - 1,
-                              child: actions[i],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
+        // When the icon, title and actions alone outgrow a short viewport,
+        // the card scrolls whole so every action stays reachable.
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final body = _frostedBody(
+              context,
+              viewportHeight: constraints.maxHeight,
+            );
+            if (!constraints.hasBoundedHeight) return body;
+            return SingleChildScrollView(primary: false, child: body);
+          },
         ),
       ),
+    );
+  }
+
+  Widget _frostedBody(BuildContext context, {required double viewportHeight}) {
+    final palette = context.palette;
+    final icon = widget.icon;
+    final title = widget.title;
+    final content = widget.content;
+    final actions = widget.actions ?? const <Widget>[];
+    final roleColor = widget.destructive ? AppColors.error : palette.primary;
+    // Title and content sit 24 from the card edge, the actions 10.
+    const textInset = EdgeInsets.symmetric(horizontal: 14);
+    final defaultIndex = widget.destructive ? 0 : actions.length - 1;
+    return FrostedDialogBody(
+      viewportHeight: viewportHeight,
+      minWidth: GlassDialog.frostedMaxWidth - 2 * _cardInset,
+      maxWidth: GlassDialog.frostedWideMaxWidth - 2 * _cardInset,
+      scrolling: content == null
+          ? null
+          : (icon == null ? 0 : 1) + (title == null ? 0 : 1),
+      children: [
+        if (icon != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Center(
+              child: Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: roleColor.withValues(alpha: 0.16),
+                ),
+                child: IconTheme.merge(
+                  data: IconThemeData(color: roleColor, size: 22),
+                  child: icon,
+                ),
+              ),
+            ),
+          ),
+        if (title != null)
+          Padding(
+            padding: textInset,
+            child: DefaultTextStyle.merge(
+              style: TextStyle(
+                fontFamily: kAppFontFamily,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: palette.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+              child: title,
+            ),
+          ),
+        if (content != null)
+          SingleChildScrollView(
+            padding: textInset.copyWith(top: title == null ? 0 : _actionGap),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(
+                fontFamily: kAppFontFamily,
+                fontSize: 13.5,
+                height: 1.4,
+                color: palette.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+              child: content,
+            ),
+          ),
+        if (actions.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(
+              top: title == null && content == null ? 0 : 20,
+            ),
+            child: Focus(
+              focusNode: _actionsNode,
+              child: FrostedDialogActions(
+                gap: _actionGap,
+                // The card, not the action row, is what must pass 420.
+                rowMinWidth: 420 - 2 * _cardInset,
+                children: [
+                  for (var i = 0; i < actions.length; i++)
+                    Focus(
+                      focusNode: i == defaultIndex ? _defaultActionNode : null,
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      child: PressScale(
+                        child: _actionTheme(
+                          context,
+                          primary: i == actions.length - 1,
+                          child: actions[i],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 

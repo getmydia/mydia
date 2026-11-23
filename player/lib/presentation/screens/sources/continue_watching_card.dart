@@ -12,6 +12,7 @@ import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/focus_emphasis.dart';
 import '../../widgets/focus_highlight.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/source_artwork.dart';
@@ -141,8 +142,12 @@ class ContinueWatchingCard extends ConsumerWidget {
         if (hoverSource != null) publishBackdropHover(ref, hoverSource);
       },
       onExit: (_) => clearBackdropHover(ref),
+      // On the television tier it grows by the tile class, the room
+      // Continue Watching's rail leaves (`SourcePosterRow.landscapeFocusSize`).
       child: FocusHighlight(
         onActivate: onTap,
+        emphasis: true,
+        emphasisSize: FocusSize.tile,
         borderRadius: radius,
         child: GestureDetector(
           onTap: onTap,

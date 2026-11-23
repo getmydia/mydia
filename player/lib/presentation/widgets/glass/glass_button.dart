@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
@@ -44,6 +45,21 @@ class GlassButton extends StatelessWidget {
 
   static const double _frostedHitTarget = 48;
 
+  /// The Frosted outline. On the television tier the hairline holds in every
+  /// state: FocusEmphasis draws the focus ring there, and the theme's focus
+  /// border would sit inside it as a second one. Elsewhere FocusEmphasis
+  /// draws nothing, so keyboard focus takes the theme's 2px primary side.
+  static WidgetStateProperty<BorderSide> _frostedSide(BuildContext context) {
+    final hairline = BorderSide(color: context.surfaceRoles.hairlineStrong);
+    if (InputCapabilities.directionalPrimary) {
+      return WidgetStatePropertyAll(hairline);
+    }
+    final focused = BorderSide(color: context.palette.primary, width: 2);
+    return WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.focused) ? focused : hairline,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
@@ -52,11 +68,7 @@ class GlassButton extends StatelessWidget {
       final style = OutlinedButton.styleFrom(
         minimumSize: Size(0, height ?? AppTheme.secondaryButtonHeight),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        // The hairline holds in every state: FocusEmphasis below draws the
-        // television focus ring, and the theme's focus border would sit
-        // inside it as a second one.
-        side: BorderSide(color: roles.hairlineStrong),
-      );
+      ).copyWith(side: _frostedSide(context));
       final button = icon == null
           ? OutlinedButton(
               key: buttonKey,

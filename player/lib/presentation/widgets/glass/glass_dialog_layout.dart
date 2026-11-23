@@ -26,12 +26,17 @@ import 'package:flutter/widgets.dart';
 ///
 /// The [scrolling] child, the content's scroll view, takes whatever height
 /// the other sections leave, so tall content scrolls and the actions stay.
+/// When the other sections alone are taller than that, the body lays out
+/// taller than the dialog, and the dialog scrolls it whole: put it in a
+/// vertical scroll view and pass the height that view shows as
+/// [viewportHeight], since the scroll view itself sets no height limit.
 class FrostedDialogBody extends MultiChildRenderObjectWidget {
   const FrostedDialogBody({
     super.key,
     required this.scrolling,
     required this.minWidth,
     required this.maxWidth,
+    this.viewportHeight = double.infinity,
     required super.children,
   });
 
@@ -44,9 +49,13 @@ class FrostedDialogBody extends MultiChildRenderObjectWidget {
   /// Widest the body grows for content that cannot be narrower.
   final double maxWidth;
 
+  /// The height the sections share when the incoming constraints are
+  /// unbounded, as inside a scroll view. Infinite when nothing bounds it.
+  final double viewportHeight;
+
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      RenderFrostedDialogBody(scrolling, minWidth, maxWidth);
+      RenderFrostedDialogBody(scrolling, minWidth, maxWidth, viewportHeight);
 
   @override
   void updateRenderObject(
@@ -55,7 +64,8 @@ class FrostedDialogBody extends MultiChildRenderObjectWidget {
   ) => renderObject
     ..scrolling = scrolling
     ..minWidth = minWidth
-    ..maxWidth = maxWidth;
+    ..maxWidth = maxWidth
+    ..viewportHeight = viewportHeight;
 }
 
 class _FrostedParentData extends ContainerBoxParentData<RenderBox> {}
@@ -110,7 +120,12 @@ class RenderFrostedDialogBody extends RenderBox
         ContainerRenderObjectMixin<RenderBox, _FrostedParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _FrostedParentData>,
         _FrostedChildren {
-  RenderFrostedDialogBody(this._scrolling, this._minWidth, this._maxWidth);
+  RenderFrostedDialogBody(
+    this._scrolling,
+    this._minWidth,
+    this._maxWidth, [
+    this._viewportHeight = double.infinity,
+  ]);
 
   int? _scrolling;
   set scrolling(int? value) {
@@ -130,6 +145,13 @@ class RenderFrostedDialogBody extends RenderBox
   set maxWidth(double value) {
     if (value == _maxWidth) return;
     _maxWidth = value;
+    markNeedsLayout();
+  }
+
+  double _viewportHeight;
+  set viewportHeight(double value) {
+    if (value == _viewportHeight) return;
+    _viewportHeight = value;
     markNeedsLayout();
   }
 
@@ -155,7 +177,13 @@ class RenderFrostedDialogBody extends RenderBox
       fixed += heights[i];
     }
     if (scrolling != null && scrolling < children.length) {
-      final room = math.max(0.0, constraints.maxHeight - fixed);
+      final available = constraints.hasBoundedHeight
+          ? constraints.maxHeight
+          : _viewportHeight;
+      // The fixed sections fit: the content takes what they leave, and the
+      // actions stay pinned. They do not: the whole body scrolls, and the
+      // content shows up to a viewport of its own on the way.
+      final room = fixed <= available ? available - fixed : available;
       heights[scrolling] = sizeChild(
         children[scrolling],
         BoxConstraints(minWidth: width, maxWidth: width, maxHeight: room),

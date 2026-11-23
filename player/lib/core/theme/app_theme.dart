@@ -546,12 +546,16 @@ class AppTheme {
         iconSize: liquid ? null : 18,
         labelTextStyle: liquid
             ? null
-            : WidgetStatePropertyAll(
-                TextStyle(
+            // Material 3 dims a disabled item only through its default
+            // label style, which this one replaces, so it dims here too.
+            : WidgetStateProperty.resolveWith(
+                (states) => TextStyle(
                   fontFamily: kAppFontFamily,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: p.textPrimary,
+                  color: states.contains(WidgetState.disabled)
+                      ? p.textPrimary.withValues(alpha: 0.38)
+                      : p.textPrimary,
                 ),
               ),
       ),

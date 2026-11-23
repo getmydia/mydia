@@ -128,7 +128,9 @@ class _FrostedSwitchState extends State<_FrostedSwitch> {
       child: AnimatedAlign(
         duration: duration,
         curve: Curves.easeOut,
-        alignment: widget.value ? Alignment.centerRight : Alignment.centerLeft,
+        alignment: widget.value
+            ? AlignmentDirectional.centerEnd
+            : AlignmentDirectional.centerStart,
         child: const DecoratedBox(
           key: AppSwitch.thumbKey,
           decoration: BoxDecoration(

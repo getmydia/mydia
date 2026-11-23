@@ -345,6 +345,60 @@ void _frostedLayoutTests() {
       expect(tester.getRect(find.byKey(_cancelKey)).bottom, card.bottom - 10);
     });
 
+    testWidgets('a viewport shorter than the actions scrolls the card', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(640, 180);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      var cancels = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: _theme(liquid: false),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => GlassDialog(
+                  icon: const Icon(Icons.warning_rounded),
+                  title: const Text('Remove account?'),
+                  content: const Text('This signs you out.'),
+                  actions: [
+                    TextButton(
+                      key: const Key('cancel'),
+                      onPressed: () => cancels++,
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(onPressed: () {}, child: const Text('Later')),
+                    FilledButton(onPressed: () {}, child: const Text('Remove')),
+                  ],
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      // Cancel, stacked last, starts below the card's edge.
+      final cancel = find.byKey(const Key('cancel'));
+      expect(
+        tester.getRect(cancel).bottom,
+        greaterThan(tester.getRect(_card).bottom),
+      );
+      await tester.ensureVisible(cancel);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(cancel).bottom,
+        lessThanOrEqualTo(tester.getRect(_card).bottom),
+      );
+      await tester.tap(cancel);
+      expect(cancels, 1);
+    });
+
     testWidgets('no AlertDialog and no splash in Frosted', (tester) async {
       await _openDialog(tester, liquid: false);
       expect(find.byType(AlertDialog), findsNothing);

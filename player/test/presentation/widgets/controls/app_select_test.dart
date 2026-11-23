@@ -297,6 +297,39 @@ void main() {
     expect(log, isEmpty);
   });
 
+  testWidgets('a pick resolves against the rows the menu showed', (
+    tester,
+  ) async {
+    final log = <String>[];
+    var items = _items;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return AppSelect<String>(
+              key: const Key('select'),
+              items: items,
+              value: 'a',
+              onChanged: log.add,
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('select')));
+    await tester.pumpAndSettle();
+    // The field's items reorder while the menu is open.
+    rebuild(() => items = _items.reversed.toList());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('item-c')));
+    await tester.pumpAndSettle();
+
+    expect(log, ['c']);
+  });
+
   testWidgets('a nullable value type keeps null as a real choice', (
     tester,
   ) async {

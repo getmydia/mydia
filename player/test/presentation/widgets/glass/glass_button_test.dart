@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
@@ -107,16 +108,44 @@ void main() {
     expect(tester.getSize(find.byType(OutlinedButton)).height, 40);
   });
 
+  testWidgets('Frosted: keyboard focus draws the 2px primary side', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(() {}, liquid: false));
+    BorderSide side() {
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(OutlinedButton),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      return (material.shape! as OutlinedBorder).side;
+    }
+
+    expect(side(), const BorderSide(color: Color(0x24FFFFFF)));
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(
+      side(),
+      BorderSide(color: Palettes.projectionBooth.primary, width: 2),
+    );
+  });
+
   testWidgets('Frosted is a 40pt hairline button in a press-scaled emphasis', (
     tester,
   ) async {
     await tester.pumpWidget(_host(() {}, liquid: false));
     final button = tester.widget<OutlinedButton>(find.byType(OutlinedButton));
     final style = button.style!;
-    expect(style.side!.resolve({})!.color, const Color(0x24FFFFFF));
+    expect(style.side!.resolve({}), const BorderSide(color: Color(0x24FFFFFF)));
+    // Off the television FocusEmphasis draws nothing, so keyboard focus
+    // takes the theme's 2px primary side (glass_button_tv_test pins the TV
+    // hairline).
     expect(
-      style.side!.resolve({WidgetState.focused})!.color,
-      const Color(0x24FFFFFF),
+      style.side!.resolve({WidgetState.focused}),
+      BorderSide(color: Palettes.projectionBooth.primary, width: 2),
     );
     final emphasis = tester.widget<FocusEmphasis>(find.byType(FocusEmphasis));
     expect(emphasis.size, FocusSize.control);

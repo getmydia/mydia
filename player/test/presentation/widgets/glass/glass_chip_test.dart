@@ -107,6 +107,36 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Frosted: a large text scale grows the chip instead of clipping',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(Palettes.projectionBooth, liquid: false),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2.0)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Center(
+              child: GlassChip(
+                label: const Text('Sort A'),
+                selected: false,
+                onSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final chip = tester.getSize(find.byType(ChoiceChip)).height;
+      final label = tester.getSize(find.text('Sort A')).height;
+      expect(chip, greaterThan(30));
+      expect(chip, greaterThan(label));
+    },
+  );
+
   testWidgets('a liquid button and chip lay out inside IntrinsicWidth', (
     tester,
   ) async {

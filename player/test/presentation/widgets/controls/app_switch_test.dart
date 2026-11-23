@@ -13,11 +13,12 @@ Widget _host(
   AppSwitch child, {
   bool liquid = false,
   bool disableAnimations = true,
+  TextDirection textDirection = TextDirection.ltr,
 }) {
   return MediaQuery(
     data: MediaQueryData(disableAnimations: disableAnimations),
     child: Directionality(
-      textDirection: TextDirection.ltr,
+      textDirection: textDirection,
       child: Theme(
         data: AppTheme.build(_palette, liquid: liquid),
         child: Material(child: Center(child: child)),
@@ -73,6 +74,29 @@ void main() {
     expect(_trackColor(tester), _palette.border);
     expect(tester.getTopLeft(thumb).dx - tester.getTopLeft(track).dx, 2);
     expect(tester.getSize(thumb), const Size(20, 20));
+  });
+
+  testWidgets('the thumb mirrors in a right-to-left subtree', (tester) async {
+    final thumb = find.byKey(AppSwitch.thumbKey);
+    final track = find.byKey(AppSwitch.trackKey);
+    double offset() =>
+        tester.getTopLeft(thumb).dx - tester.getTopLeft(track).dx;
+
+    await tester.pumpWidget(
+      _host(
+        AppSwitch(value: true, onChanged: (_) {}),
+        textDirection: TextDirection.rtl,
+      ),
+    );
+    expect(offset(), 2);
+
+    await tester.pumpWidget(
+      _host(
+        AppSwitch(value: false, onChanged: (_) {}),
+        textDirection: TextDirection.rtl,
+      ),
+    );
+    expect(offset(), 18);
   });
 
   testWidgets('hit target is 48 high', (tester) async {

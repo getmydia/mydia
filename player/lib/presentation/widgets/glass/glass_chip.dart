@@ -103,7 +103,12 @@ class GlassChip extends StatelessWidget {
           borderRadius: radius,
           child: PressScale(
             enabled: onSelected != null,
-            child: SizedBox(height: _frostedHeight, child: chip),
+            // At least the spec's height; a large text scale grows it rather
+            // than clipping the label.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: _frostedHeight),
+              child: chip,
+            ),
           ),
         ),
       );

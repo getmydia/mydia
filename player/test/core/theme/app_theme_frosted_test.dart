@@ -83,6 +83,12 @@ void main() {
   test('menus and inputs', () {
     expect(t.popupMenuTheme.color, p.surfaceHigh);
     expect(t.popupMenuTheme.shape, rr(14, hairline));
+    final label = t.popupMenuTheme.labelTextStyle!;
+    expect(label.resolve({})!.color, p.textPrimary);
+    expect(
+      label.resolve({WidgetState.disabled})!.color,
+      p.textPrimary.withValues(alpha: 0.38),
+    );
     final i = t.inputDecorationTheme;
     expect(i.fillColor, p.surfaceLow);
     final enabled = i.enabledBorder! as OutlineInputBorder;

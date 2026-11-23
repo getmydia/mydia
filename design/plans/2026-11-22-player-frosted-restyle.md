@@ -264,7 +264,7 @@ The spec's 40×24 switch with a sliding, non-resizing thumb is not expressible t
 - `text scale 1.3 does not overflow` (Review Focus 3) with labels `S`, `M`, `L`, `XL` and with two long localized-style labels.
 - Settings: `subtitle size row shows S M L XL and saves on change`: tapping `L` writes `SubtitleSize.large` to `subtitleSizeSettingProvider`; no dialog opens.
 - Filter sheet: existing filter editor tests pass with `AppSegmented` (update finders from `SegmentedButton` to `AppSegmented` only).
-- [ ] **Step 2: Run, expect FAIL. Step 3: Implement**; labels come from l10n (add ARB keys `subtitleSizeShortSmall` … `subtitleSizeShortExtraLarge` = `S`, `M`, `L`, `XL` in `app_en.arb` and the other five ARB files, per `player/docs/l10n.md`). The row becomes a `SettingsRow.action` with the control as `trailing`.
+- [ ] **Step 2: Run, expect FAIL. Step 3: Implement**; labels come from l10n (add ARB keys `subtitleSizeShortSmall` … `subtitleSizeShortExtraLarge` = `S`, `M`, `L`, `XL` in `app_en.arb` only; the other locales come through Weblate, per `player/docs/l10n.md`). The row becomes a `SettingsRow.action` with the control as `trailing`.
 - [ ] **Step 4: Run** the new test, `test/presentation/screens/settings/`, `test/presentation/screens/filter/`, and the l10n checks from `player/docs/l10n.md`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(player): AppSegmented for short fixed choices`.
 
