@@ -21,6 +21,7 @@ class AppTheme {
 
   static const double radiusButton = 16.0; // Buttons
   static const double radiusCard = 18.0; // Cards, modals
+  static const double radiusSettingsCard = 14.0; // Settings groups
   static const double radiusHeroPoster = 22.0; // Home and detail hero poster
   static const double radiusChip = 8.0; // Tag and metadata chips
   static const double radiusNavItem = 12.0; // Items inside a pill or rail
@@ -565,6 +566,8 @@ class AppTheme {
 
       // Switch
       switchTheme: SwitchThemeData(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        thumbIcon: WidgetStateProperty.all<Icon?>(null),
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (!liquid) return Colors.white;
           if (states.contains(WidgetState.selected)) {

@@ -85,6 +85,22 @@ defmodule Mydia.Config.Schema.PathsTest do
       assert reason =~ "server.port"
     end
 
+    test "reports a value outside a field's allowed set" do
+      assert {:ok, _path, "readonly"} = Paths.cast_overlay("auth.oidc_default_role", "readonly")
+      assert {:error, reason} = Paths.cast_overlay("auth.oidc_default_role", "admin")
+      assert reason =~ "auth.oidc_default_role"
+
+      # Required by its changeset, so a cleared row is refused too; the season
+      # setting is optional, so clearing it stays legal.
+      assert {:error, _reason} = Paths.cast_overlay("auth.oidc_default_role", "")
+      assert {:ok, _path, nil} = Paths.cast_overlay("media.default_season_monitoring", "")
+
+      assert {:ok, _path, "first"} =
+               Paths.cast_overlay("media.default_season_monitoring", "first")
+
+      assert {:error, _reason} = Paths.cast_overlay("media.default_season_monitoring", "some")
+    end
+
     test "reports an unknown key without raising" do
       assert {:error, reason} = Paths.cast_overlay("server.nonexistent", "1")
       assert reason =~ "unknown"

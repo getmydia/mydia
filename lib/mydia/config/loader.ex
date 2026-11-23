@@ -315,15 +315,13 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(:local_enabled, System.get_env("LOCAL_AUTH_ENABLED"), &parse_boolean/1)
     |> put_if_present(:oidc_enabled, System.get_env("OIDC_ENABLED"), &parse_boolean/1)
     |> put_if_present(:oidc_issuer, System.get_env("OIDC_ISSUER"))
-    |> put_if_present(
-      :oidc_discovery_document_uri,
-      System.get_env("OIDC_DISCOVERY_DOCUMENT_URI")
-    )
+    |> put_if_present(:oidc_discovery_document_uri, System.get_env("OIDC_DISCOVERY_DOCUMENT_URI"))
     |> put_if_present(:oidc_client_id, System.get_env("OIDC_CLIENT_ID"))
     |> put_if_present(:oidc_client_secret, System.get_env("OIDC_CLIENT_SECRET"))
     |> put_if_present(:oidc_redirect_uri, System.get_env("OIDC_REDIRECT_URI"))
     |> put_if_present(:oidc_scopes, System.get_env("OIDC_SCOPES"))
     |> put_if_present(:oidc_link_by_email, System.get_env("OIDC_LINK_BY_EMAIL"), &parse_boolean/1)
+    |> put_if_present(:oidc_default_role, System.get_env("OIDC_DEFAULT_ROLE"))
     |> put_if_present(:jwt_ttl_days, System.get_env("JWT_TTL_DAYS"), &parse_integer/1)
     |> put_if_present(:jwt_allowed_drift, System.get_env("JWT_ALLOWED_DRIFT"), &parse_integer/1)
   end

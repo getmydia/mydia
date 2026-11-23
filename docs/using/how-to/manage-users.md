@@ -14,7 +14,9 @@ with one deliberate exception noted below.
 | **Read Only** | Browse the library. Cannot add, edit, or delete anything. |
 | **Guest** | Browse the library, and submit requests for an admin to approve. |
 
-New users default to **Guest**.
+New users default to **Guest**. An account created by an SSO sign-in can get
+another role from your identity provider's claims, or from `OIDC_DEFAULT_ROLE`:
+see [SSO / OIDC](sso-oidc.md#role-assignment).
 
 !!! note "Only guests can submit requests"
     The request flow is not additive. `can_submit_request?` returns true for

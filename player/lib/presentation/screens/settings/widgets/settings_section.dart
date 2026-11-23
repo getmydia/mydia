@@ -21,13 +21,24 @@ class SettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
+    final radius = BorderRadius.circular(AppTheme.radiusSettingsCard);
+    // GlassSurface.faux takes no border colour, only the light rim, so the
+    // palette outline is drawn over the content instead.
     return GlassSurface.faux(
-      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      borderRadius: radius,
       fillColor: palette.surfaceVariant.withValues(alpha: 0.55),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _withDividers(children, palette),
+      showRim: false,
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          border: Border.all(color: palette.border.withValues(alpha: 0.6)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _withDividers(children, palette),
+        ),
       ),
     );
   }
@@ -43,7 +54,9 @@ class SettingsCard extends StatelessWidget {
     final result = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
-        result.add(Divider(height: 1, thickness: 1, color: palette.divider));
+        result.add(
+          Divider(height: 1, thickness: 1, indent: 16, color: palette.divider),
+        );
       }
       result.add(children[i]);
     }
@@ -51,20 +64,27 @@ class SettingsCard extends StatelessWidget {
   }
 }
 
-/// An eyebrow label above a [SettingsCard].
+/// A sentence-case label above a [SettingsCard], and an optional [footer]
+/// note under it.
 ///
-/// The label is a muted eyebrow: tracked under Liquid, untracked under Frosted.
-/// The string itself is rendered as given. Transforming it to upper case
-/// would make screen readers spell or shout it, and would break `find.text`
-/// against the label a caller actually passed.
+/// The label is a 13/600 header without tracking, toned to `textSecondary`
+/// under Frosted. The strings are rendered as given. Transforming the label to
+/// upper case would make screen readers spell or shout it, and would break
+/// `find.text` against the label a caller actually passed.
 class SettingsSection extends StatelessWidget {
-  final String label;
+  /// The header above the card. Null when the page already names the section;
+  /// focus ids then use an empty label.
+  final String? label;
   final List<Widget> children;
+
+  /// A short explanation shown under the card.
+  final String? footer;
 
   const SettingsSection({
     super.key,
     required this.label,
     required this.children,
+    this.footer,
   });
 
   @override
@@ -80,37 +100,44 @@ class SettingsSection extends StatelessWidget {
                 // The label and the row's own key where it has one: a row
                 // shown conditionally then does not shift its neighbours'
                 // ids. The position stands in only for unkeyed rows.
-                id: (label, row.key ?? i),
+                id: (label ?? '', row.key ?? i),
                 index: order * SettingsFocusOrder.rowsPerSection + i,
                 child: row,
               ),
           ];
     final palette = context.palette;
-    // Frosted: a quieter 13/600 label in textSecondary, no tracking. Liquid
-    // keeps its tracked 11/600 eyebrow in textDisabled.
+    // Frosted tones the header down to textSecondary; Liquid keeps the
+    // brighter textPrimary at 80%.
     final frosted = !GlassStyle.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-          child: Text(
-            label,
-            style: frosted
-                ? TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: palette.textSecondary,
-                  )
-                : TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: palette.textDisabled,
-                  ),
+        if (label case final label?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: frosted
+                    ? palette.textSecondary
+                    : palette.textPrimary.withValues(alpha: 0.8),
+              ),
+            ),
           ),
-        ),
         SettingsCard(children: rows),
+        if (footer case final footer?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 8, 2, 0),
+            child: Text(
+              footer,
+              style: TextStyle(
+                fontSize: 12,
+                color: context.palette.textSecondary,
+              ),
+            ),
+          ),
       ],
     );
   }

@@ -45,7 +45,7 @@ apt-get install -y --no-install-recommends \
   libxml2-dev \
   libfreetype-dev libfribidi-dev libharfbuzz-dev libfontconfig-dev \
   libgnutls28-dev libva-dev libdrm-dev \
-  libegl-dev libgl-dev libx11-dev libxext-dev libxpresent-dev libxrandr-dev \
+  libegl-dev libgl-dev libx11-dev libxi-dev libxext-dev libxpresent-dev libxrandr-dev \
   libxss-dev libxv-dev libwayland-dev wayland-protocols libxkbcommon-dev \
   libpulse-dev libasound2-dev \
   librsvg2-bin desktop-file-utils xvfb xauth

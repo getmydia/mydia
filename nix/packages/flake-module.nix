@@ -86,7 +86,7 @@
       # Pre-fetch npm dependencies (required for sandbox build)
       npmDeps = pkgs.fetchNpmDeps {
         src = ../../assets;
-        hash = "sha256-qJUGJy4AmdwP40o9nNQJD29DOpYahtvXRzfYjDcAwoY=";
+        hash = "sha256-gg5aNygAgJ34wMcd3Me0M/HMqdyKojv7GdpherkOEr8=";
       };
 
       # Tailwind CSS v4 standalone binary. nixpkgs does ship tailwindcss_4, but
@@ -435,7 +435,7 @@
 
       relayNpmDeps = pkgs.fetchNpmDeps {
         src = relayDir + "/assets";
-        hash = "sha256-iq742G5J4bF9SConMSczdYei1VlihwKobYhAQA47BlQ=";
+        hash = "sha256-3jkJoZ4OZ6aPANNs+A/uwZyksrga+22B+m1IFBjVWW8=";
       };
 
       metadataRelay = ciRelay.beamPackages.mixRelease {

@@ -43,6 +43,14 @@ void main() {
     expect(find.text('A'), findsOneWidget);
   });
 
+  testWidgets('an emoji-leading username shows its whole first grapheme', (
+    tester,
+  ) async {
+    await _pump(tester, username: '\u{1F600}smile');
+
+    expect(find.text('\u{1F600}'), findsOneWidget);
+  });
+
   testWidgets('an empty username reads as signed in rather than blank', (
     tester,
   ) async {

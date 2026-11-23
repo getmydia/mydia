@@ -24,7 +24,6 @@ class SubtitleSizeSettingsRow extends ConsumerWidget {
     final l10n = context.l10n;
     return SettingsRow.action(
       key: const Key('subtitle-size-row'),
-      icon: Icons.closed_caption,
       title: l10n.settingsSubtitleSizeTitle,
       subtitle: l10n.settingsSubtitleSizeSubtitle,
       trailing: AppSegmented<SubtitleSize>(

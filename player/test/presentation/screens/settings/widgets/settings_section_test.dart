@@ -37,11 +37,7 @@ void main() {
       SettingsSection(
         label: 'Playback',
         children: [
-          SettingsRow.navigation(
-            icon: Icons.hd,
-            title: 'Default quality',
-            onTap: () {},
-          ),
+          SettingsRow.navigation(title: 'Default quality', onTap: () {}),
         ],
       ),
     );
@@ -54,7 +50,57 @@ void main() {
     expect(labelY, lessThan(cardY));
   });
 
-  testWidgets('eyebrow is 13/600 textSecondary without tracking in Frosted', (
+  testWidgets('header is sentence styled', (tester) async {
+    await _pump(
+      tester,
+      const SettingsSection(label: 'Playback', children: [SizedBox()]),
+    );
+
+    final style = tester.widget<Text>(find.text('Playback')).style;
+    expect(style?.fontSize, 13);
+    expect(style?.fontWeight, FontWeight.w600);
+    expect(style?.letterSpacing ?? 0, 0);
+  });
+
+  testWidgets('footer renders under the card', (tester) async {
+    await _pump(
+      tester,
+      const SettingsSection(
+        label: 'Skipping',
+        footer: 'When off, a skip button appears instead.',
+        children: [SizedBox(height: 40)],
+      ),
+    );
+
+    final footer = find.text('When off, a skip button appears instead.');
+    expect(footer, findsOneWidget);
+    expect(
+      tester.getTopLeft(footer).dy,
+      greaterThan(tester.getBottomLeft(find.byType(SettingsCard)).dy),
+    );
+  });
+
+  testWidgets('no footer, no extra text', (tester) async {
+    await _pump(
+      tester,
+      const SettingsSection(label: 'Skipping', children: [Text('Row')]),
+    );
+
+    expect(find.byType(Text), findsNWidgets(2));
+  });
+
+  testWidgets('card dividers are inset 16', (tester) async {
+    await _pump(
+      tester,
+      const SettingsCard(
+        children: [SizedBox(height: 40), SizedBox(height: 40)],
+      ),
+    );
+
+    expect(tester.widget<Divider>(find.byType(Divider)).indent, 16);
+  });
+
+  testWidgets('header is 13/600 textSecondary without tracking in Frosted', (
     tester,
   ) async {
     await _pumpThemed(
@@ -67,13 +113,11 @@ void main() {
     expect(label.data, 'Playback');
     expect(label.style?.fontSize, 13);
     expect(label.style?.fontWeight, FontWeight.w600);
-    expect(label.style?.letterSpacing, anyOf(isNull, 0));
+    expect(label.style?.letterSpacing ?? 0, 0);
     expect(label.style?.color, Palettes.projectionBooth.textSecondary);
   });
 
-  testWidgets('eyebrow keeps 11/600 textDisabled with tracking in Liquid', (
-    tester,
-  ) async {
+  testWidgets('header keeps textPrimary at 80% in Liquid', (tester) async {
     await _pumpThemed(
       tester,
       liquid: true,
@@ -81,10 +125,12 @@ void main() {
     );
 
     final label = tester.widget<Text>(find.text('Playback'));
-    expect(label.style?.fontSize, 11);
+    expect(label.style?.fontSize, 13);
     expect(label.style?.fontWeight, FontWeight.w600);
-    expect(label.style?.letterSpacing, 1.2);
-    expect(label.style?.color, Palettes.projectionBooth.textDisabled);
+    expect(
+      label.style?.color,
+      Palettes.projectionBooth.textPrimary.withValues(alpha: 0.8),
+    );
   });
 
   testWidgets(
@@ -94,21 +140,9 @@ void main() {
         tester,
         SettingsCard(
           children: [
-            SettingsRow.navigation(
-              icon: Icons.looks_one,
-              title: 'One',
-              onTap: () {},
-            ),
-            SettingsRow.navigation(
-              icon: Icons.looks_two,
-              title: 'Two',
-              onTap: () {},
-            ),
-            SettingsRow.navigation(
-              icon: Icons.looks_3,
-              title: 'Three',
-              onTap: () {},
-            ),
+            SettingsRow.navigation(title: 'One', onTap: () {}),
+            SettingsRow.navigation(title: 'Two', onTap: () {}),
+            SettingsRow.navigation(title: 'Three', onTap: () {}),
           ],
         ),
       );
@@ -117,10 +151,13 @@ void main() {
     },
   );
 
-  testWidgets('SettingsCard uses the shared card radius', (tester) async {
+  testWidgets('SettingsCard uses the settings card radius', (tester) async {
     await _pump(tester, const SettingsCard(children: [SizedBox(height: 40)]));
 
     final clip = tester.widget<ClipRRect>(find.byType(ClipRRect).first);
-    expect(clip.borderRadius, BorderRadius.circular(AppTheme.radiusCard));
+    expect(
+      clip.borderRadius,
+      BorderRadius.circular(AppTheme.radiusSettingsCard),
+    );
   });
 }

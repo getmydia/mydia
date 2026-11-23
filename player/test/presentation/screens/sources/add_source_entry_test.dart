@@ -113,7 +113,7 @@ void main() {
 
   List<String> sectionLabels(WidgetTester tester) => tester
       .widgetList<SettingsSection>(find.byType(SettingsSection))
-      .map((s) => s.label)
+      .map((s) => s.label!)
       .toList();
 
   testWidgets('natively, the rows are grouped Mydia, servers, files, backup', (

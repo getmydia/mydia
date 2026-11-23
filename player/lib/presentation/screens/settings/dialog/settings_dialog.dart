@@ -15,6 +15,7 @@ enum SettingsCategory {
   connections(Icons.hub_outlined),
   backup(Icons.cloud_upload_outlined),
   playback(Icons.play_circle_outline),
+  appearance(Icons.palette_outlined),
   diagnostics(Icons.lan_outlined),
   about(Icons.info_outline);
 
@@ -27,9 +28,24 @@ enum SettingsCategory {
     connections => l10n.connectionsTitle,
     backup => l10n.backupSectionTitle,
     playback => l10n.settingsPlayback,
+    appearance => l10n.settingsAppearanceSection,
     diagnostics => l10n.settingsDiagnostics,
     about => l10n.settingsAbout,
   };
+
+  /// The one line under the pane title. Null for connections, whose page
+  /// opens with its own constellation.
+  String? description(AppLocalizations l10n) => switch (this) {
+    connections => null,
+    backup => l10n.settingsBackupDescription,
+    playback => l10n.settingsPlaybackDescription,
+    appearance => l10n.settingsAppearanceDescription,
+    diagnostics => l10n.settingsDiagnosticsDescription,
+    about => l10n.settingsAboutDescription,
+  };
+
+  /// True when the sidebar sets this category apart from the ones above it.
+  bool get startsGroup => this == diagnostics;
 }
 
 class SettingsDialogController extends ValueNotifier<SettingsCategory> {
@@ -61,17 +77,29 @@ const Size kSettingsDialogCompactBelow = Size(640, 420);
 const Size kSettingsDialogSize = Size(880, 600);
 const double kSettingsDialogInset = 24;
 
+typedef SettingsSidebarBuilder = Widget Function(
+  SettingsCategory selected,
+  bool compact,
+  ValueChanged<SettingsCategory> onSelect,
+);
+
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
     required this.controller,
     required this.rootPage,
     this.wrapPane,
+    this.sidebar,
   });
 
   final SettingsDialogController controller;
   final Widget Function(SettingsCategory category) rootPage;
   final Widget Function(BuildContext context, Widget child)? wrapPane;
+
+  /// Builds the sidebar. `openSettings` passes one that wires the account,
+  /// connection and update status; without it the dialog draws the plain
+  /// sidebar, so it pumps without a `ProviderScope`.
+  final SettingsSidebarBuilder? sidebar;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
@@ -110,6 +138,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 
   void _close() => Navigator.of(context).pop();
+
+  void _select(SettingsCategory c) => widget.controller.value = c;
 
   /// Esc: one level back in the pane, or out of the dialog at a root.
   void _escape() {
@@ -160,11 +190,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SettingsDialogSidebar(
-                    selected: selected,
-                    compact: compact,
-                    onSelect: (c) => widget.controller.value = c,
-                  ),
+                  widget.sidebar?.call(selected, compact, _select) ??
+                      SettingsDialogSidebar(
+                        selected: selected,
+                        compact: compact,
+                        onSelect: _select,
+                      ),
                   VerticalDivider(
                     width: 1,
                     thickness: 1,
@@ -246,26 +277,32 @@ class SettingsPane extends StatelessWidget {
   const SettingsPane({
     super.key,
     required this.title,
+    this.description,
     this.actions = const [],
     required this.child,
   });
 
-  /// Null when the content opens with its own title, so the header row
-  /// carries only the controls.
+  /// Null when the content opens with its own title, so only the header
+  /// row's controls show above it.
   final String? title;
+  final String? description;
   final List<Widget> actions;
+
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.of(context).canPop();
+    final palette = context.palette;
+    final heading = title;
+    final blurb = description;
     return Material(
       color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            height: 56,
+            height: 52,
             child: Row(
               children: [
                 const SizedBox(width: 8),
@@ -275,30 +312,59 @@ class SettingsPane extends StatelessWidget {
                     tooltip: context.l10n.commonBack,
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () => Navigator.of(context).pop(),
-                  )
-                else
-                  const SizedBox(width: 12),
-                Expanded(
-                  child: switch (title) {
-                    final title? => Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    null => const SizedBox.shrink(),
-                  },
-                ),
+                  ),
+                const Spacer(),
                 ...actions,
-                IconButton(
+                IconButton.filledTonal(
                   key: const Key('settings-dialog-close'),
                   tooltip: context.l10n.commonClose,
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close, size: 15),
+                  style: IconButton.styleFrom(
+                    fixedSize: const Size.square(30),
+                    minimumSize: Size.zero,
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                   onPressed: SettingsDialogScope.of(context).close,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 16),
               ],
             ),
           ),
+          if (heading != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(40, 0, 40, 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        heading,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (blurb != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          blurb,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
           Expanded(child: child),
         ],
       ),

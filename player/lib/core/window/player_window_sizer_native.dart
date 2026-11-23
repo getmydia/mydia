@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'player_window_session.dart';
 import 'player_window_sizer.dart';
 import 'window_controller.dart';
+import 'window_event_listener.dart';
 import 'window_geometry_controller.dart';
 import 'window_geometry_math.dart';
 
@@ -22,13 +22,15 @@ const double _kAspectTolerance = 0.01;
 ///
 /// Nothing here is allowed to throw: it runs from `PlayerScreen.initState` and
 /// `dispose`, where an exception would surface as a red screen mid-playback.
-class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
+class NativePlayerWindowSizer
+    with WindowEventListener
+    implements PlayerWindowSizer {
   final WindowController _window;
   final PlayerWindowSession _session;
   final WorkAreaReader _readWorkAreas;
 
   /// Invoked once, on the first [detach]. The facade uses this to unregister
-  /// the sizer from `windowManager`'s listener list; a sizer is built per
+  /// the sizer from `NativeWindowHost`'s listener list; a sizer is built per
   /// player screen, so without it every screen would leak a listener.
   final void Function()? _onDetached;
 

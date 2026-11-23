@@ -12,6 +12,8 @@ import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/core/update/update_backend.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/user_settings.dart';
+import 'package:player/presentation/screens/settings/dialog/settings_dialog.dart';
+import 'package:player/presentation/screens/settings/dialog/settings_panes.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_sections.dart';
 
@@ -55,22 +57,6 @@ class _StubRegistration extends NodeRegistrations {
   void retryAll() {}
 }
 
-class _PlaybackHost extends ConsumerWidget {
-  const _PlaybackHost({required this.includeRemote});
-
-  final bool includeRemote;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(settingsControllerProvider);
-    return PlaybackSettingsSection(
-      settings: async.value,
-      failed: async.hasError,
-      includeRemoteControl: includeRemote,
-    );
-  }
-}
-
 Future<void> _pumpSection(
   WidgetTester tester,
   Widget child, {
@@ -110,6 +96,28 @@ Future<void> _pumpSection(
   await tester.pump();
 }
 
+class _VideoHost extends ConsumerWidget {
+  const _VideoHost();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(settingsControllerProvider);
+    return PlaybackVideoSection(settings: async.value, failed: async.hasError);
+  }
+}
+
+/// The desktop dialog opened on its Playback page.
+Widget _playbackDialog() => SizedBox(
+  height: 1100,
+  child: SettingsDialog(
+    controller: SettingsDialogController(SettingsCategory.playback),
+    // Other categories mount too; only Playback needs its real page here.
+    rootPage: (category) => category == SettingsCategory.playback
+        ? settingsRootPage(category)
+        : const SizedBox.shrink(),
+  ),
+);
+
 void main() {
   setUp(() async {
     _remoteControlBoxCounter += 1;
@@ -123,29 +131,57 @@ void main() {
     await _remoteControlBox.close();
   });
 
-  testWidgets('Playback carries the remote-control rows only when asked', (
-    tester,
-  ) async {
-    await _pumpSection(tester, const _PlaybackHost(includeRemote: false));
-    expect(
-      find.byKey(const Key('remote-control-enabled-switch')),
-      findsNothing,
+  testWidgets('playback groups render under their headers', (tester) async {
+    await _pumpSection(tester, _playbackDialog());
+    expect(find.text('Video'), findsOneWidget);
+    expect(find.text('Skipping'), findsOneWidget);
+    // The dialog is 600 tall, so the last section sits below the fold of the
+    // pane's lazy list until it is scrolled to.
+    await tester.scrollUntilVisible(
+      find.text('Remote control'),
+      200,
+      scrollable: find.byType(Scrollable).last,
     );
-
-    await _pumpSection(tester, const _PlaybackHost(includeRemote: true));
+    expect(find.text('Remote control'), findsOneWidget);
+    expect(find.byKey(const Key('default-quality-row')), findsOneWidget);
     expect(
       find.byKey(const Key('remote-control-enabled-switch')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('default-quality-row')), findsOneWidget);
+    expect(find.byKey(const Key('theme-preset-row')), findsNothing);
+    expect(find.byKey(const Key('language-row')), findsNothing);
   });
 
-  testWidgets('Playback shows the registration retry after a failure', (
+  testWidgets('skipping footer replaces row subtitles', (tester) async {
+    await _pumpSection(tester, _playbackDialog());
+    expect(find.text('Off shows a skip button instead'), findsNothing);
+    expect(
+      find.text('When off, a skip button appears instead.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the default quality row is a select showing the rung', (
+    tester,
+  ) async {
+    await _pumpSection(tester, const _VideoHost());
+    final value = find.descendant(
+      of: find.byKey(const Key('default-quality-row')),
+      matching: find.byKey(const Key('settings-row-select-value')),
+    );
+    expect(value, findsOneWidget);
+    expect(
+      find.descendant(of: value, matching: find.text('1080p')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Remote control shows the registration retry after a failure', (
     tester,
   ) async {
     await _pumpSection(
       tester,
-      const _PlaybackHost(includeRemote: true),
+      const RemoteControlSection(),
       registration: const RegistrationFailed('offline', 2, null),
     );
     expect(find.byKey(const Key('remote-control-retry-row')), findsOneWidget);

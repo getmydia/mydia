@@ -92,10 +92,6 @@
     "@settingsAutoSkipTitle": {
         "description": "Switch that skips intros and end credits automatically during playback."
     },
-    "settingsAutoSkipSubtitle": "Искључено уместо тога приказује дугме за прескакање",
-    "@settingsAutoSkipSubtitle": {
-        "description": "Subtitle of the skip intros switch: when it is off, the player shows a button to skip instead."
-    },
     "settingsStatsOverlayTitle": "Статистика за стручњаке",
     "@settingsStatsOverlayTitle": {
         "description": "Switch that shows a technical statistics overlay on the video. Playful name; translate the idea, not the words."
@@ -185,10 +181,6 @@
     "settingsThemeSubtitle": "Боје на овом уређају",
     "@settingsThemeSubtitle": {
         "description": "Subtitle of the theme row: the theme is stored per device."
-    },
-    "settingsGlassMaterialSubtitle": "Стаклене контроле и панели",
-    "@settingsGlassMaterialSubtitle": {
-        "description": "Subtitle of the Liquid Glass switch, which draws controls and panels as glass."
     },
     "settingsIdentitySignedIn": "Пријављени сте",
     "@settingsIdentitySignedIn": {

@@ -41,6 +41,7 @@ defmodule Mydia.Config.LoaderTest do
         "LOCAL_AUTH_ENABLED",
         "OIDC_ENABLED",
         "OIDC_LINK_BY_EMAIL",
+        "OIDC_DEFAULT_ROLE",
         "OIDC_ISSUER",
         "OIDC_CLIENT_ID",
         "OIDC_CLIENT_SECRET",
@@ -254,6 +255,25 @@ defmodule Mydia.Config.LoaderTest do
       System.put_env("OIDC_LINK_BY_EMAIL", "true")
       {:ok, config} = Loader.load(config_file: "nonexistent.yml")
       assert config.auth.oidc_link_by_email == true
+    end
+
+    test "OIDC_DEFAULT_ROLE defaults to guest and accepts a non-admin role" do
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.auth.oidc_default_role == "guest"
+
+      System.put_env("OIDC_DEFAULT_ROLE", "readonly")
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+      assert config.auth.oidc_default_role == "readonly"
+    end
+
+    # Admin as a default would make every account at the IdP a Mydia admin.
+    test "OIDC_DEFAULT_ROLE refuses admin and unknown roles" do
+      for role <- ["admin", "superuser"] do
+        System.put_env("OIDC_DEFAULT_ROLE", role)
+
+        assert {:error, %Ecto.Changeset{valid?: false}} =
+                 Loader.load(config_file: "nonexistent.yml")
+      end
     end
 
     test "handles integer environment variables correctly" do

@@ -2,7 +2,7 @@ import 'dart:ui';
 
 /// The desktop window's persisted geometry.
 ///
-/// [bounds] is always the *un-maximized* rect. `windowManager.getBounds()`
+/// [bounds] is always the *un-maximized* rect. `WindowController.getBounds()`
 /// returns the maximized frame while maximized, so a tracker that wrote that
 /// would destroy the user's real window size the first time they ever
 /// maximized. See `WindowGeometryController`.

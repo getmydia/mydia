@@ -33,22 +33,17 @@ import 'theme_preset_row.dart';
 import 'track_picker_row.dart';
 import 'update_card.dart';
 
-/// Default quality, skipping, the stats overlay and, in the desktop dialog,
-/// whether this device can be controlled.
-class PlaybackSettingsSection extends ConsumerWidget {
-  const PlaybackSettingsSection({
+/// Default quality, subtitle size and the stats overlay, plus the
+/// preferences-failed row.
+class PlaybackVideoSection extends ConsumerWidget {
+  const PlaybackVideoSection({
     super.key,
     required this.settings,
     required this.failed,
-    this.includeRemoteControl = false,
   });
 
   final UserSettings? settings;
   final bool failed;
-
-  /// The dialog has no Manage section, so the remote-control rows join
-  /// Playback there. The mobile screen keeps them under Manage.
-  final bool includeRemoteControl;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,47 +51,22 @@ class PlaybackSettingsSection extends ConsumerWidget {
     // instance fields.
     final current = settings;
     final quality = current == null
-        ? QualityRung.auto
+        ? null
         : QualityRung.fromStorageKey(current.defaultQuality) ??
               QualityRung.auto;
     final l10n = context.l10n;
 
     return SettingsSection(
-      label: l10n.settingsPlayback,
+      label: l10n.settingsPlaybackVideoSection,
       children: [
-        SettingsRow.navigation(
+        SettingsRow.select(
           key: const Key('default-quality-row'),
-          icon: Icons.hd,
           title: l10n.settingsDefaultQualityTitle,
           subtitle: l10n.settingsDefaultQualitySubtitle,
-          value: current == null ? null : l10n.qualityName(quality),
-          onTap: current == null
+          value: quality == null ? null : l10n.qualityName(quality),
+          onTap: quality == null
               ? null
               : () => _pickQuality(context, ref, quality),
-        ),
-        SettingsRow.toggle(
-          key: const Key('auto-skip-segments-switch'),
-          icon: Icons.fast_forward,
-          title: l10n.settingsAutoSkipTitle,
-          subtitle: l10n.settingsAutoSkipSubtitle,
-          value: current?.autoSkipSegments ?? false,
-          onChanged: current == null
-              ? null
-              : (value) => ref
-                    .read(settingsControllerProvider.notifier)
-                    .setAutoSkipSegments(value),
-        ),
-        SettingsRow.toggle(
-          key: const Key('auto-skip-commercials-switch'),
-          icon: Icons.fast_forward,
-          title: l10n.settingsAutoSkipCommercialsTitle,
-          subtitle: l10n.settingsAutoSkipCommercialsSubtitle,
-          value: current?.autoSkipCommercials ?? true,
-          onChanged: current == null
-              ? null
-              : (value) => ref
-                    .read(settingsControllerProvider.notifier)
-                    .setAutoSkipCommercials(value),
         ),
         const SubtitleSizeSettingsRow(),
         Consumer(
@@ -105,7 +75,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
                 ref.watch(statsOverlayEnabledProvider).value ?? false;
             return SettingsRow.toggle(
               key: const Key('stats-overlay-switch'),
-              icon: Icons.speed,
               title: l10n.settingsStatsOverlayTitle,
               subtitle: l10n.settingsStatsOverlaySubtitle,
               value: enabled,
@@ -114,11 +83,9 @@ class PlaybackSettingsSection extends ConsumerWidget {
             );
           },
         ),
-        if (includeRemoteControl) ...remoteControlRows(context, ref),
         if (failed)
           SettingsRow.action(
             key: const Key('settings-retry-row'),
-            icon: Icons.error_outline,
             title: l10n.settingsPreferencesLoadFailedTitle,
             subtitle: l10n.settingsPreferencesLoadFailedSubtitle,
             trailing: Text(l10n.commonRetry),
@@ -154,6 +121,62 @@ class PlaybackSettingsSection extends ConsumerWidget {
   }
 }
 
+/// Whether intros, credits and commercials skip themselves.
+class PlaybackSkippingSection extends ConsumerWidget {
+  const PlaybackSkippingSection({
+    super.key,
+    required this.settings,
+    required this.failed,
+  });
+
+  final UserSettings? settings;
+  final bool failed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = settings;
+    final l10n = context.l10n;
+    return SettingsSection(
+      label: l10n.settingsPlaybackSkippingSection,
+      footer: l10n.settingsAutoSkipFooter,
+      children: [
+        SettingsRow.toggle(
+          key: const Key('auto-skip-segments-switch'),
+          title: l10n.settingsAutoSkipTitle,
+          value: current?.autoSkipSegments ?? false,
+          onChanged: current == null
+              ? null
+              : (value) => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setAutoSkipSegments(value),
+        ),
+        SettingsRow.toggle(
+          key: const Key('auto-skip-commercials-switch'),
+          title: l10n.settingsAutoSkipCommercialsTitle,
+          value: current?.autoSkipCommercials ?? true,
+          onChanged: current == null
+              ? null
+              : (value) => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setAutoSkipCommercials(value),
+        ),
+      ],
+    );
+  }
+}
+
+/// The desktop dialog's remote-control group. The mobile screen keeps these
+/// rows under Manage, via [remoteControlRows].
+class RemoteControlSection extends ConsumerWidget {
+  const RemoteControlSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SettingsSection(
+    label: context.l10n.settingsRemoteControlSection,
+    children: remoteControlRows(context, ref),
+  );
+}
+
 /// The remote-control switch and, after a failed registration, its retry.
 ///
 /// Rows rather than a widget: [SettingsCard] draws the dividers between its
@@ -166,7 +189,6 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
   return [
     SettingsRow.toggle(
       key: const Key('remote-control-enabled-switch'),
-      icon: Icons.settings_remote,
       title: l10n.settingsRemoteControlTitle,
       subtitle: l10n.registrationStatusText(registration),
       value: controllableEnabled ?? true,
@@ -177,7 +199,6 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
     if (registration is RegistrationFailed)
       SettingsRow.action(
         key: const Key('remote-control-retry-row'),
-        icon: Icons.refresh,
         title: l10n.settingsRetryRegistrationTitle,
         subtitle: l10n.settingsRetryRegistrationSubtitle,
         onTap: () => ref.read(nodeRegistrationsProvider.notifier).retryAll(),
@@ -222,7 +243,6 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
     if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
       SettingsRow.action(
         key: const Key('check-for-updates-row'),
-        icon: Icons.refresh,
         title: updateState.manualCheck.pressInstalls
             ? l10n.settingsCheckAndInstallUpdates
             : l10n.settingsCheckForUpdates,
@@ -368,19 +388,22 @@ class VersionFooter extends StatelessWidget {
   }
 }
 
-/// Device-level look: the language, the theme preset and the glass material.
+/// Device-level look: the theme preset, the glass material and the language.
+/// [showLabel] is false where a pane title already says "Appearance".
 class AppearanceSettingsSection extends StatelessWidget {
-  const AppearanceSettingsSection({super.key});
+  const AppearanceSettingsSection({super.key, this.showLabel = true});
+
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) => SettingsSection(
-    label: context.l10n.settingsAppearanceSection,
+    label: showLabel ? context.l10n.settingsAppearanceSection : null,
     children: [
-      const LanguageSettingsRow(),
       const ThemePresetSettingsRow(),
       // Conditional here so a TV does not get a divider above nothing.
       if (GlassMaterial.liquid.isAvailableOn(defaultTargetPlatform))
         const GlassMaterialSettingsRow(),
+      const LanguageSettingsRow(),
     ],
   );
 }
