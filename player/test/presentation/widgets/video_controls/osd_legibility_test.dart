@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/theme_preset.dart';
-import 'package:player/presentation/widgets/video_controls/center_play_button.dart';
+import 'package:player/presentation/widgets/video_controls/touch_transport.dart';
 
 import '../../../test_utils/mac_accents.dart';
 import '../../../test_utils/osd_contrast.dart';
@@ -88,11 +88,15 @@ void main() {
     }
   });
 
-  // CenterPlayButton paints straight onto video with no surface behind it,
-  // so its shadow alone has to carry the 3:1 non-text floor.
-  test('CenterPlayButton glyph clears 3:1 on a white frame via its shadow', () {
-    const shadow = CenterPlayButton.glyphShadow;
-    final shaded = compositeOver(shadow.color, Colors.white);
-    expect(contrastRatio(Colors.white, shaded), greaterThanOrEqualTo(3.0));
+  // The touch play disc is opaque white-ish, so its dark glyph is text-grade
+  // against it even over a pure-white frame.
+  test('touch play glyph clears 4.5:1 on its disc', () {
+    expect(
+      contrastRatio(
+        TouchTransport.playGlyph,
+        compositeOver(TouchTransport.playFill, Colors.white),
+      ),
+      greaterThanOrEqualTo(4.5),
+    );
   });
 }

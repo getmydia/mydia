@@ -8,6 +8,15 @@ import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/platform_features.dart';
 
 void main() {
+  tearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+
+  test('debugTouchPrimaryOverride wins', () {
+    InputCapabilities.debugTouchPrimaryOverride = true;
+    expect(InputCapabilities.touchPrimary, isTrue);
+    InputCapabilities.debugTouchPrimaryOverride = false;
+    expect(InputCapabilities.touchPrimary, isFalse);
+  });
+
   group('InputCapabilities.computeTouchPrimary', () {
     test('true on a native phone or tablet', () {
       expect(
