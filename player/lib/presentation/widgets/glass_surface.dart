@@ -357,6 +357,31 @@ class GlassSurface extends StatelessWidget {
          child: child,
        );
 
+  /// The OSD material for pills (top bar, bottom bar, touch transport): the
+  /// [GlassSurface.osd] fill, hairline and radius family with **no** blur.
+  ///
+  /// The scrim behind the bars (`ChromeScrim`) already darkens the video, so
+  /// a [BackdropFilter] per pill would cost a blur pass for no visible gain.
+  /// Sits at the pill elevation ([OsdElevation.pill]).
+  GlassSurface.osdPill({Key? key, BorderRadius? borderRadius, Widget? child})
+    : this(
+        key: key,
+        blurSigma: DepthTokens.blurNone,
+        live: false,
+        fillColor: DepthTokens.osdTint.withValues(
+          alpha: DepthTokens.osdFillOpacity,
+        ),
+        borderRadius:
+            borderRadius ??
+            const BorderRadius.all(Radius.circular(DepthTokens.radiusOsdPill)),
+        border: Border.all(
+          color: DepthTokens.osdHairline,
+          width: DepthTokens.rimWidth,
+        ),
+        shadows: OsdElevation.pill.shadows,
+        child: child,
+      );
+
   @override
   Widget build(BuildContext context) {
     final base = _baseColor(context);
