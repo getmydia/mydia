@@ -8,6 +8,7 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/controls/app_select.dart';
 import '../../widgets/controls/app_switch.dart';
 import '../../widgets/focus_highlight.dart';
 import '../../widgets/freshness_header.dart';
@@ -1773,43 +1774,24 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: palette.surfaceVariant.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int?>(
-                isExpanded: true,
-                value: _limitOptions.contains(_selectedLimit)
-                    ? _selectedLimit
-                    : null,
-                items: _limitOptions.map((limit) {
-                  final isCurrentlyUsed =
-                      limit != null && widget.currentUsage > limit;
-                  return DropdownMenuItem(
+          SizedBox(
+            width: double.infinity,
+            child: AppSelect<int?>(
+              semanticLabel: context.l10n.downloadsSettingsMaxStorage,
+              value: _limitOptions.contains(_selectedLimit)
+                  ? _selectedLimit
+                  : null,
+              items: [
+                for (final limit in _limitOptions)
+                  AppSelectItem(
                     value: limit,
-                    child: Row(
-                      children: [
-                        Text(_formatLimit(limit)),
-                        if (isCurrentlyUsed) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            context.l10n.downloadsSettingsFull,
-                            style: const TextStyle(
-                              color: AppColors.error,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onChanged: (value) => setState(() => _selectedLimit = value),
-              ),
+                    label: limit != null && widget.currentUsage > limit
+                        ? '${_formatLimit(limit)} '
+                              '${context.l10n.downloadsSettingsFull}'
+                        : _formatLimit(limit),
+                  ),
+              ],
+              onChanged: (value) => setState(() => _selectedLimit = value),
             ),
           ),
 
@@ -1822,25 +1804,17 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: palette.surfaceVariant.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                isExpanded: true,
-                value: _maxConcurrentDownloads,
-                items: _concurrentOptions.map((count) {
-                  return DropdownMenuItem(value: count, child: Text('$count'));
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _maxConcurrentDownloads = value);
-                  }
-                },
-              ),
+          SizedBox(
+            width: double.infinity,
+            child: AppSelect<int>(
+              semanticLabel: context.l10n.downloadsSettingsConcurrent,
+              value: _maxConcurrentDownloads,
+              items: [
+                for (final count in _concurrentOptions)
+                  AppSelectItem(value: count, label: '$count'),
+              ],
+              onChanged: (value) =>
+                  setState(() => _maxConcurrentDownloads = value),
             ),
           ),
 
@@ -1891,26 +1865,19 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: palette.surfaceVariant.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<CleanupPolicy>(
-                  isExpanded: true,
-                  value: _cleanupPolicy,
-                  items: CleanupPolicy.values.map((policy) {
-                    return DropdownMenuItem(
+            SizedBox(
+              width: double.infinity,
+              child: AppSelect<CleanupPolicy>(
+                semanticLabel: context.l10n.downloadsSettingsCleanupPolicy,
+                value: _cleanupPolicy,
+                items: [
+                  for (final policy in CleanupPolicy.values)
+                    AppSelectItem(
                       value: policy,
-                      child: Text(context.l10n.cleanupPolicyName(policy)),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => _cleanupPolicy = value);
-                  },
-                ),
+                      label: context.l10n.cleanupPolicyName(policy),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _cleanupPolicy = value),
               ),
             ),
           ],

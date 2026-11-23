@@ -246,7 +246,7 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
   Widget _versionPicker(BuildContext context) => _remembered(
     _versionId,
     1,
-    _DropdownButton(
+    _VersionPickerButton(
       key: SmartPlayButton.versionPickerKey,
       onTap: () async {
         final picked = await showQualitySelector(context, widget.files);
@@ -281,10 +281,10 @@ class _SmartPlayButtonState extends State<SmartPlayButton> {
       : control;
 }
 
-class _DropdownButton extends StatelessWidget {
+class _VersionPickerButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _DropdownButton({super.key, required this.onTap});
+  const _VersionPickerButton({super.key, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

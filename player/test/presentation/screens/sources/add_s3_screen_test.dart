@@ -22,6 +22,7 @@ import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/l10n/gen/app_localizations_en.dart';
 import 'package:player/presentation/screens/sources/add_s3_screen.dart';
+import 'package:player/presentation/widgets/controls/app_select.dart';
 
 import '../../../core/sources/files/fake_backend.dart';
 import '../../../core/sources/files/fake_media_names.dart';
@@ -449,11 +450,9 @@ void main() {
     expect(_field(tester, 's3-secret-key').readOnly, isFalse);
     expect(
       tester
-          .widget<DropdownButtonFormField<S3Preset>>(
-            find.byKey(const Key('s3-provider')),
-          )
-          .onChanged,
-      isNull,
+          .widget<AppSelect<S3Preset>>(find.byKey(const Key('s3-provider')))
+          .enabled,
+      isFalse,
     );
     expect(
       tester
