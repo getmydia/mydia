@@ -699,6 +699,8 @@ void main() {
   testWidgets('connection details navigates to diagnostics', (tester) async {
     await _pump(tester);
 
+    await tester.ensureVisible(find.text('Diagnostics'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Diagnostics'));
     await tester.pumpAndSettle();
 

@@ -6,11 +6,12 @@ import '../../../../core/theme/linux_desktop.dart';
 import '../../../../core/theme/theme_preset.dart';
 import '../../../../core/theme/theme_providers.dart';
 import '../../../../l10n/l10n.dart';
-import '../../../widgets/theme_preset_picker.dart';
-import 'settings_row.dart';
+import 'settings_choice_grid.dart';
+import 'theme_preset_preview.dart';
 
-/// The Appearance section's theme row. The preset lives on this device, so
-/// the row works while server settings are loading or failed.
+/// The Appearance section's theme picker: a grid of previews. The preset
+/// lives on this device, so it works while server settings are loading or
+/// failed.
 class ThemePresetSettingsRow extends ConsumerWidget {
   const ThemePresetSettingsRow({super.key});
 
@@ -18,22 +19,35 @@ class ThemePresetSettingsRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final preset = ref.watch(themePresetSettingProvider);
     final linuxDesktop = ref.watch(linuxDesktopProvider);
-    return SettingsRow.navigation(
-      key: const Key('theme-preset-row'),
-      title: context.l10n.settingsThemeTitle,
-      subtitle: context.l10n.settingsThemeSubtitle,
-      value: context.l10n.themePresetName(preset, linuxDesktop: linuxDesktop),
-      onTap: () async {
-        final picked = await showThemePresetPicker(
-          context,
-          preset,
-          ThemePreset.availableOn(defaultTargetPlatform),
-          linuxDesktop: linuxDesktop,
-        );
-        if (picked != null) {
-          await ref.read(themePresetSettingProvider.notifier).set(picked);
-        }
-      },
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: SettingsChoiceGrid<ThemePreset>(
+        key: const Key('theme-preset-row'),
+        label: l10n.settingsThemeTitle,
+        selected: preset,
+        choices: [
+          for (final option in ThemePreset.availableOn(defaultTargetPlatform))
+            SettingsChoice<ThemePreset>(
+              value: option,
+              label: l10n.themePresetName(option, linuxDesktop: linuxDesktop),
+              preview: _Preview(preset: option),
+            ),
+        ],
+        onSelected: (picked) =>
+            ref.read(themePresetSettingProvider.notifier).set(picked),
+      ),
     );
   }
+}
+
+/// Resolves the preset's palette the way the app theme does.
+class _Preview extends ConsumerWidget {
+  const _Preview({required this.preset});
+
+  final ThemePreset preset;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      ThemePresetPreview(palette: ref.watch(presetPaletteProvider(preset)));
 }

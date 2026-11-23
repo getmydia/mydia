@@ -28,7 +28,9 @@ Widget _host(MockAuthStorage storage, {bool? isTv}) => ProviderScope(
 );
 
 void main() {
-  testWidgets('toggling switches the material and persists it', (tester) async {
+  testWidgets('offers Liquid Glass and Frosted; picking one persists it', (
+    tester,
+  ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     final storage = MockAuthStorage();
     await tester.pumpWidget(_host(storage));
@@ -36,42 +38,19 @@ void main() {
     final element = tester.element(find.byKey(const Key('glass-material-row')));
     final container = ProviderScope.containerOf(element);
     expect(container.read(glassMaterialSettingProvider), GlassMaterial.frosted);
+    expect(find.byKey(const Key('settings-choice-0')), findsOneWidget);
+    expect(find.byKey(const Key('settings-choice-1')), findsOneWidget);
+    expect(find.text('Liquid Glass'), findsOneWidget);
+    expect(find.text('Frosted'), findsOneWidget);
 
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const Key('glass-material-row')),
-        matching: find.byType(Switch),
-      ),
-    );
+    await tester.tap(find.text('Liquid Glass'));
     await tester.pumpAndSettle();
-
     expect(container.read(glassMaterialSettingProvider), GlassMaterial.liquid);
     expect(storage.contents['glass_material'], 'liquid');
-    debugDefaultTargetPlatformOverride = null;
-  });
 
-  testWidgets('the switch is announced together with its title', (
-    tester,
-  ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    final handle = tester.ensureSemantics();
-    await tester.pumpWidget(_host(MockAuthStorage()));
+    await tester.tap(find.text('Frosted'));
     await tester.pumpAndSettle();
-
-    expect(
-      tester.getSemantics(
-        find.descendant(
-          of: find.byKey(const Key('glass-material-row')),
-          matching: find.byType(Switch),
-        ),
-      ),
-      isSemantics(
-        label: 'Liquid Glass\nGlass controls and panels',
-        hasToggledState: true,
-        isToggled: false,
-      ),
-    );
-    handle.dispose();
+    expect(container.read(glassMaterialSettingProvider), GlassMaterial.frosted);
     debugDefaultTargetPlatformOverride = null;
   });
 

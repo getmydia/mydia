@@ -140,6 +140,21 @@ void main() {
     expect(find.byKey(const Key('default-quality-row')), findsOneWidget);
   });
 
+  testWidgets('the default quality row is a select showing the rung', (
+    tester,
+  ) async {
+    await _pumpSection(tester, const _PlaybackHost(includeRemote: false));
+    final value = find.descendant(
+      of: find.byKey(const Key('default-quality-row')),
+      matching: find.byKey(const Key('settings-row-select-value')),
+    );
+    expect(value, findsOneWidget);
+    expect(
+      find.descendant(of: value, matching: find.text('1080p')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Playback shows the registration retry after a failure', (
     tester,
   ) async {

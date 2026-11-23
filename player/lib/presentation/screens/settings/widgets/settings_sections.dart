@@ -64,11 +64,11 @@ class PlaybackSettingsSection extends ConsumerWidget {
     return SettingsSection(
       label: l10n.settingsPlayback,
       children: [
-        SettingsRow.navigation(
+        SettingsRow.select(
           key: const Key('default-quality-row'),
           title: l10n.settingsDefaultQualityTitle,
           subtitle: l10n.settingsDefaultQualitySubtitle,
-          value: current == null ? null : l10n.qualityName(quality),
+          value: l10n.qualityName(quality),
           onTap: current == null
               ? null
               : () => _pickQuality(context, ref, quality),
