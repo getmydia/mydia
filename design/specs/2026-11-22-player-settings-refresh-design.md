@@ -106,8 +106,10 @@ Radio cards with a visual preview, for choices where seeing beats reading.
   back button (nested routes) and close button stay; close becomes a 30px
   circular button.
 - On `SettingsScreen` (phone, tablet, TV) the same section split applies:
-  Appearance is its own section after Playback, and Playback uses the three
-  groups above. `SettingsFocusOrder` positions are renumbered to match.
+  Appearance is its own section after Playback, and Playback uses the Video
+  and Skipping groups. The remote-control rows stay in the Manage section
+  there, as today. `SettingsFocusOrder` positions are renumbered so every
+  group has its own.
 
 New strings (pane descriptions, the "Video", "Skipping" and "Remote control"
 headers, the skipping footer, the "Update" badge) go in `app_en.arb` with
