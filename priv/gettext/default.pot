@@ -10274,6 +10274,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:288
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:372
+#: lib/mydia_web/live/admin_settings_live/index.ex:766
 #: lib/mydia_web/live/admin_users_live/components.ex:72
 #: lib/mydia_web/live/admin_users_live/components.ex:221
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:12
@@ -13224,12 +13225,12 @@ msgstr ""
 msgid "Auto-Generate"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:46
+#: lib/mydia_web/live/admin_settings_live/labels.ex:47
 #, elixir-autogen, elixir-format
 msgid "Auto-Repair Database Issues"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:47
+#: lib/mydia_web/live/admin_settings_live/labels.ex:48
 #, elixir-autogen, elixir-format
 msgid "Auto-Repair Threshold"
 msgstr ""
@@ -13294,7 +13295,7 @@ msgstr ""
 msgid "Automatically add new items without manual approval"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:73
+#: lib/mydia_web/live/admin_settings_live/labels.ex:80
 #, elixir-autogen, elixir-format
 msgid "Automatically queue a library re-scan on startup when database issues (orphaned files) are detected"
 msgstr ""
@@ -13636,7 +13637,7 @@ msgstr ""
 msgid "Category: %{category}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:61
+#: lib/mydia_web/live/admin_settings_live/labels.ex:68
 #, elixir-autogen, elixir-format
 msgid "Ceiling in pixels on the output height of any transcode, for example 720. Empty means no ceiling and a transcode keeps the source resolution, which a small server may not sustain in realtime for a 4K file. Never upscales, and never applies when the file is streamed without re-encoding."
 msgstr ""
@@ -13651,7 +13652,7 @@ msgstr ""
 msgid "Change role for %{user}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:45
+#: lib/mydia_web/live/admin_settings_live/labels.ex:46
 #, elixir-autogen, elixir-format
 msgid "Check for updates"
 msgstr ""
@@ -15469,6 +15470,7 @@ msgid "Granted capabilities"
 msgstr ""
 
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:373
+#: lib/mydia_web/live/admin_settings_live/index.ex:764
 #: lib/mydia_web/live/admin_users_live/components.ex:223
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:10
 #, elixir-autogen, elixir-format
@@ -16121,7 +16123,7 @@ msgstr ""
 msgid "Max Timeout (ms)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:42
+#: lib/mydia_web/live/admin_settings_live/labels.ex:43
 #, elixir-autogen, elixir-format
 msgid "Max Transcode Height"
 msgstr ""
@@ -16221,12 +16223,12 @@ msgstr ""
 msgid "Minimum Resolution"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:41
+#: lib/mydia_web/live/admin_settings_live/labels.ex:42
 #, elixir-autogen, elixir-format
 msgid "Minimum Seeders (automatic search)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:78
+#: lib/mydia_web/live/admin_settings_live/labels.ex:85
 #, elixir-autogen, elixir-format
 msgid "Minimum number of issues required to trigger auto-repair"
 msgstr ""
@@ -16236,7 +16238,7 @@ msgstr ""
 msgid "Minimum seeder ratio (torrents)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:55
+#: lib/mydia_web/live/admin_settings_live/labels.ex:62
 #, elixir-autogen, elixir-format
 msgid "Minimum seeders a result must report for automatic searches to consider it. This is a hard filter applied before ranking, so a torrent below it is removed rather than demoted. Manual searches have their own control, and Usenet results report no seeders at all and are exempt. 0, the default, filters nothing. Careful above 0: some indexers report 0 when they mean \"unknown\" rather than \"dead\", so a floor can silently empty their results."
 msgstr ""
@@ -16262,7 +16264,7 @@ msgstr ""
 msgid "Mode"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:40
+#: lib/mydia_web/live/admin_settings_live/labels.ex:41
 #, elixir-autogen, elixir-format
 msgid "Monitor Interval (minutes)"
 msgstr ""
@@ -16287,7 +16289,7 @@ msgstr ""
 msgid "Movie File Sizes"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:38
+#: lib/mydia_web/live/admin_settings_live/labels.ex:39
 #, elixir-autogen, elixir-format
 msgid "Movies Path"
 msgstr ""
@@ -17452,6 +17454,7 @@ msgstr ""
 msgid "Reach this server from the player outside your network"
 msgstr ""
 
+#: lib/mydia_web/live/admin_settings_live/index.ex:765
 #: lib/mydia_web/live/admin_users_live/components.ex:222
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:11
 #, elixir-autogen, elixir-format
@@ -18298,17 +18301,17 @@ msgstr ""
 msgid "Settings updated successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:43
+#: lib/mydia_web/live/admin_settings_live/labels.ex:44
 #, elixir-autogen, elixir-format
 msgid "Share Crashes with Developers"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:67
+#: lib/mydia_web/live/admin_settings_live/labels.ex:74
 #, elixir-autogen, elixir-format
 msgid "Shortly after startup and once a week, ask the metadata relay whether a newer Mydia release exists, and show it on the System page. The check sends a random install ID, the Mydia version, the CPU architecture and the database type. That also lets the developers count active installs and decide which versions and platforms to prioritise. Nothing about your library, accounts or network is sent, and the relay does not store your address."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:44
+#: lib/mydia_web/live/admin_settings_live/labels.ex:45
 #, elixir-autogen, elixir-format
 msgid "Show Send feedback button"
 msgstr ""
@@ -18682,7 +18685,7 @@ msgstr ""
 msgid "TV Metadata Source"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:39
+#: lib/mydia_web/live/admin_settings_live/labels.ex:40
 #, elixir-autogen, elixir-format
 msgid "TV Path"
 msgstr ""
@@ -19992,7 +19995,7 @@ msgstr ""
 msgid "new titles"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/labels.ex:83
+#: lib/mydia_web/live/admin_settings_live/labels.ex:90
 #, elixir-autogen, elixir-format
 msgid "no limit"
 msgstr ""
@@ -22590,4 +22593,14 @@ msgstr ""
 #: lib/mydia_web/live/activity_live/index.ex:432
 #, elixir-autogen, elixir-format
 msgid "custom poster"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/labels.ex:38
+#, elixir-autogen, elixir-format
+msgid "Default Role for New SSO Users"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/labels.ex:56
+#, elixir-autogen, elixir-format
+msgid "Role given to an account created by its first SSO sign-in when the identity provider's roles or groups claims grant none. Existing accounts keep their role. Admin is not offered: it would make everyone at the identity provider an admin."
 msgstr ""

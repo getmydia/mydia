@@ -116,15 +116,35 @@ OIDC_CLIENT_SECRET=your-client-secret
 
 ### First User Promotion
 
-The first user to log in via OIDC is automatically promoted to admin role. Subsequent users are assigned guest role.
+If no admin exists yet, the first user to sign in with SSO becomes an admin.
+Everyone after that gets a role as described below.
 
 ### Role Assignment
 
-Currently, role assignment is manual after first login:
+Mydia picks a role when an SSO sign-in creates an account. It reads the
+`roles` and `groups` claims from your identity provider's userinfo response and
+takes the first match:
 
-1. Admin logs in
-2. Navigates to Admin > System > Users
-3. Updates user role as needed
+| Claim | Role |
+|-------|------|
+| `roles` contains `admin`, or `groups` contains `administrators` | Admin |
+| `roles` contains `user`, or `groups` contains `users` | User |
+| `roles` contains `readonly`, or `groups` contains `readers` | Read Only |
+| none of the above | `OIDC_DEFAULT_ROLE` |
+
+`OIDC_DEFAULT_ROLE` is `guest` unless you set it. It accepts `guest`,
+`readonly` or `user`, and can also be changed under **Admin > System >
+Settings**, under Authentication. It does not accept `admin`, because that would make every
+account at your identity provider a Mydia admin. Grant admin through a claim
+instead.
+
+Many providers only send `groups` when you request the scope, for example
+`OIDC_SCOPES="openid profile email groups"`.
+
+The role is set once, when the account is created. Later sign-ins leave it
+alone, so a change in your identity provider, or in `OIDC_DEFAULT_ROLE`, does
+not affect existing accounts. To change an existing user's role, use the edit
+icon on their row in **Admin > System > Users**.
 
 ### Combining with Local Auth
 

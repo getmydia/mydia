@@ -35,6 +35,7 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   def label("auth.local_enabled"), do: gettext("Local Auth Enabled")
   def label("auth.oidc_enabled"), do: gettext("OIDC Enabled")
   def label("auth.oidc_link_by_email"), do: gettext("Link SSO Accounts by Email")
+  def label("auth.oidc_default_role"), do: gettext("Default Role for New SSO Users")
   def label("media.movies_path"), do: gettext("Movies Path")
   def label("media.tv_path"), do: gettext("TV Path")
   def label("downloads.monitor_interval_minutes"), do: gettext("Monitor Interval (minutes)")
@@ -49,6 +50,12 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
 
   @doc "The help text of the setting with config key `key`, or nil."
   def description(key)
+
+  def description("auth.oidc_default_role"),
+    do:
+      gettext(
+        "Role given to an account created by its first SSO sign-in when the identity provider's roles or groups claims grant none. Existing accounts keep their role. Admin is not offered: it would make everyone at the identity provider an admin."
+      )
 
   def description("downloads.min_seeders"),
     do:

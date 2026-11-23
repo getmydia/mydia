@@ -9,7 +9,7 @@ defmodule Mydia.Config.Schema do
 
   require Logger
 
-  alias Mydia.Config.Schema.{DownloadClientChangeset, PathMappingChangeset}
+  alias Mydia.Config.Schema.{AuthChangeset, DownloadClientChangeset, PathMappingChangeset}
   alias Mydia.Indexers.NewznabEndpoint
   alias Mydia.Plugins.Index.Signature
 
@@ -108,6 +108,7 @@ defmodule Mydia.Config.Schema do
       field :oidc_redirect_uri, :string
       field :oidc_scopes, :string, default: "openid profile email"
       field :oidc_link_by_email, :boolean, default: false
+      field :oidc_default_role, :string, default: "guest"
       field :jwt_ttl_days, :integer, default: 30
       field :jwt_allowed_drift, :integer, default: 2000
     end
@@ -465,7 +466,7 @@ defmodule Mydia.Config.Schema do
     |> cast(attrs, [])
     |> cast_embed(:server, with: &server_changeset/2)
     |> cast_embed(:database, with: &database_changeset/2)
-    |> cast_embed(:auth, with: &auth_changeset/2)
+    |> cast_embed(:auth, with: &AuthChangeset.changeset/2)
     |> cast_embed(:media, with: &media_changeset/2)
     |> cast_embed(:metadata)
     |> cast_embed(:ui)
@@ -514,27 +515,6 @@ defmodule Mydia.Config.Schema do
     |> cast(attrs, [:path, :pool_size])
     |> validate_required([:path, :pool_size])
     |> validate_number(:pool_size, greater_than: 0)
-  end
-
-  defp auth_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [
-      :local_enabled,
-      :oidc_enabled,
-      :oidc_issuer,
-      :oidc_discovery_document_uri,
-      :oidc_client_id,
-      :oidc_client_secret,
-      :oidc_redirect_uri,
-      :oidc_scopes,
-      :oidc_link_by_email,
-      :jwt_ttl_days,
-      :jwt_allowed_drift
-    ])
-    |> validate_required([:local_enabled, :oidc_enabled])
-    |> validate_oidc_config()
-    |> validate_number(:jwt_ttl_days, greater_than: 0)
-    |> validate_number(:jwt_allowed_drift, greater_than_or_equal_to: 0)
   end
 
   defp media_changeset(schema, attrs) do
@@ -947,33 +927,6 @@ defmodule Mydia.Config.Schema do
     schema
     |> cast(attrs, [:slug, :settings])
     |> validate_required([:slug])
-  end
-
-  defp validate_oidc_config(changeset) do
-    oidc_enabled = get_field(changeset, :oidc_enabled)
-
-    if oidc_enabled do
-      changeset
-      |> validate_required([:oidc_client_id, :oidc_client_secret])
-      |> validate_oidc_issuer()
-    else
-      changeset
-    end
-  end
-
-  defp validate_oidc_issuer(changeset) do
-    issuer = get_field(changeset, :oidc_issuer)
-    discovery = get_field(changeset, :oidc_discovery_document_uri)
-
-    if is_nil(issuer) and is_nil(discovery) do
-      add_error(
-        changeset,
-        :oidc_issuer,
-        "either oidc_issuer or oidc_discovery_document_uri must be provided when OIDC is enabled"
-      )
-    else
-      changeset
-    end
   end
 
   defp validate_configuration(changeset) do

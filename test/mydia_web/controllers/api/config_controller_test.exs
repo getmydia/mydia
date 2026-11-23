@@ -106,7 +106,8 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
 
   describe "auth settings set by environment variable" do
     setup %{conn: conn, token: token} do
-      originals = Map.new(~w(OIDC_LINK_BY_EMAIL OIDC_SCOPES), &{&1, System.get_env(&1)})
+      originals =
+        Map.new(~w(OIDC_LINK_BY_EMAIL OIDC_SCOPES OIDC_DEFAULT_ROLE), &{&1, System.get_env(&1)})
 
       on_exit(fn ->
         Enum.each(originals, fn
@@ -120,7 +121,8 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
 
     for {key, env, value} <- [
           {"auth.oidc_link_by_email", "OIDC_LINK_BY_EMAIL", "true"},
-          {"auth.oidc_scopes", "OIDC_SCOPES", "openid email"}
+          {"auth.oidc_scopes", "OIDC_SCOPES", "openid email"},
+          {"auth.oidc_default_role", "OIDC_DEFAULT_ROLE", "readonly"}
         ] do
       test "#{key} reports #{env} as its source and refuses UI edits", %{conn: conn} do
         System.put_env(unquote(env), unquote(value))
