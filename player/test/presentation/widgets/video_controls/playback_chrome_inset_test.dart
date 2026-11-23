@@ -163,7 +163,9 @@ void main() {
       final gutter = WindowTitleRow.endGutter(
         tester.element(find.byType(ChromeTopBar)),
       );
-      final cast = tester.getRect(find.byKey(ChromeTopBar.castKey));
+      // The cast control now lives inside the actions pill, whose outer edge
+      // is the one that keeps the gutter.
+      final cast = tester.getRect(find.byKey(ChromeTopBar.actionsPillKey));
 
       expect(cast.right, closeTo(width - gutter, 0.5));
     });
