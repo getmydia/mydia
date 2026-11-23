@@ -1,7 +1,7 @@
 # Player: Frosted mode restyle
 
 Date: 2026-11-22
-Status: draft, awaiting review
+Status: approved, implemented
 
 ## Goal
 
@@ -104,8 +104,12 @@ use.
 
 - **Feedback:** `splashFactory: NoSplash.splashFactory` on the theme and every
   button style (today only Liquid sets it). `overlayColor` resolves hover to
-  `hoverOverlay`, pressed to `pressOverlay`, focused to transparent (focus has
-  its own ring).
+  `hoverOverlay`, pressed to `pressOverlay`, focused to transparent. Focus
+  shows as a side instead: off the television tier a focused filled,
+  elevated, outlined or text button draws a visible 2px `primary` side; on
+  the television tier the existing accent ring replaces it, so no button
+  draws both. `highlightColor` and `hoverColor` take the same overlays so
+  InkWell rows, list tiles and menu items dim like buttons.
 - **Buttons:** radius `radiusControl`. Filled and elevated: white fill, dark
   text, 44 high. Outlined (secondary): white 7% fill, `hairlineStrong` side,
   40 high. Text: no fill. All Inter 600 15, `minimumSize` height kept so the
@@ -264,6 +268,8 @@ outside the seams themselves.
 - Call-site test for `DropdownButton` / `AlertDialog`.
 - Existing focus, semantics and call-site tests pass unchanged.
 - `./dev player glass-diff` shows no Liquid change.
+- The PIN setup dialog needs scrolling at 800x600: the Frosted dialog is
+  narrower, so its pad runs taller than that window.
 - Manual: Android TV emulator (`./dev player android tv-run`) walk of settings,
   detail, a destructive dialog, a sheet and a select, counting presses against
   `master`.
