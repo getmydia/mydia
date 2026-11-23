@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/video_controls/video_progress_bar.dart';
 
 Widget _host(Widget child) => MaterialApp(
@@ -11,6 +12,56 @@ Widget _host(Widget child) => MaterialApp(
 
 void main() {
   group('ProgressBarSurface', () {
+    Color fillColor(WidgetTester tester, Key key) {
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byKey(key),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
+      return (box.decoration as BoxDecoration).color!;
+    }
+
+    testWidgets('played fill uses the palette primary', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+      expect(
+        fillColor(tester, ProgressBarSurface.playedKey),
+        Palettes.projectionBooth.primary,
+      );
+    });
+
+    testWidgets('buffered layer is white at 0.42', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+      expect(
+        fillColor(tester, ProgressBarSurface.bufferedKey),
+        Colors.white.withValues(alpha: 0.42),
+      );
+    });
+
+    testWidgets('thumb is 14 at rest and 18 when focused', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
+        14.0,
+      );
+      await tester.pumpWidget(
+        _host(
+          const ProgressBarSurface(progress: 0.4, buffered: 0.6, focused: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
+        18.0,
+      );
+    });
+
     testWidgets('renders a thumb at rest — the defect this fixes', (
       tester,
     ) async {
