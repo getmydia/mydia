@@ -30,6 +30,7 @@ Widget _host(
   Widget? volume,
   double transportWidth = 48,
   Widget secondary = _secondary,
+  bool controlsFirst = false,
 }) => MaterialApp(
   home: Scaffold(
     body: Align(
@@ -45,6 +46,7 @@ Widget _host(
         ),
         volume: volume,
         secondary: secondary,
+        controlsFirst: controlsFirst,
       ),
     ),
   ),
@@ -58,7 +60,7 @@ void _setView(WidgetTester tester, double width, [double height = 600]) {
 
 void main() {
   group('ChromeMetrics.resolve', () {
-    // Literal expected values, copied from the retired PanelMetrics tiers.
+    // Literal expected values, copied from the retired panel tiers.
     // (width, showVolume, touchTargets, compactTransport, showQuality,
     //  showAlwaysOnTop, secondaryGap, horizontalPadding)
     const table = <(double, bool, bool, bool, bool, bool, double, double)>[
@@ -184,6 +186,29 @@ void main() {
       );
       expect(initCount, 1);
     });
+
+    for (final controlsFirst in [false, true]) {
+      testWidgets('row order and height with controlsFirst: $controlsFirst', (
+        tester,
+      ) async {
+        final metrics = ChromeMetrics.forWidth(1280);
+        await tester.pumpWidget(_host(metrics, controlsFirst: controlsFirst));
+
+        final timecodes = tester.getRect(find.byKey(const Key('tc')));
+        final scrubber = tester.getRect(find.byKey(const Key('s')));
+        final controls = tester.getRect(find.byKey(const Key('t')));
+        expect(timecodes.top, lessThan(scrubber.top));
+        if (controlsFirst) {
+          expect(controls.bottom, lessThanOrEqualTo(timecodes.top));
+        } else {
+          expect(controls.top, greaterThanOrEqualTo(scrubber.bottom));
+        }
+        expect(
+          tester.getSize(find.byType(ChromeBottomBar)).height,
+          closeTo(metrics.barHeight, 0.5),
+        );
+      });
+    }
 
     testWidgets('corner widget clears the bar at 600 px', (tester) async {
       _setView(tester, 600, 400);

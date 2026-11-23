@@ -92,7 +92,7 @@ import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_surface/player_video_surface.dart';
 import '../../widgets/video_controls/playback_chrome.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
-import '../../widgets/video_controls/chrome_panel.dart';
+import '../../widgets/video_controls/chrome_bottom_bar.dart';
 import '../../widgets/tap_to_play_overlay.dart';
 import '../../widgets/video_controls/up_next_policy.dart';
 import '../../widgets/video_controls/up_next_prompt.dart';
@@ -6385,7 +6385,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
-    final panelMetrics = PanelMetrics.resolve(
+    final panelMetrics = ChromeMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
       touchPrimary: InputCapabilities.touchPrimary,
     );

@@ -3,7 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
-import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_countdown.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_policy.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_prompt.dart';
@@ -49,7 +49,7 @@ Future<void> _pump(
                 UpNextPrompt(
                   target: target,
                   countdown: countdown,
-                  metrics: PanelMetrics.forWidth(width),
+                  metrics: ChromeMetrics.forWidth(width),
                   onPlayNow: onPlayNow ?? () {},
                   onDismiss: onDismiss ?? () {},
                   onEngagedChanged: onEngagedChanged ?? (_) {},
@@ -171,9 +171,9 @@ void main() {
 
     testWidgets('anchors to the shared corner inset', (tester) async {
       await _pump(tester, countdown: countdown, width: 1280);
-      final metrics = PanelMetrics.forWidth(1280);
+      final metrics = ChromeMetrics.forWidth(1280);
       final pill = tester.getRect(find.byKey(UpNextPrompt.pillKey));
-      expect(1280 - pill.right, closeTo(PanelMetrics.cornerInsetRight, 0.5));
+      expect(1280 - pill.right, closeTo(ChromeMetrics.cornerInsetRight, 0.5));
       expect(720 - pill.bottom, closeTo(metrics.cornerInsetBottom, 0.5));
     });
   });

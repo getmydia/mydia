@@ -9,10 +9,14 @@ import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/core/player/subtitle_position.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_subtitle_lift.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
+import 'package:player/presentation/widgets/video_controls/touch_transport.dart';
+import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
 Widget _host(Widget child) => MaterialApp(
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -1122,5 +1126,148 @@ void main() {
       await tester.pumpAndSettle();
       expect(lift.bottoms.last, kSubtitleRestPadding);
     });
+
+    testWidgets('captions clear the bottom bar', (tester) async {
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final lift = _RecordingSubtitleLift();
+      await tester.pumpWidget(
+        _host(
+          PlaybackChrome(
+            player: player,
+            timeline: StreamTimeline.zero,
+            onSeekToReal: (_) async {},
+            subtitleLift: lift,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The lift is a distance from the bottom of the video, so the
+      // subtitle box's bottom edge sits at `height - lift`.
+      final subtitleBottom = 720 - lift.bottoms.last;
+      final bar = tester.getRect(find.byType(ChromeBottomBar));
+      expect(subtitleBottom, lessThanOrEqualTo(bar.top));
+    });
   });
+
+  group(
+    'PlaybackChrome composition',
+    () {
+      late Player player;
+
+      setUp(() {
+        player = Player(platformPlayer: _FakePlatformPlayer());
+      });
+
+      tearDown(() {
+        InputCapabilities.debugTouchPrimaryOverride = null;
+        return player.dispose();
+      });
+
+      Future<void> pump(
+        WidgetTester tester, {
+        required bool touch,
+        ChromeVisibilityController? visibility,
+        Size size = const Size(1280, 720),
+      }) async {
+        InputCapabilities.debugTouchPrimaryOverride = touch;
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          _host(
+            PlaybackChrome(
+              player: player,
+              timeline: StreamTimeline.zero,
+              onSeekToReal: (_) async {},
+              onBack: () {},
+              onFullscreenTap: () {},
+              chromeVisibility: visibility,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('touch tier shows TouchTransport and no transport in the '
+          'bar', (tester) async {
+        await pump(tester, touch: true);
+
+        expect(find.byType(TouchTransport), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ChromeBottomBar),
+            matching: find.byType(TransportCluster),
+          ),
+          findsNothing,
+        );
+      });
+
+      testWidgets('pointer tier has no TouchTransport', (tester) async {
+        await pump(tester, touch: false);
+
+        expect(find.byType(TouchTransport), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(ChromeBottomBar),
+            matching: find.byType(TransportCluster),
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('scrim fades with the chrome', (tester) async {
+        final visibility = ChromeVisibilityController();
+        await pump(tester, touch: false, visibility: visibility);
+
+        double scrimOpacity() => tester
+            .widget<FadeTransition>(
+              find
+                  .ancestor(
+                    of: find.byType(ChromeScrim),
+                    matching: find.byType(FadeTransition),
+                  )
+                  .first,
+            )
+            .opacity
+            .value;
+
+        expect(scrimOpacity(), 1.0);
+
+        visibility.hide();
+        await tester.pumpAndSettle();
+        expect(scrimOpacity(), 0.0);
+      });
+
+      for (final touch in [false, true]) {
+        testWidgets('no BackdropFilter in the top bar, bottom bar or touch '
+            'cluster (touch: $touch)', (tester) async {
+          await pump(tester, touch: touch);
+
+          for (final type in [
+            ChromeTopBar,
+            ChromeBottomBar,
+            if (touch) TouchTransport,
+          ]) {
+            expect(find.byType(type), findsOneWidget);
+            expect(
+              find.descendant(
+                of: find.byType(type),
+                matching: find.byType(BackdropFilter),
+              ),
+              findsNothing,
+              reason: '$type blurs',
+            );
+          }
+        });
+      }
+    },
+    skip: InputCapabilities.directionalPrimary
+        ? 'covers the pointer and touch tiers; '
+              'playback_chrome_tv_test.dart covers the remote one'
+        : false,
+  );
 }

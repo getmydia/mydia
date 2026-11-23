@@ -11,7 +11,7 @@ import '../../../l10n/l10n.dart';
 import '../artwork_image.dart';
 import '../glass_surface.dart';
 import '../shimmer_card.dart';
-import 'chrome_panel.dart';
+import 'chrome_bottom_bar.dart';
 import 'chrome_top_bar.dart';
 import 'control_button.dart';
 import 'up_next_countdown.dart';
@@ -39,7 +39,7 @@ class UpNextPrompt extends StatefulWidget {
 
   final UpNextTarget target;
   final UpNextCountdown countdown;
-  final PanelMetrics metrics;
+  final ChromeMetrics metrics;
   final VoidCallback onPlayNow;
   final VoidCallback onDismiss;
 
@@ -106,7 +106,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        right: PanelMetrics.cornerInsetRight,
+        right: ChromeMetrics.cornerInsetRight,
         bottom: widget.metrics.cornerInsetBottom,
       ),
       child: Align(
@@ -183,8 +183,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
     final width = MediaQuery.sizeOf(context).width;
     // Clamp both branches: below a 32px-wide viewport `width - 32` would
     // otherwise go negative, which trips BoxConstraints' non-negative
-    // assert downstream — the same class of bug already guarded in
-    // `PanelMetrics.resolve` (chrome_panel.dart).
+    // assert downstream.
     final cardWidth = width < 600
         ? math.max(0.0, width - 32)
         : (width - 48).clamp(0.0, 320.0);

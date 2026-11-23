@@ -1,14 +1,14 @@
 /// Where the stats panel sits, and how dense it is, for a viewport.
 ///
-/// Shaped after `PanelMetrics.resolve`, and deliberately reading
-/// `PanelMetrics`' own `cornerInsetBottom` rather than repeating its
-/// arithmetic: when a tier's control panel changes height, the stats panel
-/// follows without being touched.
+/// Shaped after `ChromeMetrics.resolve`, and deliberately reading
+/// `ChromeMetrics`' own `cornerInsetBottom` rather than repeating its
+/// arithmetic: when the bottom bar changes height, the stats panel follows
+/// without being touched.
 library;
 
 import 'dart:ui' show Size;
 
-import '../../../presentation/widgets/video_controls/chrome_panel.dart';
+import '../../../presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import '../../../presentation/widgets/video_controls/chrome_top_bar.dart';
 
 enum StatsDensity { full, compact, tv }
@@ -86,33 +86,27 @@ class StatsMetrics {
   /// SafeArea.
   static const double tvGutter = 48.0;
 
-  /// The gutter everywhere else, matching `PanelMetrics.cornerInsetRight`
+  /// The gutter everywhere else, matching `ChromeMetrics.cornerInsetRight`
   /// so the panel and a corner overlay share one margin.
-  static const double pointerGutter = PanelMetrics.cornerInsetRight;
+  static const double pointerGutter = ChromeMetrics.cornerInsetRight;
 
-  /// Null when even the compact panel cannot clear the control panel.
+  /// Null when even the compact panel cannot clear the bottom bar.
   /// Drawing it anyway would put numbers over the scrubber, which is worse
   /// than not drawing it: the copy payload is unaffected either way.
+  ///
+  /// [touchPrimary] matters because the bar is taller with a touch-sized
+  /// scrubber, so it has to match what `PlaybackChrome` resolves.
   static StatsMetrics? resolve({
     required Size viewport,
     required bool directionalPrimary,
+    bool touchPrimary = false,
   }) {
-    // `PanelMetrics.forWidth` is the fine-pointer shorthand for `resolve`,
-    // but it is `@visibleForTesting`, so production code calls `resolve`
-    // directly. `touchPrimary` is hardcoded to false rather than threaded
-    // through as a parameter here because `cornerInsetBottom`, the only
-    // field this reads, is set per width tier in every branch of
-    // `PanelMetrics.resolve` and never varies with `touchPrimary`. If a
-    // future change needs a field that does vary with it instead
-    // (`touchTargets`, `maxWidth`, `compactTransport`), thread the real
-    // `touchPrimary` through `StatsMetrics.resolve` rather than assuming
-    // false here.
     final available =
         viewport.height -
         topInset -
-        PanelMetrics.resolve(
+        ChromeMetrics.resolve(
           width: viewport.width,
-          touchPrimary: false,
+          touchPrimary: touchPrimary,
         ).cornerInsetBottom;
 
     // A focusable copy/close button in the panel would join D-pad

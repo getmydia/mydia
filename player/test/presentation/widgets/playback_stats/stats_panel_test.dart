@@ -9,7 +9,7 @@ import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
 import 'package:player/presentation/widgets/playback_stats/stats_sparkline.dart';
-import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 
 import '../../../test_utils/osd_contrast.dart';
 
@@ -274,7 +274,7 @@ void main() {
     tester,
   ) async {
     const width = 1920.0;
-    final cornerInsetBottom = PanelMetrics.resolve(
+    final cornerInsetBottom = ChromeMetrics.resolve(
       width: width,
       touchPrimary: false,
     ).cornerInsetBottom;

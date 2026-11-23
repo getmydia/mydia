@@ -56,7 +56,7 @@ RenderBox? _referenceBox() =>
     _reference.currentContext?.findRenderObject() as RenderBox?;
 
 /// A 1400x900 view with a panel of [panelHeight] 16px off the bottom edge,
-/// like the real chrome's `Positioned(bottom: metrics.bottomOffset)`.
+/// the way the real chrome's bottom bar sits above the safe-area inset.
 Widget _host({
   required SubtitleLift? lift,
   Animation<double>? chrome,

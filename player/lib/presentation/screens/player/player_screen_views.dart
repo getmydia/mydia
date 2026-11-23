@@ -9,7 +9,7 @@ import '../../../domain/models/cast_device.dart' show CastSession;
 import '../../../domain/models/media_segment.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/playback_stats/stats_panel.dart';
-import '../../widgets/video_controls/chrome_panel.dart';
+import '../../widgets/video_controls/chrome_bottom_bar.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 
 /// Leaves the player: back where it came from, or home when it was the
@@ -150,7 +150,7 @@ class CastPlaceholderView extends StatelessWidget {
     final skipSegment = isStale || session.isSyncing
         ? null
         : segmentAt(castPosition);
-    final panelMetrics = PanelMetrics.resolve(
+    final panelMetrics = ChromeMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
       touchPrimary: InputCapabilities.touchPrimary,
     );
@@ -248,6 +248,7 @@ class PlayerStatsPanel extends StatelessWidget {
     final metrics = StatsMetrics.resolve(
       viewport: MediaQuery.sizeOf(context),
       directionalPrimary: InputCapabilities.directionalPrimary,
+      touchPrimary: InputCapabilities.touchPrimary,
     );
     if (metrics == null) return const SizedBox.shrink();
 
