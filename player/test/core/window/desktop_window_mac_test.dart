@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,7 +66,13 @@ void main() {
   test('initDesktopWindow asks the channel, not nativeapi', () async {
     answerEveryCall();
 
-    await initDesktopWindow();
+    // Not awaited to completion: past the channel calls, init opens the
+    // geometry store (Hive and path_provider), whose state depends on what
+    // else ran in this isolate. The channel calls come first.
+    unawaited(initDesktopWindow());
+    for (var i = 0; i < 50 && calls.length < 2; i++) {
+      await pumpEventQueue();
+    }
 
     expect(
       calls.map((c) => c.method),
