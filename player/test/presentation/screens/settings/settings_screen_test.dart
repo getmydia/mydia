@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/backup/backup_providers.dart';
 import 'package:player/core/build_channel.dart';
@@ -542,9 +543,9 @@ void main() {
 
     final toggle = find.descendant(
       of: find.byKey(const Key('auto-skip-commercials-switch')),
-      matching: find.byType(Switch),
+      matching: find.byType(AppSwitch),
     );
-    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<AppSwitch>(toggle).value, isTrue);
 
     await tester.tap(toggle);
     await tester.pump();
@@ -560,7 +561,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('auto-skip-segments-switch')),
-        matching: find.byType(Switch),
+        matching: find.byType(AppSwitch),
       ),
     );
     await tester.pump();
@@ -595,9 +596,9 @@ void main() {
 
     final toggle = find.descendant(
       of: find.byKey(const Key('stats-overlay-switch')),
-      matching: find.byType(Switch),
+      matching: find.byType(AppSwitch),
     );
-    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<AppSwitch>(toggle).value, isTrue);
   });
 
   testWidgets('the remote control toggle is interactive and writes through '
@@ -607,11 +608,11 @@ void main() {
 
     final toggle = find.descendant(
       of: find.byKey(const Key('remote-control-enabled-switch')),
-      matching: find.byType(Switch),
+      matching: find.byType(AppSwitch),
     );
     expect(find.text('Allow this device to be controlled'), findsOneWidget);
-    expect(tester.widget<Switch>(toggle).value, isTrue);
-    expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+    expect(tester.widget<AppSwitch>(toggle).value, isTrue);
+    expect(tester.widget<AppSwitch>(toggle).onChanged, isNotNull);
 
     await tester.ensureVisible(
       find.byKey(const Key('remote-control-enabled-switch')),
@@ -630,7 +631,7 @@ void main() {
     );
     // And the switch itself reflects the stored value, which is the part that
     // depends on `_setControllable` invalidating remoteControlEnabledProvider.
-    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(tester.widget<AppSwitch>(toggle).value, isFalse);
   });
 
   testWidgets('the remote control toggle turns back on', (tester) async {
@@ -642,9 +643,9 @@ void main() {
 
     final toggle = find.descendant(
       of: find.byKey(const Key('remote-control-enabled-switch')),
-      matching: find.byType(Switch),
+      matching: find.byType(AppSwitch),
     );
-    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(tester.widget<AppSwitch>(toggle).value, isFalse);
 
     await tester.ensureVisible(
       find.byKey(const Key('remote-control-enabled-switch')),
@@ -657,7 +658,7 @@ void main() {
       await RemoteControlSettings(box: _remoteControlBox).controllableEnabled(),
       isTrue,
     );
-    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<AppSwitch>(toggle).value, isTrue);
   });
 
   testWidgets('a failed write does not escape as an unhandled error and the '
@@ -667,9 +668,9 @@ void main() {
 
     final toggle = find.descendant(
       of: find.byKey(const Key('remote-control-enabled-switch')),
-      matching: find.byType(Switch),
+      matching: find.byType(AppSwitch),
     );
-    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<AppSwitch>(toggle).value, isTrue);
 
     await tester.ensureVisible(
       find.byKey(const Key('remote-control-enabled-switch')),
@@ -686,9 +687,9 @@ void main() {
     // The switch remains interactive rather than getting stuck disabled:
     // `remoteControlEnabledProvider` is still invalidated after the
     // failure, so it re-resolves off the (unchanged) stored value.
-    expect(tester.widget<Switch>(toggle).onChanged, isNotNull);
+    expect(tester.widget<AppSwitch>(toggle).onChanged, isNotNull);
     expect(
-      tester.widget<Switch>(toggle).value,
+      tester.widget<AppSwitch>(toggle).value,
       isTrue,
       reason:
           'the write never reached storage, so the true, persisted '
@@ -829,10 +830,10 @@ void main() {
 
       expect(
         tester
-            .widget<Switch>(
+            .widget<AppSwitch>(
               find.descendant(
                 of: find.byKey(const Key('auto-skip-segments-switch')),
-                matching: find.byType(Switch),
+                matching: find.byType(AppSwitch),
               ),
             )
             .onChanged,

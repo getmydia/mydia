@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/theme/app_theme.dart';
@@ -40,7 +41,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('glass-material-row')),
-        matching: find.byType(Switch),
+        matching: find.byType(AppSwitch),
       ),
     );
     await tester.pumpAndSettle();
@@ -62,7 +63,7 @@ void main() {
       tester.getSemantics(
         find.descendant(
           of: find.byKey(const Key('glass-material-row')),
-          matching: find.byType(Switch),
+          matching: find.byType(AppSwitch),
         ),
       ),
       isSemantics(

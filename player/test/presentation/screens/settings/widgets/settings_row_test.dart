@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
@@ -155,9 +156,9 @@ void main() {
         ),
       );
 
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(tester.widget<AppSwitch>(find.byType(AppSwitch)).value, isFalse);
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(AppSwitch));
       await tester.pump();
 
       expect(received, isTrue);
@@ -174,7 +175,10 @@ void main() {
         ),
       );
 
-      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+      expect(
+        tester.widget<AppSwitch>(find.byType(AppSwitch)).onChanged,
+        isNull,
+      );
     });
   });
 

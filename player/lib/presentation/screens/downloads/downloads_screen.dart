@@ -8,6 +8,7 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/controls/app_switch.dart';
 import '../../widgets/focus_highlight.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass/glass_dialog.dart';
@@ -1839,7 +1840,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                 style: Theme.of(context).textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
-              Switch(
+              AppSwitch(
                 value: _autoStartQueued,
                 onChanged: (value) => setState(() => _autoStartQueued = value),
                 activeThumbColor: palette.primary,
@@ -1858,7 +1859,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                 style: Theme.of(context).textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
-              Switch(
+              AppSwitch(
                 value: _autoCleanupEnabled,
                 onChanged: (value) =>
                     setState(() => _autoCleanupEnabled = value),

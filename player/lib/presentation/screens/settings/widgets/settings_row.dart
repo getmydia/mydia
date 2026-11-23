@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../core/theme/palette.dart';
+import '../../../widgets/controls/app_switch.dart';
 import '../../../widgets/focus_highlight.dart';
 
 enum _RowKind { navigation, toggle, action }
@@ -149,7 +150,7 @@ class SettingsRow extends StatelessWidget {
               // traversal order. It remains clickable by pointer: ExcludeFocus
               // only removes focusability, not hit testing.
               ExcludeFocus(
-                child: Switch(value: toggleValue, onChanged: onChanged),
+                child: AppSwitch(value: toggleValue, onChanged: onChanged),
               ),
             ],
             if (_kind == _RowKind.navigation) ...[
