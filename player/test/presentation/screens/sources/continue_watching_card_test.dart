@@ -6,6 +6,8 @@ import 'package:player/core/theme/palette.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/continue_watching_card.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/presentation/widgets/focus_emphasis.dart';
+import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import 'fake_media_source.dart';
@@ -281,5 +283,14 @@ void main() {
 
     expect(taps, 1);
     expect(menus, 1);
+  });
+
+  testWidgets('grows by the tile class on the television tier', (tester) async {
+    await _pump(tester, _item());
+    final highlight = tester.widget<FocusHighlight>(
+      find.byType(FocusHighlight),
+    );
+    expect(highlight.emphasis, isTrue);
+    expect(highlight.emphasisSize, FocusSize.tile);
   });
 }

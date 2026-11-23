@@ -4,6 +4,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/palette.dart';
+import '../../../core/theme/surface_roles.dart';
 import '../glass_surface.dart';
 import 'toast_models.dart';
 
@@ -22,15 +23,11 @@ class ToastPill extends StatelessWidget {
   /// [ToastEntry.action] is set.
   final VoidCallback? onAction;
 
-  /// Browse-chrome density: at or above
+  /// Liquid only (Frosted uses an opaque `surfaceHigh`). Browse-chrome density: at or above
   /// [DepthTokens.glassLegibilityFloor], so text stays legible over bright
   /// artwork behind the blur.
   static Color fill(MydiaPalette p) =>
       p.surfaceHigh.withValues(alpha: DepthTokens.chromeFillOpacity);
-
-  static const BorderRadius _radius = BorderRadius.all(
-    Radius.circular(ToastMetrics.radius),
-  );
 
   /// Liquid Glass: a capsule. The pill is held at [liquidMinHeight] so its
   /// radius is half its height for a single line.
@@ -38,6 +35,16 @@ class ToastPill extends StatelessWidget {
   static const BorderRadius liquidRadius = BorderRadius.all(
     Radius.circular(liquidMinHeight / 2),
   );
+
+  /// Frosted: fully rounded, any line count.
+  static const BorderRadius _frostedRadius = BorderRadius.all(
+    Radius.circular(999),
+  );
+
+  static const List<BoxShadow> _frostedShadow = [
+    BoxShadow(color: Color(0x8C000000), blurRadius: 32, offset: Offset(0, 12)),
+    BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
+  ];
 
   static const double _padHorizontal = 16;
   static const double _padVertical = 12;
@@ -69,97 +76,102 @@ class ToastPill extends StatelessWidget {
     final leading = _leading(palette);
     final action = entry.action;
     final liquid = GlassStyle.of(context);
-    final shape = liquid ? liquidRadius : _radius;
+    final shape = liquid ? liquidRadius : _frostedRadius;
+    // The layer sits above the Navigator, outside any Scaffold, so the pill
+    // brings its own Material for the text style and the action button's ink.
+    final body = Material(
+      type: MaterialType.transparency,
+      child: Container(
+        constraints: BoxConstraints(minHeight: liquid ? liquidMinHeight : 0),
+        padding: _padding,
+        // The outer Row centres the content in the height the minimum
+        // forces; it stays as narrow as its content.
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (leading != null) ...[leading, const SizedBox(width: 10)],
+                  Flexible(
+                    child: Text(
+                      entry.message,
+                      maxLines: ToastMetrics.maxLines,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: palette.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  if (action != null) ...[
+                    const SizedBox(width: 12),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: _maxActionWidth,
+                      ),
+                      child: TextButton(
+                        key: const Key('toast-action'),
+                        onPressed: onAction,
+                        style: TextButton.styleFrom(
+                          foregroundColor: palette.primary,
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          action.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
     return Semantics(
       container: true,
       liveRegion: true,
       child: ConstrainedBox(
         key: const Key('toast-pill'),
         constraints: const BoxConstraints(maxWidth: ToastMetrics.maxWidth),
-        child: DecoratedBox(
-          // The shadow lives on an outer box because GlassSurface clips its
-          // own blurred fill, the same split `BottomNav` uses.
-          decoration: BoxDecoration(
-            borderRadius: shape,
-            boxShadow: DepthTokens.chrome,
-          ),
-          child: GlassSurface(
-            blurSigma: DepthTokens.blurChrome,
-            fillColor: fill(palette),
-            borderRadius: shape,
-            border: Border.all(
-              color: DepthTokens.rimColor,
-              width: DepthTokens.rimWidth,
-            ),
-            // The layer sits above the Navigator, outside any Scaffold, so
-            // the pill brings its own Material for the text style and the
-            // action button's ink.
-            child: Material(
-              type: MaterialType.transparency,
-              child: Container(
-                constraints: BoxConstraints(
-                  minHeight: liquid ? liquidMinHeight : 0,
+        child: liquid
+            ? DecoratedBox(
+                // The shadow lives on an outer box because GlassSurface clips
+                // its own blurred fill, the same split `BottomNav` uses.
+                decoration: BoxDecoration(
+                  borderRadius: shape,
+                  boxShadow: DepthTokens.chrome,
                 ),
-                padding: _padding,
-                // The outer Row centres the content in the height the minimum
-                // forces; it stays as narrow as its content.
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (leading != null) ...[
-                            leading,
-                            const SizedBox(width: 10),
-                          ],
-                          Flexible(
-                            child: Text(
-                              entry.message,
-                              maxLines: ToastMetrics.maxLines,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: palette.textPrimary,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          if (action != null) ...[
-                            const SizedBox(width: 12),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                maxWidth: _maxActionWidth,
-                              ),
-                              child: TextButton(
-                                key: const Key('toast-action'),
-                                onPressed: onAction,
-                                style: TextButton.styleFrom(
-                                  foregroundColor: palette.primary,
-                                  minimumSize: const Size(0, 32),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: Text(
-                                  action.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
+                child: GlassSurface(
+                  blurSigma: DepthTokens.blurChrome,
+                  fillColor: fill(palette),
+                  borderRadius: shape,
+                  border: Border.all(
+                    color: DepthTokens.rimColor,
+                    width: DepthTokens.rimWidth,
+                  ),
+                  child: body,
                 ),
+              )
+            : DecoratedBox(
+                key: const Key('toast-pill-frosted'),
+                // Frosted: an opaque card with a hairline edge and a
+                // two-layer shadow (ambient plus direct). No backdrop blur.
+                decoration: BoxDecoration(
+                  color: palette.surfaceHigh,
+                  borderRadius: shape,
+                  border: Border.all(color: context.surfaceRoles.hairline),
+                  boxShadow: _frostedShadow,
+                ),
+                child: body,
               ),
-            ),
-          ),
-        ),
       ),
     );
   }

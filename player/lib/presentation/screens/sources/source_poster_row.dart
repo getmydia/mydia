@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../domain/sources/item.dart';
+import '../../widgets/focus_emphasis.dart';
 import '../../widgets/horizontal_rail.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
@@ -22,6 +23,7 @@ class SourcePosterRow extends StatelessWidget {
     this.showHeading = true,
     this.itemWidth,
     this.height,
+    this.focusSize = FocusSize.poster,
   });
 
   /// Item width and rail height when the items are not posters. Default to
@@ -34,6 +36,16 @@ class SourcePosterRow extends StatelessWidget {
 
   static const posterWidth = 140.0;
   static const rowHeight = 250.0;
+
+  /// The size class of the items this row holds, which its rail leaves room
+  /// for on the television tier (see `HorizontalRail.focusSize`). Posters by
+  /// default; Continue Watching's landscape cards pass
+  /// [landscapeFocusSize].
+  final FocusSize? focusSize;
+
+  /// The size class of Continue Watching's landscape cards, shared with the
+  /// loading skeleton so both rails leave the same room.
+  static const landscapeFocusSize = FocusSize.tile;
 
   final String title;
 
@@ -50,6 +62,8 @@ class SourcePosterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final railHeight = height ?? rowHeight;
+    final bleed = HorizontalRail.focusBleed(railHeight, focusSize);
     final heading = Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Row(
@@ -69,10 +83,11 @@ class SourcePosterRow extends StatelessWidget {
         else
           KeyedSubtree(key: titleKey, child: heading),
         SizedBox(
-          height: height ?? rowHeight,
+          height: railHeight + bleed * 2,
           child: HorizontalRail(
             itemCount: items.length,
-            height: height ?? rowHeight,
+            height: railHeight,
+            focusSize: focusSize,
             leftFadeKey: Key('source-rail-left-$railId'),
             rightFadeKey: Key('source-rail-right-$railId'),
             // The item, not its slot: Continue Watching reorders as titles

@@ -1,10 +1,30 @@
+import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/palette.dart';
 
-/// The television tier's look for a focused button: it grows, and an accent
-/// ring with a soft glow is drawn just outside it.
+/// How much a focused item grows on the television tier, by what it is.
+///
+/// Large artwork grows the most and small controls the least, so each reads
+/// as focused from across the room without crowding its neighbours.
+enum FocusSize {
+  /// Poster and portrait cards.
+  poster(1.1),
+
+  /// Landscape tiles and episode thumbnails.
+  tile(1.05),
+
+  /// Buttons, rows and chips. The default.
+  control(1.025);
+
+  const FocusSize(this.scale);
+
+  final double scale;
+}
+
+/// The television tier's look for a focused item: it grows by its [FocusSize],
+/// and an accent ring is drawn just outside it, with an optional glow.
 ///
 /// A viewer across the room has only this to tell them where they are. The
 /// thin ring a button carries elsewhere disappears at that distance, and a
@@ -25,6 +45,8 @@ class FocusEmphasis extends StatefulWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(12)),
     this.circular = false,
     this.gap = defaultGap,
+    this.size = FocusSize.control,
+    this.glowColor,
   });
 
   final Widget child;
@@ -38,9 +60,24 @@ class FocusEmphasis extends StatefulWidget {
   /// Space between the button's edge and the ring.
   final double gap;
 
+  /// How much the item grows when focused.
+  final FocusSize size;
+
+  /// A soft glow around the ring, in this colour. None when null.
+  final Color? glowColor;
+
   static const double defaultGap = 3;
-  static const double scale = 1.07;
-  static const double ringWidth = 4;
+  static const double ringWidth = 3;
+
+  /// How far a focused item reaches past its own edge along an axis where it
+  /// measures [extent]: half its growth, plus the gap and the ring, which
+  /// grow with it because they are painted inside the scale. The glow is not
+  /// included.
+  static double bleed(
+    double extent,
+    FocusSize size, {
+    double gap = defaultGap,
+  }) => (extent / 2 + gap + ringWidth) * size.scale - extent / 2;
 
   /// Finder handles for tests.
   static const scaleKey = ValueKey('focus-emphasis-scale');
@@ -84,15 +121,21 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return;
     final size = box.size;
-    final grow = size.longestSide * (FocusEmphasis.scale - 1) / 2;
+    final grow = size.longestSide * (_scale - 1) / 2;
+    final glow = widget.glowColor == null ? 0 : _glowBlur;
     final margin =
-        widget.gap + FocusEmphasis.ringWidth + _glowBlur + grow.ceilToDouble();
+        widget.gap + FocusEmphasis.ringWidth + glow + grow.ceilToDouble();
     box.showOnScreen(
       rect: (Offset.zero & size).inflate(margin),
       duration: const Duration(milliseconds: 140),
       curve: Curves.easeOutCubic,
     );
   }
+
+  /// The focused scale: none with animations disabled, where only the ring
+  /// shows focus.
+  double get _scale =>
+      MediaQuery.disableAnimationsOf(context) ? 1 : widget.size.scale;
 
   @override
   Widget build(BuildContext context) {
@@ -101,11 +144,15 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
       canRequestFocus: false,
       skipTraversal: true,
       onFocusChange: _onFocusChange,
-      child: AnimatedScale(
-        key: FocusEmphasis.scaleKey,
-        scale: _focused ? FocusEmphasis.scale : 1,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: _focused ? _scale : 1),
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        builder: (context, scale, child) => FocusPaintScale(
+          key: FocusEmphasis.scaleKey,
+          scale: scale,
+          child: child,
+        ),
         child: CustomPaint(
           key: FocusEmphasis.ringKey,
           // Glow and ring both lie outside the button's bounds, so painting
@@ -113,6 +160,7 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
           foregroundPainter: FocusEmphasisPainter(
             visible: _focused,
             color: context.palette.primary,
+            glowColor: widget.glowColor,
             borderRadius: widget.borderRadius,
             circular: widget.circular,
             gap: widget.gap,
@@ -124,12 +172,85 @@ class _FocusEmphasisState extends State<FocusEmphasis> {
   }
 }
 
-/// Paints [FocusEmphasis]'s ring and the glow around it.
+/// Scales its child about its centre when painting, and nowhere else.
+///
+/// An ordinary transform also moves the child's geometry: a focus node's
+/// rect is measured through it, so a grown poster's rect would reach into the
+/// row above it, and directional traversal, which searches from that rect,
+/// would pick a different neighbour (RIGHT along a grid's first row landed on
+/// the sort chip above it). Painting the growth alone keeps every focus rect,
+/// and so every focus move, what the unscaled layout gives. Hit testing stays
+/// unscaled too, which only a pointer could notice, and the television tier
+/// has none.
+@visibleForTesting
+class FocusPaintScale extends SingleChildRenderObjectWidget {
+  const FocusPaintScale({super.key, required this.scale, super.child});
+
+  final double scale;
+
+  @override
+  RenderFocusPaintScale createRenderObject(BuildContext context) =>
+      RenderFocusPaintScale(scale);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderFocusPaintScale renderObject,
+  ) => renderObject.scale = scale;
+}
+
+/// The render object behind [FocusPaintScale].
+@visibleForTesting
+class RenderFocusPaintScale extends RenderProxyBox {
+  RenderFocusPaintScale(this._scale);
+
+  double _scale;
+  double get scale => _scale;
+  set scale(double value) {
+    if (value == _scale) return;
+    _scale = value;
+    markNeedsPaint();
+  }
+
+  final LayerHandle<TransformLayer> _layer = LayerHandle<TransformLayer>();
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null) return;
+    if (_scale == 1) {
+      _layer.layer = null;
+      context.paintChild(child, offset);
+      return;
+    }
+    final centre = size.center(Offset.zero);
+    final transform = Matrix4.identity()
+      ..translateByDouble(centre.dx, centre.dy, 0, 1)
+      ..scaleByDouble(_scale, _scale, 1, 1)
+      ..translateByDouble(-centre.dx, -centre.dy, 0, 1);
+    _layer.layer = context.pushTransform(
+      needsCompositing,
+      offset,
+      transform,
+      (context, offset) => context.paintChild(child, offset),
+      oldLayer: _layer.layer,
+    );
+  }
+
+  @override
+  void dispose() {
+    _layer.layer = null;
+    super.dispose();
+  }
+}
+
+/// Paints [FocusEmphasis]'s ring and, when given a colour, the glow around it.
 @visibleForTesting
 class FocusEmphasisPainter extends CustomPainter {
   FocusEmphasisPainter({
     required this.visible,
     required this.color,
+    this.glowColor,
     required this.borderRadius,
     required this.circular,
     required this.gap,
@@ -137,6 +258,7 @@ class FocusEmphasisPainter extends CustomPainter {
 
   final bool visible;
   final Color color;
+  final Color? glowColor;
   final BorderRadius borderRadius;
   final bool circular;
   final double gap;
@@ -167,14 +289,17 @@ class FocusEmphasisPainter extends CustomPainter {
         bottomRight: r.bottomRight + Radius.circular(inset),
       );
     }
-    canvas.drawRRect(
-      ring,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = FocusEmphasis.ringWidth * 2
-        ..color = color.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, _glowBlur),
-    );
+    final glow = glowColor;
+    if (glow != null) {
+      canvas.drawRRect(
+        ring,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = FocusEmphasis.ringWidth * 2
+          ..color = glow.withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.outer, _glowBlur),
+      );
+    }
     canvas.drawRRect(
       ring,
       Paint()
@@ -188,6 +313,7 @@ class FocusEmphasisPainter extends CustomPainter {
   bool shouldRepaint(FocusEmphasisPainter old) =>
       old.visible != visible ||
       old.color != color ||
+      old.glowColor != glowColor ||
       old.borderRadius != borderRadius ||
       old.circular != circular ||
       old.gap != gap;

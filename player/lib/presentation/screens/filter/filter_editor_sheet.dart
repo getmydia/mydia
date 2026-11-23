@@ -8,6 +8,8 @@ import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../../../l10n/l10n.dart';
 import '../library/library_sort.dart';
+import '../../widgets/controls/app_segmented.dart';
+import '../../widgets/controls/app_select.dart';
 import '../../widgets/glass/glass_sheet.dart';
 import '../library/library_sort_sheet.dart';
 
@@ -207,74 +209,75 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                 const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SegmentedButton<MediaKind>(
+                  child: AppSegmented<MediaKind>(
+                    key: const Key('filter-editor-kind'),
                     segments: [
-                      ButtonSegment(
+                      AppSegment(
                         value: MediaKind.movies,
-                        label: Text(context.l10n.navMovies),
+                        label: context.l10n.navMovies,
                       ),
-                      ButtonSegment(
+                      AppSegment(
                         value: MediaKind.shows,
-                        label: Text(context.l10n.navShows),
+                        label: context.l10n.navShows,
                       ),
                     ],
-                    selected: {_filter.kind},
-                    onSelectionChanged: (selection) =>
-                        _setKind(selection.first),
+                    selected: _filter.kind,
+                    onChanged: _setKind,
                   ),
                 ),
                 const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  // initialValue is read once, so changing the kind (which
-                  // swaps the categories and clears the selection) must
-                  // rebuild the field.
-                  child: KeyedSubtree(
-                    key: ValueKey(_filter.kind),
-                    child: DropdownButtonFormField<MediaCategoryFilter?>(
-                      key: const Key('filter-editor-category'),
-                      initialValue: _filter.category,
-                      decoration: InputDecoration(
-                        labelText: context.l10n.filterEditorCategory,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        context.l10n.filterEditorCategory,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(color: palette.textSecondary),
                       ),
-                      items: [
-                        DropdownMenuItem(
-                          value: null,
-                          child: Text(context.l10n.commonAll),
-                        ),
-                        for (final category in categories)
-                          DropdownMenuItem(
-                            value: category,
-                            child: Text(
-                              context.l10n.categoryFilterName(category),
-                            ),
+                      const SizedBox(height: 4),
+                      AppSelect<MediaCategoryFilter?>(
+                        key: const Key('filter-editor-category'),
+                        semanticLabel: context.l10n.filterEditorCategory,
+                        value: _filter.category,
+                        items: [
+                          AppSelectItem(
+                            value: null,
+                            label: context.l10n.commonAll,
                           ),
-                      ],
-                      onChanged: _setCategory,
-                    ),
+                          for (final category in categories)
+                            AppSelectItem(
+                              value: category,
+                              label: context.l10n.categoryFilterName(category),
+                            ),
+                        ],
+                        onChanged: _setCategory,
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SegmentedButton<WatchScope>(
+                  child: AppSegmented<WatchScope>(
+                    key: const Key('filter-editor-watch'),
                     segments: [
-                      ButtonSegment(
+                      AppSegment(
                         value: WatchScope.all,
-                        label: Text(context.l10n.commonAll),
+                        label: context.l10n.commonAll,
                       ),
-                      ButtonSegment(
+                      AppSegment(
                         value: WatchScope.unwatched,
-                        label: Text(context.l10n.navUnwatched),
+                        label: context.l10n.navUnwatched,
                       ),
-                      ButtonSegment(
+                      AppSegment(
                         value: WatchScope.favorites,
-                        label: Text(context.l10n.navFavorites),
+                        label: context.l10n.navFavorites,
                       ),
                     ],
-                    selected: {_filter.watch},
-                    onSelectionChanged: (selection) =>
-                        _setWatch(selection.first),
+                    selected: _filter.watch,
+                    onChanged: _setWatch,
                   ),
                 ),
                 const SizedBox(height: 8),

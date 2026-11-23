@@ -40,7 +40,10 @@ class DevicesSection extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: scheme.error),
+            style: GlassDialog.liquidOnly(
+              context,
+              TextButton.styleFrom(foregroundColor: scheme.error),
+            ),
             child: Text(l10n.settingsDevicesRevoke),
           ),
         ],

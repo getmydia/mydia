@@ -168,8 +168,9 @@ abstract final class DepthTokens {
   // ---------------------------------------------------------------------------
 
   /// Fixed for every theme preset: the OSD sits over video, not the app
-  /// ground, and osd_legibility_test measures against this value.
-  static const Color osdTint = Color(0xFF0B0B0C);
+  /// ground, and osd_legibility_test measures against this value. Tracks the
+  /// warm Projection Booth ground.
+  static const Color osdTint = Color(0xFF0C0B0A);
 
   /// Opacity of the OSD fill.
   static const double osdFillOpacity = 0.85;

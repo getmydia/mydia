@@ -17,9 +17,12 @@ import '../../../core/sources/files/files_accounts.dart';
 import '../../../core/sources/files/media_names.dart';
 import '../../../core/sources/files/s3_presets.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../core/theme/palette.dart';
 import '../../../core/ui/reduced_motion.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
+import '../../widgets/controls/app_select.dart';
+import '../../widgets/controls/app_switch.dart';
 import '../../widgets/files/experimental_badge.dart';
 import '../../widgets/files/remote_folder_picker.dart';
 import 'files_library_kind_picker.dart';
@@ -422,15 +425,27 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
     return [
       const FilesExperimentalNotice(key: Key('add-s3-experimental')),
       const SizedBox(height: 16),
-      DropdownButtonFormField<S3Preset>(
-        key: const Key('s3-provider'),
-        initialValue: preset,
-        decoration: InputDecoration(labelText: l10n.filesS3Provider),
-        items: [
-          for (final p in S3Preset.values)
-            DropdownMenuItem(value: p, child: Text(p.label(l10n))),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            l10n.filesS3Provider,
+            style: Theme.of(context).textTheme.labelMedium
+                ?.copyWith(color: context.palette.textSecondary),
+          ),
+          const SizedBox(height: 4),
+          AppSelect<S3Preset>(
+            key: const Key('s3-provider'),
+            semanticLabel: l10n.filesS3Provider,
+            value: preset,
+            enabled: !fixed,
+            items: [
+              for (final p in S3Preset.values)
+                AppSelectItem(value: p, label: p.label(l10n)),
+            ],
+            onChanged: _choosePreset,
+          ),
         ],
-        onChanged: fixed ? null : _choosePreset,
       ),
       if (preset.needsEndpoint)
         _field(
@@ -466,7 +481,7 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         obscure: true,
       ),
       const SizedBox(height: 8),
-      SwitchListTile(
+      AppSwitchTile(
         key: const Key('s3-style'),
         contentPadding: EdgeInsets.zero,
         title: Text(l10n.filesS3PathStyle),

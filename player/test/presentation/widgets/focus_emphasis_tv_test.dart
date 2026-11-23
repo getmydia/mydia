@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/core/theme/surface_roles.dart';
 import 'package:player/presentation/widgets/focus_emphasis.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:player/presentation/widgets/glass/glass_button.dart';
@@ -26,7 +27,7 @@ Widget _host(Widget child) => MaterialApp(
 ({double scale, bool ring}) _emphasis(WidgetTester tester, Finder of) {
   final finder = find.ancestor(of: of, matching: find.byType(FocusEmphasis));
   final scale = tester
-      .widget<AnimatedScale>(
+      .widget<FocusPaintScale>(
         find.descendant(
           of: finder.first,
           matching: find.byKey(FocusEmphasis.scaleKey),
@@ -105,7 +106,7 @@ void main() {
       );
     });
 
-    testWidgets('focused, it paints a glow and then the accent ring', (
+    testWidgets('focused, it paints only the accent ring by default', (
       tester,
     ) async {
       final node = FocusNode();
@@ -128,9 +129,50 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.renderObject(ring),
+        paints..rrect(
+          color: accent,
+          strokeWidth: FocusEmphasis.ringWidth,
+          style: PaintingStyle.stroke,
+        ),
+      );
+      // One stroke: no glow unless a glow colour is given.
+      expect(
+        tester.renderObject(ring),
+        isNot(
+          paints
+            ..rrect()
+            ..rrect(),
+        ),
+      );
+    });
+
+    testWidgets('given a glowColor, it paints that glow and then the ring', (
+      tester,
+    ) async {
+      const glow = Color(0xFF3366CC);
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      await tester.pumpWidget(
+        _host(
+          FocusHighlight(
+            emphasis: true,
+            emphasisGlow: glow,
+            focusNode: node,
+            onActivate: () {},
+            child: const SizedBox(width: 80, height: 40),
+          ),
+        ),
+      );
+      final ring = find.byKey(FocusEmphasis.ringKey);
+      final accent = tester.element(ring).palette.primary;
+
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      expect(
+        tester.renderObject(ring),
         paints
           ..rrect(
-            color: accent.withValues(alpha: 0.35),
+            color: glow.withValues(alpha: 0.35),
             strokeWidth: FocusEmphasis.ringWidth * 2,
             style: PaintingStyle.stroke,
           )
@@ -140,6 +182,169 @@ void main() {
             style: PaintingStyle.stroke,
           ),
       );
+    });
+
+    testWidgets('the ring is 3 wide', (tester) async {
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      await tester.pumpWidget(
+        _host(
+          FocusEmphasis(
+            child: Focus(
+              focusNode: node,
+              child: const SizedBox(width: 80, height: 40),
+            ),
+          ),
+        ),
+      );
+      node.requestFocus();
+      await tester.pumpAndSettle();
+
+      expect(FocusEmphasis.ringWidth, 3);
+      expect(
+        tester.renderObject(find.byKey(FocusEmphasis.ringKey)),
+        paints..rrect(strokeWidth: 3, style: PaintingStyle.stroke),
+      );
+    });
+
+    for (final (size, expected) in [
+      (FocusSize.poster, 1.1),
+      (FocusSize.tile, 1.05),
+      (FocusSize.control, 1.025),
+    ]) {
+      testWidgets('a focused ${size.name} scales to $expected', (tester) async {
+        final node = FocusNode();
+        addTearDown(node.dispose);
+        const box = Key('box');
+        await tester.pumpWidget(
+          _host(
+            FocusEmphasis(
+              size: size,
+              child: Focus(
+                focusNode: node,
+                child: const SizedBox(key: box, width: 80, height: 40),
+              ),
+            ),
+          ),
+        );
+        expect(_emphasis(tester, find.byKey(box)).scale, 1.0);
+
+        node.requestFocus();
+        await tester.pumpAndSettle();
+        expect(_emphasis(tester, find.byKey(box)), (
+          scale: expected,
+          ring: true,
+        ));
+      });
+    }
+
+    testWidgets('the growth is painted only: the focus rect does not grow', (
+      tester,
+    ) async {
+      // Directional traversal searches from the focused node's rect. Grown,
+      // it would reach into the neighbouring row and change where a D-pad
+      // press goes.
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      await tester.pumpWidget(
+        _host(
+          FocusEmphasis(
+            size: FocusSize.poster,
+            child: Focus(
+              focusNode: node,
+              child: const SizedBox(width: 140, height: 250),
+            ),
+          ),
+        ),
+      );
+      final before = node.rect;
+
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FocusPaintScale>(find.byKey(FocusEmphasis.scaleKey))
+            .scale,
+        FocusSize.poster.scale,
+      );
+      expect(node.rect, before);
+      // ...while the paint is scaled about the centre.
+      const centre = Offset(70, 125);
+      final expected = Matrix4.identity()
+        ..translateByDouble(centre.dx, centre.dy, 0, 1)
+        ..scaleByDouble(1.1, 1.1, 1, 1)
+        ..translateByDouble(-centre.dx, -centre.dy, 0, 1);
+      expect(
+        tester.renderObject(find.byKey(FocusEmphasis.scaleKey)),
+        paints..transform(matrix4: equals(expected.storage)),
+      );
+    });
+
+    testWidgets('the default size class is control', (tester) async {
+      const box = Key('box');
+      await tester.pumpWidget(
+        _host(
+          const FocusEmphasis(
+            child: Focus(
+              autofocus: true,
+              child: SizedBox(key: box, width: 80, height: 40),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(_emphasis(tester, find.byKey(box)).scale, FocusSize.control.scale);
+    });
+
+    testWidgets('FocusHighlight passes its size class through', (tester) async {
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      const box = Key('box');
+      await tester.pumpWidget(
+        _host(
+          FocusHighlight(
+            emphasis: true,
+            emphasisSize: FocusSize.poster,
+            focusNode: node,
+            onActivate: () {},
+            child: const SizedBox(key: box, width: 80, height: 120),
+          ),
+        ),
+      );
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      expect(_emphasis(tester, find.byKey(box)).scale, 1.1);
+    });
+
+    testWidgets('no scale when animations are disabled, ring still painted', (
+      tester,
+    ) async {
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      const box = Key('box');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.darkTheme,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Center(
+              child: FocusEmphasis(
+                size: FocusSize.poster,
+                child: Focus(
+                  focusNode: node,
+                  child: const SizedBox(key: box, width: 80, height: 120),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      expect(_emphasis(tester, find.byKey(box)), (scale: 1.0, ring: true));
     });
 
     testWidgets('a focused Play is emphasized', (tester) async {
@@ -200,20 +405,26 @@ void main() {
       final context = tester.element(find.byType(SizedBox));
       final theme = Theme.of(context);
       final accent = context.palette.primary;
+      final outlined = theme.outlinedButtonTheme.style;
       for (final style in [
         theme.filledButtonTheme.style,
         theme.elevatedButtonTheme.style,
-        theme.outlinedButtonTheme.style,
+        outlined,
         theme.textButtonTheme.style,
       ]) {
         final side = style!.side!.resolve({WidgetState.focused});
         expect(side?.color, accent);
         expect(side!.width, greaterThanOrEqualTo(3));
         final rest = style.side!.resolve({});
-        expect(
-          rest == null || rest.width == 0 || rest == BorderSide.none,
-          isTrue,
-        );
+        if (identical(style, outlined)) {
+          // The Frosted secondary button keeps its hairline edge at rest.
+          expect(rest, BorderSide(color: context.surfaceRoles.hairlineStrong));
+        } else {
+          expect(
+            rest == null || rest.width == 0 || rest == BorderSide.none,
+            isTrue,
+          );
+        }
       }
     });
   }, skip: tvSkipReason);

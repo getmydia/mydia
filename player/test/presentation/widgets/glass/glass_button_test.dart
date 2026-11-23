@@ -1,8 +1,11 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/controls/press_scale.dart';
+import 'package:player/presentation/widgets/focus_emphasis.dart';
 import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -102,7 +105,111 @@ void main() {
     expect(find.byType(OutlinedButton), findsOneWidget);
     await tester.tap(find.byKey(_key));
     expect(taps, 1);
-    expect(tester.getSize(find.byType(OutlinedButton)).height, 48);
+    expect(tester.getSize(find.byType(OutlinedButton)).height, 40);
+  });
+
+  testWidgets('Frosted: keyboard focus draws the 2px primary side', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(() {}, liquid: false));
+    BorderSide side() {
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(OutlinedButton),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      return (material.shape! as OutlinedBorder).side;
+    }
+
+    expect(side(), const BorderSide(color: Color(0x24FFFFFF)));
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(
+      side(),
+      BorderSide(color: Palettes.projectionBooth.primary, width: 2),
+    );
+  });
+
+  testWidgets('Frosted is a 40pt hairline button in a press-scaled emphasis', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(() {}, liquid: false));
+    final button = tester.widget<OutlinedButton>(find.byType(OutlinedButton));
+    final style = button.style!;
+    expect(style.side!.resolve({}), const BorderSide(color: Color(0x24FFFFFF)));
+    // Off the television FocusEmphasis draws nothing, so keyboard focus
+    // takes the theme's 2px primary side (glass_button_tv_test pins the TV
+    // hairline).
+    expect(
+      style.side!.resolve({WidgetState.focused}),
+      BorderSide(color: Palettes.projectionBooth.primary, width: 2),
+    );
+    final emphasis = tester.widget<FocusEmphasis>(find.byType(FocusEmphasis));
+    expect(emphasis.size, FocusSize.control);
+    expect(emphasis.borderRadius, BorderRadius.circular(10));
+    expect(
+      find.descendant(
+        of: find.byType(FocusEmphasis),
+        matching: find.byType(PressScale),
+      ),
+      findsOneWidget,
+    );
+    final ctx = tester.element(find.byType(OutlinedButton));
+    final theme = Theme.of(ctx).outlinedButtonTheme.style!;
+    expect(theme.backgroundColor!.resolve({}), const Color(0x12FFFFFF));
+    final shape = theme.shape!.resolve({}) as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.circular(10));
+  });
+
+  testWidgets('Frosted keeps a 48 hit target around the 40 visual', (
+    tester,
+  ) async {
+    var taps = 0;
+    await tester.pumpWidget(_host(() => taps++, liquid: false));
+    expect(tester.getSize(find.byType(OutlinedButton)).height, 40);
+    expect(
+      tester.getSize(find.byType(GlassButton)).height,
+      greaterThanOrEqualTo(48),
+    );
+    final top = tester.getTopLeft(find.byType(OutlinedButton));
+    await tester.tapAt(top + const Offset(20, -4));
+    expect(taps, 1);
+  });
+
+  testWidgets('Frosted fills a tight width', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: _theme(liquid: false),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: double.infinity,
+              child: GlassButton(label: 'x', onPressed: () {}),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(OutlinedButton)).width,
+      tester.getSize(find.byType(Scaffold)).width,
+    );
+  });
+
+  testWidgets('Frosted: an explicit height wins', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: _theme(liquid: false),
+        home: Center(
+          child: GlassButton(label: 'x', onPressed: () {}, height: 52),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byType(OutlinedButton)).height, 52);
   });
 
   testWidgets('a null onPressed disables the glass press', (tester) async {

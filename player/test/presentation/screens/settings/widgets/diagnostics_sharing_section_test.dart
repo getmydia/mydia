@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/core/diagnostics/diagnostics_provider.dart';
 import 'package:player/core/diagnostics/diagnostics_settings.dart';
 import 'package:player/core/logging/log_uploader.dart';
@@ -113,10 +114,10 @@ const _crashes = Key('diagnostics-crashes');
 const _logs = Key('diagnostics-logs');
 
 Finder _switchOf(Key row) =>
-    find.descendant(of: find.byKey(row), matching: find.byType(Switch));
+    find.descendant(of: find.byKey(row), matching: find.byType(AppSwitch));
 
-Switch _switch(WidgetTester tester, Key row) =>
-    tester.widget<Switch>(_switchOf(row));
+AppSwitch _switch(WidgetTester tester, Key row) =>
+    tester.widget<AppSwitch>(_switchOf(row));
 
 void main() {
   testWidgets('each switch shows its stored value', (tester) async {

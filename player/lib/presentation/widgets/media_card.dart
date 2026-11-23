@@ -5,6 +5,7 @@ import '../../core/theme/depth_tokens.dart';
 import '../../core/theme/palette.dart';
 import '../../domain/models/media_file.dart';
 import '../../domain/models/watch_status.dart';
+import 'focus_emphasis.dart';
 import 'focus_highlight.dart';
 import 'poster_badge_corner.dart';
 import 'poster_frame.dart';
@@ -138,8 +139,12 @@ class MediaCard extends StatelessWidget {
     // labels together, which is what a viewer scanning a rail with a remote
     // is actually selecting. `borderRadius` uses the shared poster token so
     // the ring traces the same corner radius `PosterFrame` already paints.
+    // On the television tier the card grows by the poster class instead. No
+    // glow: the card has no tint of its own to give it.
     return FocusHighlight(
       onActivate: onTap,
+      emphasis: true,
+      emphasisSize: FocusSize.poster,
       borderRadius: const BorderRadius.all(
         Radius.circular(DepthTokens.radiusPoster),
       ),

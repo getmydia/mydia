@@ -311,6 +311,14 @@ extension AppFormatters on AppLocalizations {
     SubtitleSize.extraLarge => subtitleSizeExtraLarge,
   };
 
+  /// The abbreviation drawn on the inline subtitle size control.
+  String subtitleSizeShortName(SubtitleSize size) => switch (size) {
+    SubtitleSize.small => subtitleSizeShortSmall,
+    SubtitleSize.medium => subtitleSizeShortMedium,
+    SubtitleSize.large => subtitleSizeShortLarge,
+    SubtitleSize.extraLarge => subtitleSizeShortExtraLarge,
+  };
+
   String updateTrackName(UpdateTrack track) => switch (track) {
     UpdateTrack.stable => updateTrackStable,
     UpdateTrack.beta => updateTrackBeta,

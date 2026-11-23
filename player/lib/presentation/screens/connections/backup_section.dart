@@ -14,6 +14,7 @@ import '../../../core/backup/backup_providers.dart';
 import '../../../core/backup/backup_relay_client.dart';
 import '../../../core/theme/palette.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/controls/app_switch.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../backup/backup_manage_disclosure.dart';
@@ -361,7 +362,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
                       move: move,
                     ),
                   ] else if (!unavailable) ...[
-                    SwitchListTile(
+                    AppSwitchTile(
                       key: const Key('backup-switch'),
                       value: s.enabled,
                       onChanged: _busy ? null : _toggle,

@@ -143,26 +143,26 @@ class MydiaPalette extends ThemeExtension<MydiaPalette> {
 }
 
 abstract final class Palettes {
-  /// The original cinematic palette: neutral near-black, warm gold.
+  /// The original cinematic palette: warm near-black greys, warm gold.
   static const MydiaPalette projectionBooth = MydiaPalette(
-    background: Color(0xFF0B0B0C),
-    surfaceDim: Color(0xFF0E0E10),
-    surfaceLow: Color(0xFF111113),
-    surface: Color(0xFF141416),
-    surfaceHigh: Color(0xFF191A1D),
-    surfaceVariant: Color(0xFF1E1E21),
-    surfaceBright: Color(0xFF26272B),
+    background: Color(0xFF0C0B0A),
+    surfaceDim: Color(0xFF0F0E0D),
+    surfaceLow: Color(0xFF121110),
+    surface: Color(0xFF151413),
+    surfaceHigh: Color(0xFF1B1A19),
+    surfaceVariant: Color(0xFF1F1E1D),
+    surfaceBright: Color(0xFF282726),
     primary: Color(0xFFE9A23B),
     primaryFocus: Color(0xFFD08C24),
     onPrimary: Color(0xFF1A1205),
     textPrimary: Color(0xFFF0EFED),
     textSecondary: Color(0xFF9A9894),
     textDisabled: Color(0xFF7A7975),
-    divider: Color(0xFF1D1D21),
-    border: Color(0xFF2E2E33),
-    cardHover: Color(0xFF26272B),
-    shimmerBase: Color(0xFF1A1A1D),
-    shimmerHighlight: Color(0xFF26272B),
+    divider: Color(0xFF1E1D1C),
+    border: Color(0xFF2F2E2D),
+    cardHover: Color(0xFF282726),
+    shimmerBase: Color(0xFF1B1A19),
+    shimmerHighlight: Color(0xFF282726),
     ambientTint: true,
   );
 

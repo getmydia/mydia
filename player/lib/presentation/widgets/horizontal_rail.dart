@@ -4,6 +4,7 @@ import '../../core/focus/focus_memory.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/palette.dart';
+import 'focus_emphasis.dart';
 import 'horizontal_wheel_scroll.dart';
 import 'rail_focus_scroller.dart';
 
@@ -34,6 +35,15 @@ class HorizontalRail extends StatefulWidget {
   /// remembers a place in a rail whose order does not change.
   final Object Function(int index)? itemId;
 
+  /// The [FocusSize] of the emphasized cards this rail holds, if any.
+  ///
+  /// The rail clips at its own bounds, and on the television tier a focused
+  /// card grows and draws its ring outside itself, so the top and bottom of
+  /// the ring would be cut off. With this set the rail adds that much room
+  /// above and below its items on the television tier, growing taller by it;
+  /// [height] stays the items' height. Elsewhere it changes nothing.
+  final FocusSize? focusSize;
+
   const HorizontalRail({
     super.key,
     required this.itemCount,
@@ -42,7 +52,15 @@ class HorizontalRail extends StatefulWidget {
     required this.leftFadeKey,
     required this.rightFadeKey,
     this.itemId,
+    this.focusSize,
   });
+
+  /// The room this rail leaves above and below its items for a focused
+  /// card's growth and ring. Zero off the television tier.
+  static double focusBleed(double height, FocusSize? focusSize) {
+    if (focusSize == null || !InputCapabilities.directionalPrimary) return 0;
+    return FocusEmphasis.bleed(height, focusSize).ceilToDouble();
+  }
 
   @override
   State<HorizontalRail> createState() => _HorizontalRailState();
@@ -139,6 +157,7 @@ class _HorizontalRailState extends State<HorizontalRail>
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final directional = InputCapabilities.directionalPrimary;
+    final bleed = HorizontalRail.focusBleed(widget.height, widget.focusSize);
 
     // On the television tier each slot is keyed by its item, so a reorder
     // moves the slot's element with the item instead of handing it to
@@ -163,7 +182,10 @@ class _HorizontalRailState extends State<HorizontalRail>
         scrollCacheExtent: directional
             ? const ScrollCacheExtent.pixels(_directionalCacheExtent)
             : null,
-        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: bleed,
+        ),
         itemCount: widget.itemCount,
         findChildIndexCallback: slotId == null
             ? null
@@ -192,7 +214,7 @@ class _HorizontalRailState extends State<HorizontalRail>
     );
 
     return SizedBox(
-      height: widget.height,
+      height: widget.height + bleed * 2,
       child: Stack(
         children: [
           if (directional) FocusMemoryRegion(child: list) else list,

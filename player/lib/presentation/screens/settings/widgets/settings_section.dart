@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../core/focus/focus_memory.dart';
 import '../../../../core/player/input_capabilities.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../widgets/glass_surface.dart';
 
@@ -66,9 +67,10 @@ class SettingsCard extends StatelessWidget {
 /// A sentence-case label above a [SettingsCard], and an optional [footer]
 /// note under it.
 ///
-/// The strings are rendered as given. Transforming the label to upper case
-/// would make screen readers spell or shout it, and would break `find.text`
-/// against the label a caller actually passed.
+/// The label is a 13/600 header without tracking, toned to `textSecondary`
+/// under Frosted. The strings are rendered as given. Transforming the label to
+/// upper case would make screen readers spell or shout it, and would break
+/// `find.text` against the label a caller actually passed.
 class SettingsSection extends StatelessWidget {
   /// The header above the card. Null when the page already names the section;
   /// focus ids then use an empty label.
@@ -103,6 +105,10 @@ class SettingsSection extends StatelessWidget {
                 child: row,
               ),
           ];
+    final palette = context.palette;
+    // Frosted tones the header down to textSecondary; Liquid keeps the
+    // brighter textPrimary at 80%.
+    final frosted = !GlassStyle.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -114,7 +120,9 @@ class SettingsSection extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: context.palette.textPrimary.withValues(alpha: 0.8),
+                color: frosted
+                    ? palette.textSecondary
+                    : palette.textPrimary.withValues(alpha: 0.8),
               ),
             ),
           ),

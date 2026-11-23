@@ -339,11 +339,14 @@ class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
       ),
       ElevatedButton(
         onPressed: canDownload ? () => _startDownload(options) : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: palette.primary,
-          foregroundColor: palette.onPrimary,
-          disabledBackgroundColor: palette.surfaceVariant,
-          disabledForegroundColor: palette.textDisabled,
+        style: GlassDialog.liquidOnly(
+          context,
+          ElevatedButton.styleFrom(
+            backgroundColor: palette.primary,
+            foregroundColor: palette.onPrimary,
+            disabledBackgroundColor: palette.surfaceVariant,
+            disabledForegroundColor: palette.textDisabled,
+          ),
         ),
         child: _isStartingDownload
             ? const SizedBox(

@@ -1,12 +1,27 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_section.dart';
 
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(
     MaterialApp(
+      home: Scaffold(body: ListView(children: [child])),
+    ),
+  );
+  await tester.pump();
+}
+
+Future<void> _pumpThemed(
+  WidgetTester tester, {
+  required bool liquid,
+  required Widget child,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
       home: Scaffold(body: ListView(children: [child])),
     ),
   );
@@ -83,6 +98,39 @@ void main() {
     );
 
     expect(tester.widget<Divider>(find.byType(Divider)).indent, 16);
+  });
+
+  testWidgets('header is 13/600 textSecondary without tracking in Frosted', (
+    tester,
+  ) async {
+    await _pumpThemed(
+      tester,
+      liquid: false,
+      child: const SettingsSection(label: 'Playback', children: [SizedBox()]),
+    );
+
+    final label = tester.widget<Text>(find.text('Playback'));
+    expect(label.data, 'Playback');
+    expect(label.style?.fontSize, 13);
+    expect(label.style?.fontWeight, FontWeight.w600);
+    expect(label.style?.letterSpacing ?? 0, 0);
+    expect(label.style?.color, Palettes.projectionBooth.textSecondary);
+  });
+
+  testWidgets('header keeps textPrimary at 80% in Liquid', (tester) async {
+    await _pumpThemed(
+      tester,
+      liquid: true,
+      child: const SettingsSection(label: 'Playback', children: [SizedBox()]),
+    );
+
+    final label = tester.widget<Text>(find.text('Playback'));
+    expect(label.style?.fontSize, 13);
+    expect(label.style?.fontWeight, FontWeight.w600);
+    expect(
+      label.style?.color,
+      Palettes.projectionBooth.textPrimary.withValues(alpha: 0.8),
+    );
   });
 
   testWidgets(

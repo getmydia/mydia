@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/settings/stats_overlay_setting.dart';
@@ -42,7 +43,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byType(AppSwitch));
     await tester.pumpAndSettle();
 
     expect(storage.contents['stats_overlay_enabled'], 'true');

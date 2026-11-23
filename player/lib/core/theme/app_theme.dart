@@ -4,6 +4,7 @@ import '../player/input_capabilities.dart';
 import 'colors.dart';
 import 'liquid_glass/glass_style.dart';
 import 'palette.dart';
+import 'surface_roles.dart';
 
 /// Mydia Design System Theme
 ///
@@ -30,6 +31,10 @@ class AppTheme {
   static const double radiusInput = 10.0; // Input fields
   static const double radiusSheet = 20.0; // Bottom sheets
 
+  /// Frosted button heights (primary and secondary).
+  static const double primaryButtonHeight = 44;
+  static const double secondaryButtonHeight = 40;
+
   /// Secondary button fill: white at 14%, over any ground.
   static const Color secondaryButtonFill = Color(0x24FFFFFF);
 
@@ -49,6 +54,68 @@ class AppTheme {
     final InteractiveInkFeatureFactory? buttonSplash = liquid
         ? NoSplash.splashFactory
         : null;
+    final roles = SurfaceRoles.fromPalette(p);
+    final strongSide = BorderSide(color: roles.hairlineStrong);
+    final inputRadius = BorderRadius.circular(
+      liquid ? radiusInput : roles.radiusControl,
+    );
+    final OutlinedBorder frostedShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(roles.radiusControl),
+    );
+    RoundedRectangleBorder hairlineShape(double radius) =>
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radius),
+          side: BorderSide(color: roles.hairline),
+        );
+    const frostedButtonText = TextStyle(
+      fontFamily: kAppFontFamily,
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+    );
+    // Frosted feedback: no ripple; a faint wash on hover, a dim on press,
+    // no wash on focus. Focus shows as a side instead: a 2px primary one off
+    // the television tier (below), the accent ring of [withTvFocus] on it.
+    Color? frostedOverlayFor(Set<WidgetState> states, {Color? focused}) {
+      if (states.contains(WidgetState.pressed)) return roles.pressOverlay;
+      if (states.contains(WidgetState.hovered)) return roles.hoverOverlay;
+      if (states.contains(WidgetState.focused)) return focused;
+      return Colors.transparent;
+    }
+
+    final WidgetStateProperty<Color?> frostedOverlay =
+        WidgetStateProperty.resolveWith(
+          (states) => frostedOverlayFor(states, focused: Colors.transparent),
+        );
+    // Keyboard focus off the television tier. On it [withTvFocus] replaces
+    // the side, so a TV button never draws both rings.
+    WidgetStateProperty<BorderSide?>? frostedFocusSide(BorderSide? rest) =>
+        InputCapabilities.directionalPrimary
+        ? null
+        : WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.focused)
+                ? BorderSide(color: p.primary, width: 2)
+                : rest,
+          );
+    ButtonStyle frosted(
+      ButtonStyle style, {
+      double? height,
+      BorderSide? rest,
+    }) => style.copyWith(
+      splashFactory: NoSplash.splashFactory,
+      overlayColor: frostedOverlay,
+      side: frostedFocusSide(rest),
+      shape: WidgetStatePropertyAll(frostedShape),
+      textStyle: const WidgetStatePropertyAll(frostedButtonText),
+      minimumSize: height == null
+          ? null
+          : WidgetStatePropertyAll(Size(64, height)),
+    );
+    ButtonStyle styled(ButtonStyle style, {double? height, BorderSide? rest}) =>
+        liquid ? style : frosted(style, height: height, rest: rest);
+    // Tabular figures so timecodes, durations, sizes and bitrates line up.
+    TextStyle figures(TextStyle t) => liquid
+        ? t
+        : t.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
     // On a television the only cue for where focus is. Material's focus
     // overlay is a faint tint, invisible on the white fills these buttons
     // use, so a focused button gets an accent border. Elsewhere the buttons
@@ -66,9 +133,16 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      splashFactory: liquid ? null : NoSplash.splashFactory,
+      // InkWell surfaces (rows, list tiles, menu items) dim like buttons
+      // instead of flashing Material's light grey highlight.
+      highlightColor: liquid ? null : roles.pressOverlay,
+      hoverColor: liquid ? null : roles.hoverOverlay,
+      splashColor: liquid ? null : Colors.transparent,
       extensions: [
         p,
         GlassStyle(liquid: liquid),
+        roles,
       ],
 
       // Font family - matches web app
@@ -116,9 +190,12 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: p.surface,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusCard),
-        ),
+        surfaceTintColor: liquid ? null : Colors.transparent,
+        shape: liquid
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(radiusCard),
+              )
+            : hairlineShape(roles.radiusMenu),
       ),
 
       // Typography - refined spacing with letterSpacing and height
@@ -198,64 +275,79 @@ class AppTheme {
           color: p.textPrimary,
           height: 1.35,
         ),
-        bodyLarge: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w400,
-          color: p.textPrimary,
-          height: 1.5,
+        bodyLarge: figures(
+          TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
+            color: p.textPrimary,
+            height: 1.5,
+          ),
         ),
-        bodyMedium: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
-          color: p.textPrimary,
-          height: 1.45,
+        bodyMedium: figures(
+          TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: p.textPrimary,
+            height: 1.45,
+          ),
         ),
         // Meta info, captions - text-xs (12px)
-        bodySmall: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w400,
-          color: p.textSecondary,
-          letterSpacing: 0.1,
-          height: 1.4,
+        bodySmall: figures(
+          TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: p.textSecondary,
+            letterSpacing: 0.1,
+            height: 1.4,
+          ),
         ),
-        labelLarge: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: p.textPrimary,
-          letterSpacing: 0.15,
-          height: 1.3,
+        labelLarge: figures(
+          TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: p.textPrimary,
+            letterSpacing: 0.15,
+            height: 1.3,
+          ),
         ),
-        labelMedium: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: p.textPrimary,
-          letterSpacing: 0.2,
-          height: 1.3,
+        labelMedium: figures(
+          TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: p.textPrimary,
+            letterSpacing: 0.2,
+            height: 1.3,
+          ),
         ),
-        labelSmall: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: p.textSecondary,
-          letterSpacing: 0.3,
-          height: 1.3,
+        labelSmall: figures(
+          TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: p.textSecondary,
+            letterSpacing: 0.3,
+            height: 1.3,
+          ),
         ),
       ),
 
       // Elevated Button
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: withTvFocus(
-          ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: p.background,
-            elevation: 0,
-            textStyle: const TextStyle(
-              fontFamily: displayFamily,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+          styled(
+            ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: p.background,
+              elevation: 0,
+              textStyle: const TextStyle(
+                fontFamily: displayFamily,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              shape: buttonShape,
+              splashFactory: buttonSplash,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            shape: buttonShape,
-            splashFactory: buttonSplash,
+            height: primaryButtonHeight,
           ),
         ),
       ),
@@ -263,16 +355,18 @@ class AppTheme {
       // Text Button
       textButtonTheme: TextButtonThemeData(
         style: withTvFocus(
-          TextButton.styleFrom(
-            foregroundColor: p.textPrimary,
-            textStyle: const TextStyle(
-              fontFamily: displayFamily,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
+          styled(
+            TextButton.styleFrom(
+              foregroundColor: p.textPrimary,
+              textStyle: const TextStyle(
+                fontFamily: displayFamily,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: buttonShape,
+              splashFactory: buttonSplash,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            shape: buttonShape,
-            splashFactory: buttonSplash,
           ),
         ),
       ),
@@ -280,43 +374,64 @@ class AppTheme {
       // Outlined Button
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: withTvFocus(
-          rest: BorderSide.none,
-          OutlinedButton.styleFrom(
-            foregroundColor: p.textPrimary,
-            backgroundColor: secondaryButtonFill,
-            side: BorderSide.none,
-            textStyle: const TextStyle(
-              fontFamily: displayFamily,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
+          rest: liquid ? BorderSide.none : strongSide,
+          styled(
+            rest: strongSide,
+            OutlinedButton.styleFrom(
+              foregroundColor: p.textPrimary,
+              backgroundColor: liquid
+                  ? secondaryButtonFill
+                  : const Color(0x12FFFFFF),
+              side: liquid ? BorderSide.none : strongSide,
+              textStyle: const TextStyle(
+                fontFamily: displayFamily,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: buttonShape,
+              splashFactory: buttonSplash,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: buttonShape,
-            splashFactory: buttonSplash,
+            height: secondaryButtonHeight,
           ),
         ),
       ),
 
       // Icon Button
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: p.textSecondary),
+        style: liquid
+            ? IconButton.styleFrom(foregroundColor: p.textSecondary)
+            : IconButton.styleFrom(
+                foregroundColor: p.textSecondary,
+                splashFactory: NoSplash.splashFactory,
+              ).copyWith(
+                // Same hover and press as the buttons. Focus resolves to
+                // null so Material's own focus layer still shows: icon
+                // buttons have no themed ring on or off the television.
+                overlayColor: WidgetStateProperty.resolveWith(
+                  (states) => frostedOverlayFor(states),
+                ),
+              ),
       ),
 
       // Filled Button (for primary actions)
       filledButtonTheme: FilledButtonThemeData(
         style: withTvFocus(
-          FilledButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: p.background,
-            elevation: 0,
-            textStyle: const TextStyle(
-              fontFamily: displayFamily,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+          styled(
+            FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: p.background,
+              elevation: 0,
+              textStyle: const TextStyle(
+                fontFamily: displayFamily,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              shape: buttonShape,
+              splashFactory: buttonSplash,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            shape: buttonShape,
-            splashFactory: buttonSplash,
+            height: primaryButtonHeight,
           ),
         ),
       ),
@@ -324,21 +439,21 @@ class AppTheme {
       // Input Decoration - uses radiusInput
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: p.surfaceVariant,
+        fillColor: liquid ? p.surfaceVariant : p.surfaceLow,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
-          borderSide: BorderSide(color: p.border),
+          borderRadius: inputRadius,
+          borderSide: BorderSide(color: liquid ? p.border : roles.hairline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
-          borderSide: BorderSide(color: p.border),
+          borderRadius: inputRadius,
+          borderSide: BorderSide(color: liquid ? p.border : roles.hairline),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
-          borderSide: BorderSide(color: p.primary, width: 2),
+          borderRadius: inputRadius,
+          borderSide: BorderSide(color: p.primary, width: liquid ? 2 : 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
+          borderRadius: inputRadius,
           borderSide: const BorderSide(color: AppColors.error),
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -379,6 +494,9 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusCard),
         ),
+        // Frosted: every showDialog gets the scrim without its caller
+        // passing a barrierColor.
+        barrierColor: liquid ? null : roles.scrim,
       ),
 
       // Divider
@@ -406,19 +524,40 @@ class AppTheme {
       // Tooltip
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: p.surface,
-          borderRadius: BorderRadius.circular(radiusButton),
+          color: liquid ? p.surface : p.surfaceHigh,
+          borderRadius: BorderRadius.circular(liquid ? radiusButton : 8),
+          border: liquid ? null : Border.all(color: roles.hairline),
         ),
         textStyle: TextStyle(color: p.textPrimary, fontSize: 12),
       ),
 
       // Popup Menu
       popupMenuTheme: PopupMenuThemeData(
-        color: p.surface,
+        color: liquid ? p.surface : p.surfaceHigh,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusButton),
-        ),
+        shape: liquid
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(radiusButton),
+              )
+            : hairlineShape(roles.radiusMenu),
+        elevation: liquid ? null : 8,
+        shadowColor: liquid ? null : Colors.black,
+        iconColor: liquid ? null : p.textSecondary,
+        iconSize: liquid ? null : 18,
+        labelTextStyle: liquid
+            ? null
+            // Material 3 dims a disabled item only through its default
+            // label style, which this one replaces, so it dims here too.
+            : WidgetStateProperty.resolveWith(
+                (states) => TextStyle(
+                  fontFamily: kAppFontFamily,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: states.contains(WidgetState.disabled)
+                      ? p.textPrimary.withValues(alpha: 0.38)
+                      : p.textPrimary,
+                ),
+              ),
       ),
 
       // List Tile
@@ -426,6 +565,7 @@ class AppTheme {
         textColor: p.textPrimary,
         iconColor: p.textSecondary,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        shape: liquid ? null : frostedShape,
       ),
 
       // Switch
@@ -433,6 +573,7 @@ class AppTheme {
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         thumbIcon: WidgetStateProperty.all<Icon?>(null),
         thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (!liquid) return Colors.white;
           if (states.contains(WidgetState.selected)) {
             return p.primary;
           }
@@ -440,10 +581,13 @@ class AppTheme {
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return p.primary.withValues(alpha: 0.5);
+            return liquid ? p.primary.withValues(alpha: 0.5) : p.primary;
           }
-          return p.surfaceVariant;
+          return liquid ? p.surfaceVariant : p.border;
         }),
+        trackOutlineColor: liquid
+            ? null
+            : const WidgetStatePropertyAll(Colors.transparent),
       ),
 
       // Checkbox
@@ -455,8 +599,12 @@ class AppTheme {
           return Colors.transparent;
         }),
         checkColor: WidgetStateProperty.all(p.onPrimary),
-        side: BorderSide(color: p.border, width: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        side: liquid
+            ? BorderSide(color: p.border, width: 2)
+            : BorderSide(color: roles.hairlineStrong, width: 1.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(liquid ? 4 : 5),
+        ),
       ),
 
       // Radio

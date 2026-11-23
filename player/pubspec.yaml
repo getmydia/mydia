@@ -109,7 +109,7 @@ dependencies:
   file_selector: ^1.1.0
   # Keeps qr on 3.x: qr_flutter 4.1.0, the latest, requires qr ^3.0.1.
   qr_flutter: ^4.1.0
-  material_ui: ^1.11.1
+  material_ui: 1.11.1
   cupertino_ui: ^1.1.7
 
 # macOS ships getmydia's video-hdr libmpv (mpv 0.42, libplacebo, MoltenVK)

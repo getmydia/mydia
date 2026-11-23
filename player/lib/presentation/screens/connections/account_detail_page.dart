@@ -22,6 +22,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/controls/app_switch.dart';
 import '../../widgets/files/files_scan_banner.dart' show filesScanProgressText;
 import '../../widgets/toast/toaster.dart';
 import '../settings/settings_nav.dart';
@@ -132,7 +133,7 @@ class _AllServersSwitch extends ConsumerWidget {
   final Source source;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => SwitchListTile(
+  Widget build(BuildContext context, WidgetRef ref) => AppSwitchTile(
     key: ValueKey('manage-all-servers-${source.id.value}'),
     dense: true,
     contentPadding: EdgeInsets.zero,

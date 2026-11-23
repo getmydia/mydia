@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../../core/theme/palette.dart';
+import '../../../widgets/controls/app_switch.dart';
 import '../../../widgets/focus_highlight.dart';
 
 enum _RowKind { navigation, toggle, action, select }
@@ -159,18 +161,22 @@ class SettingsRow extends StatelessWidget {
               // traversal order. It remains clickable by pointer: ExcludeFocus
               // only removes focusability, not hit testing.
               ExcludeFocus(
-                // A real 40x24 layout box: FittedBox shrinks the themed switch
-                // into it, so the row keeps its 52px height.
+                // A real 40x24 layout box, so the row keeps its 52px
+                // height. Frosted's AppSwitch already draws a 40x24 track;
+                // Liquid's themed switch is shrunk into the box by FittedBox.
                 child: SizedBox(
                   key: const Key('settings-row-switch-box'),
                   width: 40,
                   height: 24,
-                  child: FittedBox(
-                    child: Switch.adaptive(
-                      value: toggleValue,
-                      onChanged: onChanged,
-                    ),
-                  ),
+                  child: GlassStyle.of(context)
+                      ? FittedBox(
+                          child: AppSwitch(
+                            value: toggleValue,
+                            onChanged: onChanged,
+                            adaptive: true,
+                          ),
+                        )
+                      : AppSwitch(value: toggleValue, onChanged: onChanged),
                 ),
               ),
             ],

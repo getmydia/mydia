@@ -24,6 +24,7 @@ Future<void> showCancelDownloadDialog(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => GlassDialog(
+      destructive: true,
       backgroundColor: context.palette.surface,
       title: Text(context.l10n.downloadsCancelDownloadTitle),
       content: Text(context.l10n.downloadsCancelEpisodeBody(task.episodeCode)),
@@ -37,7 +38,10 @@ Future<void> showCancelDownloadDialog(
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          style: GlassDialog.liquidOnly(
+            context,
+            FilledButton.styleFrom(backgroundColor: AppColors.error),
+          ),
           child: Text(context.l10n.downloadsCancelDownloadAction),
         ),
       ],
@@ -70,7 +74,10 @@ Future<void> showDeleteEpisodeDialog(
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          style: GlassDialog.liquidOnly(
+            context,
+            FilledButton.styleFrom(backgroundColor: AppColors.error),
+          ),
           child: Text(context.l10n.commonDelete),
         ),
       ],
@@ -113,7 +120,10 @@ Future<void> showDeleteSeasonDialog(
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          style: GlassDialog.liquidOnly(
+            context,
+            FilledButton.styleFrom(backgroundColor: AppColors.error),
+          ),
           child: Text(context.l10n.commonDelete),
         ),
       ],
@@ -158,7 +168,10 @@ Future<bool> showDeleteAllDialog(
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          style: GlassDialog.liquidOnly(
+            context,
+            FilledButton.styleFrom(backgroundColor: AppColors.error),
+          ),
           child: Text(context.l10n.downloadsDeleteAllAction),
         ),
       ],

@@ -4,6 +4,7 @@ import '../../core/focus/focus_memory.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/dock_insets.dart';
 import '../../core/player/input_capabilities.dart';
+import 'focus_emphasis.dart';
 
 /// The poster grid shared by every browse screen that shows media.
 ///
@@ -70,6 +71,15 @@ class BrowseGrid extends StatelessWidget {
 
     final grid = LayoutBuilder(
       builder: (context, constraints) {
+        final columns = libraryCrossAxisCount(constraints.maxWidth);
+        final topBleed = directional
+            ? posterFocusBleed(
+                width: constraints.maxWidth,
+                columns: columns,
+                horizontalPadding: horizontalPadding,
+                spacing: cardSpacing,
+              )
+            : 0.0;
         return GridView.builder(
           controller: controller,
           scrollCacheExtent: directional
@@ -77,13 +87,13 @@ class BrowseGrid extends StatelessWidget {
               : null,
           padding: EdgeInsets.fromLTRB(
             horizontalPadding,
-            scrollTopPadding,
+            scrollTopPadding + topBleed,
             horizontalPadding,
             bottomPadding,
           ),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: libraryCrossAxisCount(constraints.maxWidth),
-            childAspectRatio: 0.58,
+            crossAxisCount: columns,
+            childAspectRatio: posterAspectRatio,
             crossAxisSpacing: cardSpacing,
             mainAxisSpacing: cardSpacing + 4,
           ),
@@ -98,6 +108,28 @@ class BrowseGrid extends StatelessWidget {
     return directional
         ? FocusMemoryRegion(landing: landing, child: grid)
         : grid;
+  }
+
+  /// Width over height of a poster cell.
+  static const double posterAspectRatio = 0.58;
+
+  /// How far a focused poster in a grid of [columns] across [width] reaches
+  /// above its cell on the television tier: the room the first row needs
+  /// below the glass bar, which the page draws over the top of the scroll
+  /// area. `scrollTopPadding` clears the bar for a resting poster only, and
+  /// a focused one cannot be scrolled down past the top of the list.
+  static double posterFocusBleed({
+    required double width,
+    required int columns,
+    required double horizontalPadding,
+    required double spacing,
+  }) {
+    final cellWidth =
+        (width - horizontalPadding * 2 - spacing * (columns - 1)) / columns;
+    return FocusEmphasis.bleed(
+      cellWidth / posterAspectRatio,
+      FocusSize.poster,
+    ).ceilToDouble();
   }
 
   /// [itemBuilder]'s cell wrapped as an item of the grid's region. A null

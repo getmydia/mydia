@@ -20,6 +20,7 @@ import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/focus/focus_memory.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/player/subtitle_size.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
 import 'package:player/core/remote/remote_control_settings.dart';
@@ -33,6 +34,7 @@ import 'package:player/core/update/update_track.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
+import 'package:player/presentation/widgets/controls/app_segmented.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
@@ -380,11 +382,13 @@ void main() {
     ) async {
       await pumpSettings(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      // One more press than rows: the backup switch is not a ringed row.
-      for (var i = 0; i < 5; i++) {
+      // One more press than rows: the backup switch is not a ringed row,
+      // nor is the subtitle size control, whose Left and Right change the
+      // size (next test). Row 3 is the stats overlay row just below it.
+      for (var i = 0; i < 4; i++) {
         await press(tester, LogicalKeyboardKey.arrowDown);
       }
-      expectOnRow(tester, 4);
+      expectOnRow(tester, 3);
 
       await press(tester, LogicalKeyboardKey.arrowLeft);
       expect(
@@ -394,7 +398,42 @@ void main() {
       );
 
       await press(tester, LogicalKeyboardKey.arrowRight);
-      expectOnRow(tester, 4);
+      expectOnRow(tester, 3);
+    });
+
+    testWidgets('the subtitle size control is one stop; LEFT at Small reaches '
+        'the rail', (tester) async {
+      await pumpSettings(tester);
+      const control = Key('subtitle-size-control');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      // Backup switch, default quality, then the control.
+      for (var i = 0; i < 3; i++) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expectFocusIn(control);
+
+      // Medium to Small: the size changes and focus stays.
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expectFocusIn(control);
+      expect(
+        tester.widget<AppSegmented<SubtitleSize>>(find.byKey(control)).selected,
+        SubtitleSize.small,
+      );
+
+      // A fresh Left at the first segment leaves for the rail.
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(
+        shell.sidebarRow.hasPrimaryFocus,
+        isTrue,
+        reason: 'focus is on ${describeFocus()}',
+      );
+
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expectFocusIn(control);
+
+      // One Down leaves the row for the next one.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(const Key('stats-overlay-switch'));
     });
 
     testWidgets(

@@ -26,6 +26,9 @@ void main() {
       shapeOf(theme.filledButtonTheme.style),
       isA<RoundedRectangleBorder>(),
     );
-    expect(theme.filledButtonTheme.style?.splashFactory, isNull);
+    expect(
+      theme.filledButtonTheme.style?.splashFactory,
+      NoSplash.splashFactory,
+    );
   });
 }

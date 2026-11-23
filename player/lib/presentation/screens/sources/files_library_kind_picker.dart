@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../core/sources/files/media_names.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/controls/app_select.dart';
 
 String filesLibraryKindLabel(AppLocalizations l10n, FilesLibraryKind kind) =>
     switch (kind) {
@@ -27,20 +28,17 @@ class FilesLibraryKindPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onChanged = this.onChanged;
-    return DropdownButton<FilesLibraryKind>(
+    return AppSelect<FilesLibraryKind>(
       value: value,
-      isDense: true,
-      onChanged: onChanged == null
-          ? null
-          : (kind) {
-              if (kind != null) onChanged(kind);
-            },
+      enabled: onChanged != null,
+      semanticLabel: context.l10n.filesKindLabel,
+      onChanged: (kind) => onChanged?.call(kind),
       items: [
         for (final kind in FilesLibraryKind.values)
-          DropdownMenuItem(
+          AppSelectItem(
             key: ValueKey('files-kind-${kind.name}'),
             value: kind,
-            child: Text(filesLibraryKindLabel(context.l10n, kind)),
+            label: filesLibraryKindLabel(context.l10n, kind),
           ),
       ],
     );

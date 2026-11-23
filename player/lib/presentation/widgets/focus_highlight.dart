@@ -51,10 +51,16 @@ class FocusHighlight extends StatefulWidget {
   /// child into view or lift the state.
   final ValueChanged<bool>? onFocusChange;
 
-  /// A button: on the television tier it takes [FocusEmphasis]'s look (it
-  /// grows, with an accent ring and glow) in place of this widget's ring.
+  /// A button or card: on the television tier it takes [FocusEmphasis]'s
+  /// look (it grows, with an accent ring) in place of this widget's ring.
   /// Off that tier it changes nothing.
   final bool emphasis;
+
+  /// [FocusEmphasis.size]: how much the child grows when emphasized.
+  final FocusSize emphasisSize;
+
+  /// [FocusEmphasis.glowColor]: the glow around the emphasis ring, if any.
+  final Color? emphasisGlow;
 
   /// [FocusEmphasis.gap], for a child that already carries space for a ring
   /// around its visible edge.
@@ -75,6 +81,8 @@ class FocusHighlight extends StatefulWidget {
     this.onFocusChange,
     this.emphasis = false,
     this.emphasisGap = FocusEmphasis.defaultGap,
+    this.emphasisSize = FocusSize.control,
+    this.emphasisGlow,
   });
 
   /// Finder handle for the ring itself, so tests assert on the decoration
@@ -157,6 +165,8 @@ class _FocusHighlightState extends State<FocusHighlight> {
       borderRadius: widget.borderRadius,
       circular: widget.circular,
       gap: widget.emphasisGap,
+      size: widget.emphasisSize,
+      glowColor: widget.emphasisGlow,
       child: detector,
     );
   }

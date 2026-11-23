@@ -3,12 +3,14 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/glass_style.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/toast/toast_models.dart';
 import 'package:player/presentation/widgets/toast/toast_pill.dart';
 
 final _pill = find.byKey(const Key('toast-pill'));
+final _frostedBox = find.byKey(const Key('toast-pill-frosted'));
 
 ToastEntry _entry(
   String message, {
@@ -28,12 +30,14 @@ Future<void> _pump(
   WidgetTester tester,
   ToastEntry entry, {
   VoidCallback? onAction,
+  bool liquid = false,
 }) async {
   tester.view.physicalSize = const Size(800, 600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
+      theme: ThemeData(extensions: [GlassStyle(liquid: liquid)]),
       home: Scaffold(
         body: Center(
           child: ToastPill(entry: entry, onAction: onAction),
@@ -94,14 +98,48 @@ void main() {
 
   testWidgets('no kind recolours the pill itself', (tester) async {
     for (final kind in ToastKind.values) {
-      await _pump(tester, _entry('Same glass', kind: kind));
-      final glass = tester.widget<GlassSurface>(find.byType(GlassSurface));
+      await _pump(tester, _entry('Same card', kind: kind));
+      final box = tester.widget<DecoratedBox>(_frostedBox);
       expect(
-        glass.fillColor,
-        ToastPill.fill(Palettes.projectionBooth),
+        (box.decoration as BoxDecoration).color,
+        Palettes.projectionBooth.surfaceHigh,
         reason: '$kind',
       );
     }
+  });
+
+  testWidgets('Frosted pill is opaque with a hairline and no blur', (
+    tester,
+  ) async {
+    await _pump(tester, _entry('Saved'));
+    expect(
+      find.descendant(of: _pill, matching: find.byType(BackdropFilter)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: _pill, matching: find.byType(GlassSurface)),
+      findsNothing,
+    );
+    final deco =
+        tester.widget<DecoratedBox>(_frostedBox).decoration as BoxDecoration;
+    expect(deco.color, Palettes.projectionBooth.surfaceHigh);
+    expect(deco.color!.a, 1.0);
+    expect((deco.border! as Border).top.color, const Color(0x14FFFFFF));
+    expect(deco.boxShadow, hasLength(2));
+    expect(deco.borderRadius, BorderRadius.circular(999));
+  });
+
+  testWidgets('Frosted pill keeps its live region', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await _pump(tester, _entry('Saved'));
+    expect(tester.getSemantics(_pill), isSemantics(isLiveRegion: true));
+    semantics.dispose();
+  });
+
+  testWidgets('Liquid pill still renders through GlassSurface', (tester) async {
+    await _pump(tester, _entry('Saved'), liquid: true);
+    final glass = tester.widget<GlassSurface>(find.byType(GlassSurface));
+    expect(glass.fillColor, ToastPill.fill(Palettes.projectionBooth));
   });
 
   test('the fill clears the legibility floor', () {

@@ -63,7 +63,7 @@ void main() {
     }
   });
 
-  test('primary buttons are white with a near-black Outfit label', () {
+  test('primary buttons are white with a near-black Inter label', () {
     final theme = AppTheme.darkTheme;
     for (final style in [
       theme.filledButtonTheme.style!,
@@ -74,7 +74,7 @@ void main() {
         style.foregroundColor!.resolve({}),
         Palettes.projectionBooth.background,
       );
-      expect(style.textStyle!.resolve({})!.fontFamily, 'Outfit');
+      expect(style.textStyle!.resolve({})!.fontFamily, 'Inter');
     }
   });
 

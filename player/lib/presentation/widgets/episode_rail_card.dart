@@ -9,6 +9,7 @@ import '../../l10n/l10n.dart';
 import '../screens/detail/detail_actions.dart';
 import 'detail_art_image.dart';
 import 'episode_download_button.dart';
+import 'focus_emphasis.dart';
 import 'focus_highlight.dart';
 import 'toast/toaster.dart';
 import 'watch_indicator.dart';
@@ -72,8 +73,11 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
     // FocusHighlight sits outermost, mirroring MediaCard: the ring should
     // enclose the whole card, thumbnail and label together, which is what a
     // viewer scanning the episode rail with a remote is actually selecting.
+    // On the television tier it grows by the tile class.
     return FocusHighlight(
       onActivate: widget.onTap,
+      emphasis: true,
+      emphasisSize: FocusSize.tile,
       borderRadius: const BorderRadius.all(Radius.circular(12)),
       child: SizedBox(
         width: cardSize.width,
