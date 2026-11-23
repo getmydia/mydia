@@ -212,6 +212,29 @@ void main() {
       expect(nativeEnterCalls, 0);
     });
 
+    test('on Windows, toggle goes by the observed state: nativeapi never '
+        'sees media_kit\'s fullscreen and always reads false', () async {
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: ValueNotifier<bool>(true),
+        isWindows: true,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => false,
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(true);
+      await pumpEventQueue();
+
+      expect(nativeExitCalls, 1);
+      expect(nativeEnterCalls, 0);
+    });
+
     test('on native mobile there is no fullscreen route: the player is '
         'already immersive, so the button must not draw', () {
       final changes = <bool>[];

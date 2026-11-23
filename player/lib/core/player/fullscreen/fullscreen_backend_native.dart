@@ -121,9 +121,18 @@ class NativeFullscreenBackend implements FullscreenBackend {
   /// it turned every tap into another enter, which AppKit ignores, so the
   /// viewer had no way out during playback. The live read costs nothing that
   /// matters here: unlike web, nothing on native needs user activation.
+  ///
+  /// Not on Windows. There nativeapi's `IsFullScreen` only knows windows it
+  /// fullscreened itself, and media_kit fullscreens through its own Win32
+  /// channel, so the read is always false and every tap would enter again.
+  /// The optimistic bookkeeping in [enter] and [exit] keeps [observed] right.
   @override
   void toggle(bool observed) {
     if (mode == FullscreenMode.unsupported) return;
+    if (_effectiveIsWindows) {
+      observed ? exit() : enter();
+      return;
+    }
     unawaited(_toggleFromWindow(observed));
   }
 
