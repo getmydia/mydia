@@ -90,6 +90,11 @@ defmodule Mydia.Config.Schema.PathsTest do
       assert {:error, reason} = Paths.cast_overlay("auth.oidc_default_role", "admin")
       assert reason =~ "auth.oidc_default_role"
 
+      # Required by its changeset, so a cleared row is refused too; the season
+      # setting is optional, so clearing it stays legal.
+      assert {:error, _reason} = Paths.cast_overlay("auth.oidc_default_role", "")
+      assert {:ok, _path, nil} = Paths.cast_overlay("media.default_season_monitoring", "")
+
       assert {:ok, _path, "first"} =
                Paths.cast_overlay("media.default_season_monitoring", "first")
 

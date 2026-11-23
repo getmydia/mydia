@@ -55,10 +55,11 @@ defmodule Mydia.Config.Schema.Paths do
   # Fields whose changeset restricts them to a fixed set. Checked here too, so a
   # row outside the set is refused on write and skipped by the merge on its
   # own; reaching Schema.changeset/2 instead would invalidate the whole
-  # database layer, every other admin-saved setting with it.
+  # database layer, every other admin-saved setting with it. nil (a cleared
+  # row) is listed only where the changeset does not require the field.
   @allowed_values %{
     "auth.oidc_default_role" => AuthChangeset.oidc_default_roles(),
-    "media.default_season_monitoring" => Schema.season_monitoring_values()
+    "media.default_season_monitoring" => [nil | Schema.season_monitoring_values()]
   }
 
   # Built at compile time from the schema itself. A hand-maintained list drifts
@@ -148,15 +149,17 @@ defmodule Mydia.Config.Schema.Paths do
 
   defp check_allowed(key, path, value) do
     case Map.fetch(@allowed_values, key) do
-      {:ok, allowed} when not is_nil(value) ->
+      {:ok, allowed} ->
         if value in allowed,
           do: {:ok, path, value},
-          else: {:error, "#{key}: #{inspect(value)} is not one of #{Enum.join(allowed, ", ")}"}
+          else: {:error, "#{key}: #{inspect(value)} is not one of #{allowed_list(allowed)}"}
 
-      _ ->
+      :error ->
         {:ok, path, value}
     end
   end
+
+  defp allowed_list(allowed), do: allowed |> Enum.reject(&is_nil/1) |> Enum.join(", ")
 
   # A key outside @overlay_index is either a genuine typo or a real schema
   # field that was excluded on purpose. Telling those apart matters: an
