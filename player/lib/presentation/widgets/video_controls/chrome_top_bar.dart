@@ -163,6 +163,9 @@ class ChromeTopBar extends StatelessWidget {
         if (showBack) ...[
           Tooltip(
             message: l10n.commonBack,
+            // The Semantics below already carries the label; without this
+            // the tooltip would announce Back a second time.
+            excludeFromSemantics: true,
             child: Semantics(
               label: l10n.commonBack,
               button: true,
@@ -185,7 +188,7 @@ class ChromeTopBar extends StatelessWidget {
                   key: titleKey,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.left,
+                  textAlign: TextAlign.start,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,

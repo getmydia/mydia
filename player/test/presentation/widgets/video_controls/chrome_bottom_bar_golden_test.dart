@@ -22,6 +22,7 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
@@ -37,6 +38,9 @@ Widget _bar(double width) {
   final metrics = ChromeMetrics.forWidth(width);
   return MaterialApp(
     debugShowCheckedModeBanner: false,
+    // TransportSurface and SecondaryCluster read context.l10n.
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: RepaintBoundary(
         key: _sceneKey,

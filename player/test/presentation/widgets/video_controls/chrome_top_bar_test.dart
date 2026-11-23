@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'dart:ui' show SemanticsAction;
 
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/player/video_scaling.dart';
@@ -214,7 +215,12 @@ void main() {
       await tester.pumpWidget(_host(ChromeTopBar(onBack: () {})));
 
       expect(find.text('Back'), findsNothing);
-      expect(find.byTooltip('Back'), findsOneWidget);
+      // byTooltip goes through semantics, which the tooltip is excluded
+      // from (the Semantics wrapper carries the label), so match the widget.
+      expect(
+        find.byWidgetPredicate((w) => w is Tooltip && w.message == 'Back'),
+        findsOneWidget,
+      );
       expect(
         find.descendant(
           of: find.byKey(ChromeTopBar.backKey),
@@ -228,16 +234,63 @@ void main() {
       tester,
     ) async {
       final handle = tester.ensureSemantics();
-      var backed = false;
-      await tester.pumpWidget(_host(ChromeTopBar(onBack: () => backed = true)));
+      try {
+        var backed = false;
+        await tester.pumpWidget(
+          _host(ChromeTopBar(onBack: () => backed = true)),
+        );
 
-      final node = tester.getSemantics(find.byKey(ChromeTopBar.backKey));
-      expect(node.label, 'Back');
-      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
-      tester.semantics.tap(find.semantics.byLabel('Back'));
-      await tester.pump();
-      expect(backed, isTrue);
-      handle.dispose();
+        final node = tester.getSemantics(find.byKey(ChromeTopBar.backKey));
+        expect(node.label, 'Back');
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+        // The tooltip is excluded from semantics, so Back is announced once.
+        expect(find.semantics.byLabel('Back'), findsOne);
+        tester.semantics.tap(find.semantics.byLabel('Back'));
+        await tester.pump();
+        expect(backed, isTrue);
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('a short title sits next to Back in RTL', (tester) async {
+      tester.view.physicalSize = const Size(800, 200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _host(
+          Directionality(
+            textDirection: TextDirection.rtl,
+            child: ChromeTopBar(
+              title: 'Ash Harbour',
+              onBack: () {},
+              onScalingTap: () {},
+            ),
+          ),
+        ),
+      );
+
+      final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
+      final actions = tester.getRect(find.byKey(ChromeTopBar.actionsPillKey));
+      // Back leads on the right in RTL, the actions pill on the left.
+      expect(back.left, greaterThan(actions.right));
+
+      // Measure the glyphs, not the Expanded box that spans the whole gap.
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.byKey(ChromeTopBar.titleKey),
+      );
+      final box = paragraph.localToGlobal(Offset.zero) & paragraph.size;
+      final lineWidth = paragraph.getMaxIntrinsicWidth(double.infinity);
+      expect(lineWidth, lessThan(box.width / 2));
+      final glyphs = paragraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 'Ash Harbour'.length),
+      );
+      final glyphRight = glyphs
+          .map((b) => b.right)
+          .reduce((a, b) => a > b ? a : b);
+      // Start-aligned in RTL: the text hugs the right edge, next to Back.
+      expect(box.left + glyphRight, closeTo(box.right, 1.0));
     });
 
     testWidgets('long title ellipsizes at 320 px with cast and scaling', (
