@@ -19,7 +19,7 @@
 // gets from its own, still-all-sides `SafeArea`. A `SafeArea(top: false)`
 // wrapping everything, which is what an earlier version of this file had, is
 // exactly the regression that group is pinned against: it would leave the
-// centre play button and the bottom panel un-inset from the platform's top
+// centre transport and the bottom bar un-inset from the platform's top
 // safe-area padding (a phone's status bar or notch) while still correctly
 // consuming left/right/bottom, an easy thing to miss since only one edge is
 // wrong.
@@ -30,8 +30,7 @@ import 'package:player/l10n/l10n.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/player/stream_timeline.dart';
-import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
-import 'package:player/presentation/widgets/video_controls/chrome_subtitle_lift.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
@@ -163,7 +162,9 @@ void main() {
       final gutter = WindowTitleRow.endGutter(
         tester.element(find.byType(ChromeTopBar)),
       );
-      final cast = tester.getRect(find.byKey(ChromeTopBar.castKey));
+      // The cast control now lives inside the actions pill, whose outer edge
+      // is the one that keeps the gutter.
+      final cast = tester.getRect(find.byKey(ChromeTopBar.actionsPillKey));
 
       expect(cast.right, closeTo(width - gutter, 0.5));
     });
@@ -295,7 +296,7 @@ void main() {
 
       tearDown(() => player.dispose());
 
-      // A nonzero bottom is load-bearing: the content and panel assertions
+      // A nonzero bottom is load-bearing: the content and bar assertions
       // below check `rect.bottom` against `height - padding.bottom`, which a
       // zero bottom cannot tell apart from a `PlaybackChrome` that dropped the
       // bottom `SafeArea` inset entirely -- both give the same rect.
@@ -306,8 +307,8 @@ void main() {
       // `MediaQuery.of(context).copyWith(padding: padding)`, not a bare
       // `MediaQueryData(padding: padding)`: the latter defaults every other
       // field, including `size`, to its class default (`Size.zero`), which
-      // would make `PanelMetrics.resolve`'s width-driven `bottomOffset` branch
-      // in `PlaybackChrome.build` resolve against 0 instead of the resized
+      // would make `ChromeMetrics.resolve`'s width-driven tiers in
+      // `PlaybackChrome.build` resolve against 0 instead of the resized
       // view. `copyWith` keeps the real, resized `size` and overrides only
       // `padding`.
       Widget chromeHost() => MaterialApp(
@@ -353,22 +354,16 @@ void main() {
       );
 
       testWidgets(
-        'the bottom transport panel keeps its old rect, unaffected by the '
-        'top bar now sitting outside the SafeArea',
+        'the bottom bar spans the safe area and sits on its bottom edge, '
+        'unaffected by the top bar now sitting outside the SafeArea',
         (tester) async {
           await pump(tester);
 
-          final panel = tester.getRect(find.byType(ChromeSubtitleLift));
-          // Desktop-tier width (>= 900), matching the resized view above, so
-          // `bottomOffset` is 48 -- see `PanelMetrics.resolve`.
-          final metrics = PanelMetrics.resolve(
-            width: width,
-            touchPrimary: false,
-          );
+          final bar = tester.getRect(find.byType(ChromeBottomBar));
 
-          expect(panel.left, padding.left);
-          expect(panel.right, width - padding.right);
-          expect(panel.bottom, height - padding.bottom - metrics.bottomOffset);
+          expect(bar.left, padding.left);
+          expect(bar.right, width - padding.right);
+          expect(bar.bottom, height - padding.bottom);
         },
       );
 

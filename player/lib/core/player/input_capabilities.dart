@@ -69,13 +69,20 @@ class InputCapabilities {
     required bool forcedTv,
   }) => forcedTv || (isNativeAndroid && hasLeanback);
 
+  /// Test seam: when non-null, [touchPrimary] returns it instead of probing
+  /// the platform. Tests that set it must reset it to null in `tearDown`.
+  @visibleForTesting
+  static bool? debugTouchPrimaryOverride;
+
   /// Whether the primary pointer is a finger.
-  static bool get touchPrimary => computeTouchPrimary(
-    isNativeMobile: PlatformFeatures.isMobile,
-    isWeb: kIsWeb,
-    coarsePointer: probe.coarsePointer,
-    directionalPrimary: directionalPrimary,
-  );
+  static bool get touchPrimary =>
+      debugTouchPrimaryOverride ??
+      computeTouchPrimary(
+        isNativeMobile: PlatformFeatures.isMobile,
+        isWeb: kIsWeb,
+        coarsePointer: probe.coarsePointer,
+        directionalPrimary: directionalPrimary,
+      );
 
   /// Pure predicate behind [touchPrimary], exposed separately so it can be
   /// unit-tested for every platform combination without running on each.

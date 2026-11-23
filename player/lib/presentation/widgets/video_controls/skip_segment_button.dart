@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../domain/models/media_segment.dart';
 import '../../../l10n/l10n.dart';
-import 'chrome_panel.dart';
+import 'chrome_bottom_bar.dart';
 import 'chrome_top_bar.dart';
 
 /// Records which segments have already been auto-skipped this playback session.
@@ -80,7 +80,7 @@ class SkipSegmentButton extends StatelessWidget {
   /// `UpNextPrompt` cannot drift apart; the old private constants cited
   /// `UpNextOverlay`, which was the one widget not following the design
   /// system.
-  final PanelMetrics metrics;
+  final ChromeMetrics metrics;
 
   static const Key buttonKey = Key('skip-segment-button');
 
@@ -91,10 +91,7 @@ class SkipSegmentButton extends StatelessWidget {
     }
 
     return Padding(
-      padding: EdgeInsets.only(
-        right: PanelMetrics.cornerInsetRight,
-        bottom: metrics.cornerInsetBottom,
-      ),
+      padding: metrics.cornerPaddingOf(context),
       child: Align(
         alignment: Alignment.bottomRight,
         child: GlassPill(

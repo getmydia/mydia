@@ -55,8 +55,10 @@ final _reference = GlobalKey();
 RenderBox? _referenceBox() =>
     _reference.currentContext?.findRenderObject() as RenderBox?;
 
-/// A 1400x900 view with a panel of [panelHeight] 16px off the bottom edge,
-/// like the real chrome's `Positioned(bottom: metrics.bottomOffset)`.
+/// A 1400x900 view with a bar of [panelHeight] 16px off the bottom edge,
+/// standing in for a bottom safe-area inset under the real chrome's bar. The
+/// offset makes the lift arithmetic prove it measures the bar's top edge
+/// rather than assuming the bar sits flush with the screen bottom.
 Widget _host({
   required SubtitleLift? lift,
   Animation<double>? chrome,

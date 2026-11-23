@@ -39,11 +39,11 @@ class VolumeSurface extends StatefulWidget {
   /// wrong on two counts: `VolumeSurface`'s own 112px need (40 mute button +
   /// 72 slider) was never the binding constraint at that width (
   /// `SecondaryCluster`'s 120px floor was, and stayed broken regardless of
-  /// this value — see `chrome_panel_overflow_test.dart`), and once the panel
-  /// width/padding levers actually closed 600px (`PanelMetrics.forWidth`'s
-  /// tablet-branch factor and `horizontalPadding`), 72 fits there too
-  /// (`40 + 72 == 112 <= 122`). Restored to the original 72; trimming it
-  /// bought nothing but ~33% less slider travel.
+  /// this value), and once the old floating panel's width and padding levers
+  /// closed 600px, 72 fit there too (`40 + 72 == 112 <= 122`). The
+  /// full-width `ChromeBottomBar` has more room still
+  /// (`chrome_bottom_bar_overflow_test.dart`). Restored to the original 72;
+  /// trimming it bought nothing but ~33% less slider travel.
   static const double sliderWidth = 72.0;
 
   /// The slider's width. The Liquid Glass knob pads the track by half its
@@ -212,7 +212,7 @@ class SecondaryCluster extends StatelessWidget {
 
   /// Fit/Fill toggle. Wired only on the remote tier, where it takes the slot
   /// the fullscreen button leaves empty, so the cluster stays within the
-  /// four-button budget `PanelMetrics.showQuality` documents (a fifth button
+  /// four-button budget `ChromeMetrics.showQuality` documents (a fifth button
   /// overflows the tablet and mobile tiers). Pointer and touch tiers get it
   /// in `ChromeTopBar` instead. When null it is omitted.
   final VoidCallback? onScalingTap;
@@ -258,7 +258,7 @@ class SecondaryCluster extends StatelessWidget {
 
   /// Horizontal gap between this cluster's buttons.
   ///
-  /// Tier-dependent, supplied by the caller from `PanelMetrics`: 8 on
+  /// Tier-dependent, supplied by the caller from `ChromeMetrics`: 8 on
   /// desktop, 6 on tablet, 0 on mobile. This used to be a hard `0.0`
   /// constant, which was the narrowest the cluster could go and was needed
   /// to squeeze a 4th 40px button into the desktop tier at all. Compacting
@@ -403,8 +403,7 @@ class SecondaryCluster extends StatelessWidget {
               // `tester.getRect` (which derives a rect from two
               // independently-transformed corner points) would degenerate for a
               // -45° rotation of a square, since both corners land on the same
-              // line. See chrome_panel_overflow_test.dart's five-button
-              // width-budget checks, which measure this key's rect and require
+              // line. Tests that measure this key's rect rely on it staying
               // >=32 in both dimensions regardless of pinned state.
               angle: isAlwaysOnTop ? 0 : -math.pi / 4,
               child: ControlButton(

@@ -1,4 +1,8 @@
 import 'package:material_ui/material_ui.dart';
+
+import 'dart:ui' show SemanticsAction;
+
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/player/video_scaling.dart';
@@ -143,8 +147,7 @@ void main() {
       expect(titleRect.right, lessThanOrEqualTo(rowWidth + 0.5));
     });
 
-    testWidgets('the title pill is centered on the row when a cast action is '
-        'present (symmetric flanks)', (tester) async {
+    testWidgets('title starts right after back', (tester) async {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
@@ -155,24 +158,191 @@ void main() {
         ),
       );
 
-      final rowRect = tester.getRect(find.byType(ChromeTopBar));
-      final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-      expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
+      final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
+      final title = tester.getRect(find.byKey(ChromeTopBar.titleKey));
+      expect(title.left - back.right, 12);
     });
 
-    testWidgets(
-      'the title pill stays centered on the row even when there is no '
-      'cast action (asymmetric content, symmetric flex allocation)',
-      (tester) async {
+    testWidgets('title starts at the left edge on TV', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChromeTopBar(showBack: false, onBack: () {}, title: 'Harbor Lights'),
+        ),
+      );
+
+      expect(find.byKey(ChromeTopBar.backKey), findsNothing);
+      final bar = tester.getRect(find.byType(ChromeTopBar));
+      final title = tester.getRect(find.byKey(ChromeTopBar.titleKey));
+      expect(title.left, bar.left);
+    });
+
+    testWidgets('cast and scaling share one pill', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChromeTopBar(
+            onScalingTap: () {},
+            castAction: const Icon(Icons.cast_rounded),
+            onCastTap: () {},
+          ),
+        ),
+      );
+
+      for (final key in [ChromeTopBar.scalingKey, ChromeTopBar.castKey]) {
+        expect(
+          find.descendant(
+            of: find.byKey(ChromeTopBar.actionsPillKey),
+            matching: find.byKey(key),
+          ),
+          findsOneWidget,
+        );
+      }
+      expect(
+        tester.getSize(find.byKey(ChromeTopBar.actionsPillKey)).height,
+        GlassPill.defaultHeight,
+      );
+    });
+
+    testWidgets('the actions pill is omitted with neither action', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const ChromeTopBar(title: 'Silo')));
+      expect(find.byKey(ChromeTopBar.actionsPillKey), findsNothing);
+    });
+
+    testWidgets('back is an icon with a Back tooltip, no visible label', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(ChromeTopBar(onBack: () {})));
+
+      expect(find.text('Back'), findsNothing);
+      // byTooltip goes through semantics, which the tooltip is excluded
+      // from (the Semantics wrapper carries the label), so match the widget.
+      expect(
+        find.byWidgetPredicate((w) => w is Tooltip && w.message == 'Back'),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(ChromeTopBar.backKey),
+          matching: find.byIcon(Icons.chevron_left_rounded),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('back exposes a labelled tap action to semantics', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      try {
+        var backed = false;
         await tester.pumpWidget(
-          _host(ChromeTopBar(onBack: () {}, title: 'Silo')),
+          _host(ChromeTopBar(onBack: () => backed = true)),
         );
 
-        final rowRect = tester.getRect(find.byType(ChromeTopBar));
-        final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-        expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
-      },
-    );
+        final node = tester.getSemantics(find.byKey(ChromeTopBar.backKey));
+        expect(node.label, 'Back');
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+        // The tooltip is excluded from semantics, so Back is announced once.
+        expect(find.semantics.byLabel('Back'), findsOne);
+        tester.semantics.tap(find.semantics.byLabel('Back'));
+        await tester.pump();
+        expect(backed, isTrue);
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('a short title sits next to Back in RTL', (tester) async {
+      tester.view.physicalSize = const Size(800, 200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _host(
+          Directionality(
+            textDirection: TextDirection.rtl,
+            child: ChromeTopBar(
+              title: 'Ash Harbour',
+              onBack: () {},
+              onScalingTap: () {},
+            ),
+          ),
+        ),
+      );
+
+      final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
+      final actions = tester.getRect(find.byKey(ChromeTopBar.actionsPillKey));
+      // Back leads on the right in RTL, the actions pill on the left.
+      expect(back.left, greaterThan(actions.right));
+
+      // Measure the glyphs, not the Expanded box that spans the whole gap.
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.byKey(ChromeTopBar.titleKey),
+      );
+      final box = paragraph.localToGlobal(Offset.zero) & paragraph.size;
+      final lineWidth = paragraph.getMaxIntrinsicWidth(double.infinity);
+      expect(lineWidth, lessThan(box.width / 2));
+      final glyphs = paragraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 'Ash Harbour'.length),
+      );
+      final glyphRight = glyphs
+          .map((b) => b.right)
+          .reduce((a, b) => a > b ? a : b);
+      // Start-aligned in RTL: the text hugs the right edge, next to Back.
+      expect(box.left + glyphRight, closeTo(box.right, 1.0));
+    });
+
+    testWidgets('long title ellipsizes at 320 px with cast and scaling', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      var backed = false;
+      await tester.pumpWidget(
+        _host(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ChromeTopBar(
+              title: 'An extremely long episode title ' * 6,
+              onBack: () => backed = true,
+              onScalingTap: () {},
+              castAction: const Icon(Icons.cast_rounded),
+              onCastTap: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      final text = tester.widget<Text>(find.textContaining('extremely'));
+      expect(text.overflow, TextOverflow.ellipsis);
+      await tester.tap(find.byKey(ChromeTopBar.backKey));
+      expect(backed, isTrue);
+    });
+
+    testWidgets('top bar contains no BackdropFilter', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChromeTopBar(
+            title: 'Silo',
+            onBack: () {},
+            onScalingTap: () {},
+            castAction: const Icon(Icons.cast_rounded),
+          ),
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(ChromeTopBar),
+          matching: find.byType(BackdropFilter),
+        ),
+        findsNothing,
+      );
+    });
 
     testWidgets('stays sane with no title, no onBack, no castAction', (
       tester,
@@ -189,8 +359,7 @@ void main() {
       );
     });
 
-    testWidgets('all three pills are the same height even though their content '
-        'differs (icon+label, text, icon-only)', (tester) async {
+    testWidgets('back, actions pill and cast are all 36 tall', (tester) async {
       await tester.pumpWidget(
         _host(
           ChromeTopBar(
@@ -201,42 +370,19 @@ void main() {
         ),
       );
 
-      final backHeight = tester
-          .getSize(find.byKey(ChromeTopBar.backKey))
-          .height;
-      final titleHeight = tester
-          .getSize(find.byKey(ChromeTopBar.titleKey))
-          .height;
-      final castHeight = tester
-          .getSize(find.byKey(ChromeTopBar.castKey))
-          .height;
-
-      expect(backHeight, GlassPill.defaultHeight);
-      expect(titleHeight, GlassPill.defaultHeight);
-      expect(castHeight, GlassPill.defaultHeight);
+      expect(
+        tester.getSize(find.byKey(ChromeTopBar.backKey)).height,
+        GlassPill.defaultHeight,
+      );
+      expect(
+        tester.getSize(find.byKey(ChromeTopBar.actionsPillKey)).height,
+        GlassPill.defaultHeight,
+      );
+      expect(
+        tester.getSize(find.byKey(ChromeTopBar.castKey)).height,
+        GlassPill.defaultHeight,
+      );
     });
-
-    testWidgets(
-      'showBack: false omits the back pill entirely and keeps the title '
-      'centered',
-      (tester) async {
-        await tester.pumpWidget(
-          _host(
-            ChromeTopBar(
-              showBack: false,
-              onBack: () {},
-              title: 'Harbor Lights',
-            ),
-          ),
-        );
-
-        expect(find.byKey(ChromeTopBar.backKey), findsNothing);
-
-        final rowRect = tester.getRect(find.byType(ChromeTopBar));
-        final titleRect = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-        expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
-      },
-    );
 
     for (final width in const [320.0, 360.0]) {
       testWidgets('title, back, scaling and cast all fit at ${width}px', (
@@ -274,30 +420,6 @@ void main() {
         }
       });
     }
-
-    testWidgets('a long title can grow past a third of a wide bar', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1200, 640);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(
-        _host(
-          ChromeTopBar(
-            title: 'An extremely long episode title ' * 6,
-            onBack: () {},
-            onScalingTap: () {},
-            castAction: const Icon(Icons.cast_rounded),
-            onCastTap: () {},
-          ),
-        ),
-      );
-
-      final bar = tester.getSize(find.byType(ChromeTopBar)).width;
-      final title = tester.getSize(find.byKey(ChromeTopBar.titleKey)).width;
-      expect(title, greaterThan(bar / 3));
-    });
 
     testWidgets('omits the scaling pill when no handler is wired', (
       tester,

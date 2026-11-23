@@ -502,12 +502,12 @@ void main() {
       );
 
       // 32, not the previous 40: the whole control row was compacted so four
-      // discrete buttons fit down to 360px. See `chrome_panel.dart`'s
-      // PanelMetrics dartdocs for the per-width budget.
+      // discrete buttons fit down to 360px. See
+      // `chrome_bottom_bar_overflow_test.dart` for the per-width budget.
       //
       // Not strict `lessThan`: `SecondaryCluster.gap` defaults to 0 to
-      // help close a real `ChromePanel` overflow (see the field's own
-      // dartdoc and `chrome_panel_overflow_test.dart`), so adjacent buttons
+      // keep the mobile tier inside its budget (see the field's own
+      // dartdoc), so adjacent buttons
       // may legitimately share an edge rather than have a visible gap.
       expect(subtitlesRect.right, lessThanOrEqualTo(audioRect.left));
       expect(audioRect.right, lessThanOrEqualTo(qualityRect.left));
@@ -525,7 +525,7 @@ void main() {
       //
       // `gap` is `SecondaryCluster`'s own default (0.0), not a static
       // constant: the field became instance-level and tier-dependent in
-      // this same change, supplied by `PanelMetrics.secondaryGap` in real
+      // this same change, supplied by `ChromeMetrics.secondaryGap` in real
       // usage. This widget doesn't pass one, so it renders at the default.
       const gap = 0.0;
       expect(

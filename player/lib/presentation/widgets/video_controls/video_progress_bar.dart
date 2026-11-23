@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/palette.dart';
 
 /// The scrubber's painting and gesture surface, free of any [Player]
 /// dependency so it can be widget-tested directly.
@@ -83,7 +84,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
   /// Hover, a drag, or keyboard focus: any of them draws the bar larger.
   bool get _emphasized => _active || widget.focused;
 
-  double get _trackHeight => _emphasized ? 8.0 : 6.0;
+  double get _trackHeight => _emphasized ? 8.0 : 4.0;
 
   double get _thumbSize => _emphasized
       ? VideoProgressBar.activeThumbSize
@@ -164,7 +165,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                   curve: DepthTokens.curveStandard,
                   height: _trackHeight,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
+                    color: Colors.white.withValues(alpha: 0.22),
                     borderRadius: BorderRadius.circular(_trackHeight / 2),
                   ),
                 ),
@@ -188,7 +189,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                   curve: DepthTokens.curveStandard,
                   height: _trackHeight,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.40),
+                    color: Colors.white.withValues(alpha: 0.42),
                     borderRadius: BorderRadius.circular(_trackHeight / 2),
                   ),
                 ),
@@ -204,7 +205,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                   curve: DepthTokens.curveStandard,
                   height: _trackHeight,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.palette.primary,
                     borderRadius: BorderRadius.circular(_trackHeight / 2),
                   ),
                 ),
@@ -349,10 +350,10 @@ class VideoProgressBar extends StatelessWidget {
   });
 
   /// Thumb diameter at rest.
-  static const double restingThumbSize = 12.0;
+  static const double restingThumbSize = 14.0;
 
   /// Thumb diameter while hovered or scrubbing.
-  static const double activeThumbSize = 16.0;
+  static const double activeThumbSize = 18.0;
 
   /// Diameter of the D-pad scrub cursor.
   static const double scrubCursorSize = 20.0;

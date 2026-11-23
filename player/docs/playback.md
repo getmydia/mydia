@@ -371,7 +371,7 @@ requests that reach the wire.
 A device-level flag (`stats_overlay_enabled`, exposed as
 `statsOverlayEnabledProvider`) draws `StatsPanel` over the video. There is no
 chrome button for it: `SecondaryCluster` already runs at a measured overflow
-floor (`chrome_panel_overflow_test.dart`), so the two entry points are the
+floor (`chrome_bottom_bar_overflow_test.dart`), so the two entry points are the
 settings row and a row `showQualityPicker` adds at the foot of the quality
 sheet, since that is where a viewer already stands when wondering why the
 picture looks soft.

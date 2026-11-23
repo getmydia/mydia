@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/domain/models/media_segment.dart';
-import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/skip_segment_button.dart';
 
 void main() {
@@ -345,7 +345,7 @@ void main() {
       segment: segment,
       position: position,
       onSkip: onSkip ?? (_) {},
-      metrics: PanelMetrics.forWidth(1280),
+      metrics: ChromeMetrics.forWidth(1280),
     );
 
     testWidgets('shows the intro label while inside the segment', (
@@ -463,6 +463,47 @@ void main() {
       expect(skipped, isNotNull);
       expect(skipped!.endMs, 90000);
       expect(skipped!.end, const Duration(milliseconds: 90000));
+    });
+
+    // The bar sits inside a SafeArea, so on a phone with a home indicator
+    // it floats above the inset. The pill has to add the same inset back or
+    // it lands on the bar.
+    testWidgets('clears the bar above a 34 px bottom safe-area inset', (
+      tester,
+    ) async {
+      const size = Size(844, 390);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(bottom: 34, right: 47);
+      addTearDown(tester.view.reset);
+      final metrics = ChromeMetrics.resolve(
+        width: size.width,
+        touchPrimary: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Stack(
+            children: [
+              Positioned.fill(
+                child: SkipSegmentButton(
+                  segment: intro,
+                  position: const Duration(seconds: 45),
+                  onSkip: (_) {},
+                  metrics: metrics,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final pill = tester.getRect(find.byKey(SkipSegmentButton.buttonKey));
+      final barTop = size.height - 34 - metrics.barHeight;
+      expect(pill.bottom, closeTo(barTop - ChromeMetrics.cornerGap, 0.5));
+      expect(pill.right, closeTo(size.width - 47 - 24, 0.5));
     });
 
     // Manual skipping stays available for a segment auto-skip already spent:

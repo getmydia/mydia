@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/video_controls/video_progress_bar.dart';
 
 Widget _host(Widget child) => MaterialApp(
@@ -11,6 +12,77 @@ Widget _host(Widget child) => MaterialApp(
 
 void main() {
   group('ProgressBarSurface', () {
+    Color fillColor(WidgetTester tester, Key key) {
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byKey(key),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
+      return (box.decoration as BoxDecoration).color!;
+    }
+
+    testWidgets('played fill uses the palette primary', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+      expect(
+        fillColor(tester, ProgressBarSurface.playedKey),
+        Palettes.projectionBooth.primary,
+      );
+    });
+
+    testWidgets('buffered layer is white at 0.42', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+      expect(
+        fillColor(tester, ProgressBarSurface.bufferedKey),
+        Colors.white.withValues(alpha: 0.42),
+      );
+    });
+
+    testWidgets('base track rests 4 px tall in white at 0.22', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ProgressBarSurface(progress: 0.4, buffered: 0.6, onSeekTo: (_) {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
+        4.0,
+      );
+      final track = tester.widget<AnimatedContainer>(
+        find.byKey(ProgressBarSurface.trackKey),
+      );
+      expect(
+        (track.decoration! as BoxDecoration).color,
+        Colors.white.withValues(alpha: 0.22),
+      );
+    });
+
+    testWidgets('thumb is 14 at rest and 18 when focused', (tester) async {
+      await tester.pumpWidget(
+        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
+      );
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
+        14.0,
+      );
+      await tester.pumpWidget(
+        _host(
+          const ProgressBarSurface(progress: 0.4, buffered: 0.6, focused: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
+        18.0,
+      );
+    });
+
     testWidgets('renders a thumb at rest — the defect this fixes', (
       tester,
     ) async {
@@ -38,7 +110,7 @@ void main() {
       final restingTrack = tester.getSize(
         find.byKey(ProgressBarSurface.trackKey),
       );
-      expect(restingTrack.height, 6.0);
+      expect(restingTrack.height, 4.0);
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: Offset.zero);
@@ -228,7 +300,7 @@ void main() {
         );
         expect(
           tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
-          6.0,
+          4.0,
         );
       },
     );

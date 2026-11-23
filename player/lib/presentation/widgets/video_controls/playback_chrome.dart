@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -19,13 +21,14 @@ import '../../../core/theme/depth_tokens.dart';
 import '../toast/toast_obstruction.dart';
 import '../window_chrome/window_title_row.dart';
 import 'buffering_indicator.dart';
-import 'center_play_button.dart';
-import 'chrome_panel.dart';
+import 'chrome_bottom_bar.dart';
+import 'chrome_scrim.dart';
 import 'chrome_subtitle_lift.dart';
 import 'chrome_top_bar.dart';
 import 'panel_controls.dart';
 import 'playback_surface.dart';
 import 'scrub_bubble.dart';
+import 'touch_transport.dart';
 import 'transport_cluster.dart';
 import 'tv_scrubber.dart';
 import 'video_progress_bar.dart';
@@ -65,16 +68,42 @@ class ChromeVisibilityController extends ChangeNotifier {
   /// and on a remote there is no other way out of it.
   bool get blocksBack => attached && visible;
 
+  final ValueNotifier<bool> _fadedOut = ValueNotifier(false);
+
+  /// Whether the hide fade has finished, so nothing of the chrome is left on
+  /// screen.
+  ///
+  /// [visible] flips the moment a hide starts, while the chrome is still
+  /// fading. Anything that takes over from the chrome and must never share
+  /// the screen with its fading copy (the touch tier's buffering spinner)
+  /// waits for this instead. A separate listenable so the extra transitions do not
+  /// wake [visible]'s listeners. False while detached.
+  ValueListenable<bool> get fadedOut => _fadedOut;
+
   void show() => _state?._show();
 
   void hide() => _state?._hide();
 
   void toggle() => _state?._toggle();
 
-  void _attach(_ChromeVisibilityState state) => _state = state;
+  /// A chrome mounts shown, so attaching also clears [fadedOut], which a
+  /// previous chrome may have left set on a controller that outlived it.
+  void _attach(_ChromeVisibilityState state) {
+    _state = state;
+    _fadedOut.value = false;
+  }
 
   void _detach(_ChromeVisibilityState state) {
-    if (identical(_state, state)) _state = null;
+    if (identical(_state, state)) {
+      _state = null;
+      _fadedOut.value = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _fadedOut.dispose();
+    super.dispose();
   }
 
   /// Called by the state on every real transition. Private because only the
@@ -259,6 +288,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
       curve: DepthTokens.curveStandard,
       reverseCurve: DepthTokens.curveEmphasized,
     );
+    _controller.addStatusListener(_onFadeStatus);
     _restartTimer();
     // `_visible` starts true and `_show()` only calls the bridge on a
     // false -> true transition, so a freshly-mounted ChromeVisibility would
@@ -277,6 +307,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     if (old.controller != widget.controller) {
       old.controller?._detach(this);
       widget.controller?._attach(this);
+      _onFadeStatus(_controller.status);
     }
     if (old.restartOnKeyActivity != widget.restartOnKeyActivity) {
       if (widget.restartOnKeyActivity) {
@@ -318,6 +349,10 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     _curved.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onFadeStatus(AnimationStatus status) {
+    widget.controller?._fadedOut.value = status == AnimationStatus.dismissed;
   }
 
   bool get _mayHide =>
@@ -525,13 +560,13 @@ class ChromeSlide extends StatelessWidget {
   }
 }
 
-/// Keeps toasts above the control panel while it is shown.
+/// Keeps toasts above the bottom bar while it is shown.
 ///
 /// The chrome hides by fading and sliding behind an `IgnorePointer` while
 /// staying mounted with its tickers running, so `ToastObstruction`'s
 /// `TickerMode` check cannot see it go. This follows the same show/hide
 /// animation [ChromeSlide] reads and withdraws the claim the moment a hide
-/// starts, so the toast moves alongside the panel rather than after it.
+/// starts, so the toast moves alongside the bar rather than after it.
 /// With no [ChromeAnimation] above it, it always counts.
 class ChromeToastObstruction extends StatefulWidget {
   const ChromeToastObstruction({super.key, required this.child});
@@ -585,7 +620,7 @@ class _ChromeToastObstructionState extends State<ChromeToastObstruction> {
 /// on a windowed desktop this slot has to reach past where that `SafeArea`
 /// would otherwise clear space, and mounting it as a sibling means it can be
 /// placed independently without changing what the rest of the chrome (the
-/// centre play button, the bottom panel, `_withCastAffordance`'s spinner or
+/// touch centre transport, the bottom bar, `_withCastAffordance`'s spinner or
 /// error body) gets from its own, unmodified `SafeArea`. `@visibleForTesting`
 /// because the `_withCastAffordance` use lives in another file's production
 /// code, not a test, but this is still the shared seam the layout contract
@@ -596,10 +631,23 @@ class PlayerTopBarSlot extends StatelessWidget {
 
   final Widget child;
 
+  /// Distance from the top of the chrome to the slot's top edge.
+  static double _top(BuildContext context, WindowChromeInsets insets) =>
+      insets.isZero
+      ? MediaQuery.paddingOf(context).top + 16
+      : (insets.height - GlassPill.defaultHeight) / 2;
+
+  /// Distance from the top of the chrome to the top bar's bottom edge, as
+  /// this slot places a [GlassPill.defaultHeight]-tall bar. The top band of
+  /// the chrome scrim is solid down to here.
+  static double bottomEdgeOf(BuildContext context) =>
+      _top(context, WindowChromeInsets.of(context)) + GlassPill.defaultHeight;
+
   @override
   Widget build(BuildContext context) {
     final insets = WindowChromeInsets.of(context);
     final gutter = WindowTitleRow.endGutter(context);
+    final top = _top(context, insets);
     if (insets.isZero) {
       // No window chrome to clear (mobile, web, TV, fullscreen): the same
       // fixed 16px inset the old top bar had inside a `SafeArea`. This slot
@@ -611,7 +659,7 @@ class PlayerTopBarSlot extends StatelessWidget {
       final padding = MediaQuery.paddingOf(context);
       final ltr = Directionality.of(context) == TextDirection.ltr;
       return PositionedDirectional(
-        top: padding.top + 16,
+        top: top,
         start: (ltr ? padding.left : padding.right) + 16,
         end: (ltr ? padding.right : padding.left) + 16,
         child: child,
@@ -621,7 +669,7 @@ class PlayerTopBarSlot extends StatelessWidget {
     // it (so a 36px `GlassPill` lands level with the traffic lights /
     // window buttons), clear of whichever corner the controls occupy.
     return PositionedDirectional(
-      top: (insets.height - GlassPill.defaultHeight) / 2,
+      top: top,
       start: insets.leading + gutter,
       end: insets.trailing + gutter,
       child: child,
@@ -629,7 +677,8 @@ class PlayerTopBarSlot extends StatelessWidget {
   }
 }
 
-/// All playback chrome: the top pill row and the bottom control panel.
+/// All playback chrome: the top pill row, the full-width bottom bar, the
+/// scrim behind both and, on touch, the centre transport.
 ///
 /// Replaces four independently-positioned floating elements — the top bar and
 /// episode-navigation buttons in `player_screen.dart`, plus the floating
@@ -717,11 +766,11 @@ class PlaybackChrome extends StatefulWidget {
   /// player can reach (always, over p2p).
   final ScrubThumbnails? scrubThumbnails;
 
-  /// Where the chrome sends the subtitle lift while its panel shows. Null
-  /// leaves subtitles where media_kit puts them, which is under the panel.
+  /// Where the chrome sends the subtitle lift while its bottom bar shows.
+  /// Null leaves subtitles where media_kit puts them, which is under the bar.
   final SubtitleLift? subtitleLift;
 
-  /// Keys for the timecodes flanking the scrubber.
+  /// Keys for the timecodes above the scrubber.
   static const Key elapsedKey = Key('osd-elapsed');
   static const Key remainingKey = Key('osd-remaining');
 
@@ -729,11 +778,7 @@ class PlaybackChrome extends StatefulWidget {
   /// except the top bar, which `PlayerTopBarSlot` places in its own sibling
   /// layer instead (see that class's dartdoc). Exposed so a test can measure
   /// this layer's box directly and confirm it still gets the same insets it
-  /// always had, without needing `InputCapabilities.touchPrimary` true (which
-  /// reads the real host platform via `dart:io`'s `Platform.isAndroid` /
-  /// `.isIOS` and so cannot be forced on in `flutter test`, unlike
-  /// `defaultTargetPlatform`) just to reach the centre play button that
-  /// would otherwise be the obvious thing to measure.
+  /// always had, on any input tier.
   static const Key safeContentKey = Key('playback-chrome-safe-content');
 
   /// Timecode size on the remote tier. 12 logical px through `TvCanvas`'s
@@ -798,6 +843,14 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
     requestFocusCallback: FocusMemory.requestFocus,
   );
 
+  /// Stands in for [PlaybackChrome.chromeVisibility] when the owner passes
+  /// none, so the touch tier can still tell whether the chrome is up.
+  ChromeVisibilityController? _ownVisibility;
+
+  ChromeVisibilityController get _visibility =>
+      widget.chromeVisibility ??
+      (_ownVisibility ??= ChromeVisibilityController());
+
   @override
   void initState() {
     super.initState();
@@ -818,6 +871,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
   @override
   void dispose() {
     widget.scrub?.removeListener(_onScrubChanged);
+    _ownVisibility?.dispose();
     super.dispose();
   }
 
@@ -846,9 +900,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
 
   @override
   Widget build(BuildContext context) {
-    final metrics = PanelMetrics.resolve(
+    final touch = InputCapabilities.touchPrimary;
+    final metrics = ChromeMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
-      touchPrimary: InputCapabilities.touchPrimary,
+      touchPrimary: touch,
     );
 
     // A remote has its own BACK key and volume control, a television is a
@@ -866,7 +921,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
           fit: StackFit.expand,
           children: [
             ChromeVisibility(
-              controller: widget.chromeVisibility,
+              controller: _visibility,
               isPlaying: snapshot.data ?? false,
               // A D-pad scrub holds the OSD up for the same reason a drag
               // does: the viewer is looking at the bar.
@@ -896,161 +951,188 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
               // `PlayerTopBarSlot` computes that placement (and the mobile
               // fallback this `SafeArea` used to give it for free) on its
               // own. Everything else here keeps the same all-sides
-              // `SafeArea` it always had, so the centre play button and the
-              // bottom panel are unaffected by the top bar's needs.
+              // `SafeArea` it always had, so the touch transport and the
+              // bottom bar are unaffected by the top bar's needs.
               child: Stack(
                 children: [
+                  // First, so both bars paint over it. Inside
+                  // ChromeVisibility so it fades with the chrome, but not in
+                  // a ChromeSlide: a darkening band that translates would
+                  // uncover a strip of bright video at the screen edge.
+                  // Outside the SafeArea, so the bottom band reaches under
+                  // the home indicator the bar sits above.
+                  ChromeScrim(
+                    topHeight: PlayerTopBarSlot.bottomEdgeOf(context),
+                    bottomHeight:
+                        metrics.barHeight +
+                        MediaQuery.paddingOf(context).bottom,
+                  ),
                   SafeArea(
                     child: Stack(
                       key: PlaybackChrome.safeContentKey,
                       children: [
-                        // Mobile only: a large centre play/pause. Desktop/web use
-                        // the panel's own transport; on touch a one-handed thumb
-                        // reach to a 48px in-bar button is worse than a centre
-                        // target. No skip buttons here, `gesture_controls.dart`
-                        // already does double-tap-left/right for +/-10s.
-                        if (InputCapabilities.touchPrimary)
-                          Center(
-                            child: CenterPlayButton(player: widget.player),
+                        // Touch only: the transport floats as large discs,
+                        // since a one-handed thumb reach to a bar button is
+                        // worse than a centre target. Pointer and remote keep
+                        // it in the bar. Centred in the band between the two
+                        // bars rather than on the screen, so a short
+                        // landscape phone does not tuck it under either one.
+                        if (touch)
+                          Positioned.fill(
+                            child: CustomSingleChildLayout(
+                              delegate: _BandCentreDelegate(
+                                top: math.max(
+                                  0,
+                                  PlayerTopBarSlot.bottomEdgeOf(context) -
+                                      MediaQuery.paddingOf(context).top,
+                                ),
+                                bottom: metrics.barHeight,
+                              ),
+                              child: TouchTransport(
+                                player: widget.player,
+                                playPauseFocusNode: widget.playPauseFocusNode,
+                                onBack10: () =>
+                                    _seekBy(const Duration(seconds: -10)),
+                                onForward10: () =>
+                                    _seekBy(const Duration(seconds: 10)),
+                                onPreviousEpisode: widget.onPreviousEpisode,
+                                onNextEpisode: widget.onNextEpisode,
+                                // A phone keeps the discs to seek and play; a
+                                // touch tablet has room for episode nav too.
+                                showEpisodeNav: !metrics.compactTransport,
+                              ),
+                            ),
                           ),
                         Positioned(
                           left: 0,
                           right: 0,
-                          bottom: metrics.bottomOffset,
+                          bottom: 0,
                           child: ChromeSubtitleLift(
                             lift: widget.subtitleLift,
                             referenceBox: _subtitleReference,
                             child: ChromeSlide(
                               hiddenOffsetY: 8,
-                              child: Center(
-                                child: ChromeToastObstruction(
-                                  // The control bar remembers the control
-                                  // the viewer left it from. UP from the
-                                  // full-width scrubber otherwise lands on
-                                  // whichever button geometry finds nearest
-                                  // the bar's centre. The transport and the
-                                  // track buttons beside it are one region:
-                                  // they are one row on screen, and UP has to
-                                  // be able to return to either. The scrubber
-                                  // is its own region inside this one (see
-                                  // `_ScrubberRow`), so leaving it counts as
-                                  // entering the bar. With nothing
-                                  // remembered (a scrub from the hidden OSD
-                                  // focuses the scrubber without passing
-                                  // through the bar), UP lands on
-                                  // play/pause rather than the lowest index,
-                                  // Previous episode or -10s.
-                                  child: FocusMemoryRegion(
-                                    debugLabel: 'osd-controls',
-                                    initialId: TransportSurface.playPauseKey,
-                                    child: ChromePanel(
-                                      metrics: metrics,
-                                      transport: TransportCluster(
-                                        player: widget.player,
-                                        playPauseFocusNode:
-                                            widget.playPauseFocusNode,
-                                        onBack10: () => _seekBy(
-                                          const Duration(seconds: -10),
-                                        ),
-                                        onForward10: () => _seekBy(
-                                          const Duration(seconds: 10),
-                                        ),
-                                        onPreviousEpisode:
-                                            widget.onPreviousEpisode,
-                                        onNextEpisode: widget.onNextEpisode,
-                                        // Below the mobile breakpoint the in-bar
-                                        // transport is play/pause only (see
-                                        // `TransportSurface.compact`'s dartdoc for the
-                                        // full layout reasoning). `onPreviousEpisode`/
-                                        // `onNextEpisode` above are still passed
-                                        // through unconditionally (`compact` ignores
-                                        // them regardless), rather than gated to null
-                                        // here, so they reappear the moment the
-                                        // breakpoint is crossed without this widget
-                                        // needing to know why.
-                                        //
-                                        // NOTE, this is a real, currently-unresolved
-                                        // gap: unlike ±10s seek (which has an explicit
-                                        // gesture replacement, double-tap in
-                                        // `gesture_controls.dart`), episode nav has no
-                                        // touch-reachable equivalent once it's dropped
-                                        // from the bar. `UpNextOverlay` only offers
-                                        // *next*, and only near an episode's end; there
-                                        // is no touch path to the *previous* episode at
-                                        // all below this breakpoint. See this task's
-                                        // report for the open follow-up; do not read
-                                        // this comment as "handled".
-                                        compact: metrics.compactTransport,
-                                      ),
-                                      // Null on the remote tier, which has no volume
-                                      // control to show. Otherwise unconditional per
-                                      // ChromePanel's `volume` dartdoc: it already gates
-                                      // visibility internally via
-                                      // Visibility(maintainState: true), so
-                                      // VolumeCluster's `_lastVolume` survives a
-                                      // breakpoint crossing only if it isn't also
-                                      // rebuilt from scratch here. The tier itself never
-                                      // changes at runtime, so the null branch loses no
-                                      // state.
-                                      volume: remote
-                                          ? null
-                                          : VolumeCluster(
-                                              player: widget.player,
+                              child: ChromeToastObstruction(
+                                // The control bar remembers the control the
+                                // viewer left it from. UP from the
+                                // full-width scrubber otherwise lands on
+                                // whichever button geometry finds nearest
+                                // the bar's centre. The transport and the
+                                // track buttons beside it are one region:
+                                // they are one row on screen, and UP has to
+                                // be able to return to either. The scrubber
+                                // is its own region inside this one (see
+                                // `_Scrubber`), so leaving it counts as
+                                // entering the bar. With nothing remembered
+                                // (a scrub from the hidden OSD focuses the
+                                // scrubber without passing through the bar),
+                                // UP lands on play/pause rather than the
+                                // lowest index, Previous episode or -10s.
+                                child: FocusMemoryRegion(
+                                  debugLabel: 'osd-controls',
+                                  initialId: TransportSurface.playPauseKey,
+                                  child: ChromeBottomBar(
+                                    metrics: metrics,
+                                    // Master's order on the remote tier, so
+                                    // UP from the scrubber reaches the
+                                    // remembered control above it.
+                                    controlsFirst: remote,
+                                    transport: touch
+                                        ? null
+                                        : TransportCluster(
+                                            player: widget.player,
+                                            playPauseFocusNode:
+                                                widget.playPauseFocusNode,
+                                            onBack10: () => _seekBy(
+                                              const Duration(seconds: -10),
                                             ),
-                                      secondary: SecondaryCluster(
-                                        onSubtitleTap: widget.onSubtitleTap,
-                                        onAudioTap: widget.onAudioTap,
-                                        // Passed through `metrics.showQuality` rather
-                                        // than bare, even though every tier shows it
-                                        // today: see that field's dartdoc; it stays a
-                                        // real per-tier lever for the tier that can't
-                                        // absorb a future 5th control.
-                                        onQualityTap: metrics.showQuality
-                                            ? widget.onQualityTap
-                                            : null,
-                                        onFullscreenTap: remote
-                                            ? null
-                                            : widget.onFullscreenTap,
-                                        onAlwaysOnTopTap:
-                                            PlatformFeatures.isDesktop &&
-                                                metrics.showAlwaysOnTop
-                                            ? widget.onAlwaysOnTopTap
-                                            : null,
-                                        // TV only: the top bar takes no focus
-                                        // there, and remote never shows
-                                        // fullscreen, so scaling takes its slot.
-                                        onScalingTap: remote
-                                            ? widget.onScalingTap
-                                            : null,
-                                        scaling: widget.scaling,
-                                        audioTrackCount: widget.audioTrackCount,
-                                        selectedAudioLabel:
-                                            widget.selectedAudioLabel,
-                                        selectedSubtitleLabel:
-                                            widget.selectedSubtitleLabel,
-                                        selectedQualityLabel:
-                                            widget.selectedQualityLabel,
-                                        isFullscreen: widget.isFullscreen,
-                                        isAlwaysOnTop: widget.isAlwaysOnTop,
-                                        gap: metrics.secondaryGap,
-                                      ),
-                                      scrubber: _ScrubberRow(
-                                        player: widget.player,
-                                        timeline: widget.timeline,
-                                        onSeekToReal: widget.onSeekToReal,
-                                        touchTargets: metrics.touchTargets,
-                                        onSeekStart: () =>
-                                            setState(() => _seeking = true),
-                                        onSeekEnd: () =>
-                                            setState(() => _seeking = false),
-                                        remote: remote,
-                                        scrub: widget.scrub,
-                                        scrubberFocusNode:
-                                            widget.scrubberFocusNode,
-                                        thumbnails: widget.scrubThumbnails,
-                                        onPlayPause: () =>
-                                            widget.player.playOrPause(),
-                                      ),
+                                            onForward10: () => _seekBy(
+                                              const Duration(seconds: 10),
+                                            ),
+                                            onPreviousEpisode:
+                                                widget.onPreviousEpisode,
+                                            onNextEpisode: widget.onNextEpisode,
+                                            // Below the mobile breakpoint the
+                                            // in-bar transport is play/pause
+                                            // only (see
+                                            // `TransportSurface.compact`).
+                                            // The episode callbacks are still
+                                            // passed through unconditionally
+                                            // (`compact` ignores them), so
+                                            // they reappear the moment the
+                                            // breakpoint is crossed.
+                                            compact: metrics.compactTransport,
+                                          ),
+                                    // Null on the remote tier, which has no
+                                    // volume control to show. Otherwise
+                                    // unconditional per ChromeBottomBar's
+                                    // `volume` dartdoc: it gates visibility
+                                    // itself with Visibility(maintainState:
+                                    // true), so VolumeCluster's `_lastVolume`
+                                    // survives a breakpoint crossing. The tier
+                                    // never changes at runtime, so the null
+                                    // branch loses no state.
+                                    volume: remote
+                                        ? null
+                                        : VolumeCluster(player: widget.player),
+                                    secondary: SecondaryCluster(
+                                      onSubtitleTap: widget.onSubtitleTap,
+                                      onAudioTap: widget.onAudioTap,
+                                      // Passed through `metrics.showQuality`
+                                      // rather than bare, even though every
+                                      // tier shows it today: it stays a real
+                                      // per-tier lever for a tier that cannot
+                                      // absorb a future fifth control.
+                                      onQualityTap: metrics.showQuality
+                                          ? widget.onQualityTap
+                                          : null,
+                                      onFullscreenTap: remote
+                                          ? null
+                                          : widget.onFullscreenTap,
+                                      onAlwaysOnTopTap:
+                                          PlatformFeatures.isDesktop &&
+                                              metrics.showAlwaysOnTop
+                                          ? widget.onAlwaysOnTopTap
+                                          : null,
+                                      // TV only: the top bar takes no focus
+                                      // there, and remote never shows
+                                      // fullscreen, so scaling takes its slot.
+                                      onScalingTap: remote
+                                          ? widget.onScalingTap
+                                          : null,
+                                      scaling: widget.scaling,
+                                      audioTrackCount: widget.audioTrackCount,
+                                      selectedAudioLabel:
+                                          widget.selectedAudioLabel,
+                                      selectedSubtitleLabel:
+                                          widget.selectedSubtitleLabel,
+                                      selectedQualityLabel:
+                                          widget.selectedQualityLabel,
+                                      isFullscreen: widget.isFullscreen,
+                                      isAlwaysOnTop: widget.isAlwaysOnTop,
+                                      gap: metrics.secondaryGap,
+                                    ),
+                                    timecodes: _Timecodes(
+                                      player: widget.player,
+                                      timeline: widget.timeline,
+                                      remote: remote,
+                                    ),
+                                    scrubber: _Scrubber(
+                                      player: widget.player,
+                                      timeline: widget.timeline,
+                                      onSeekToReal: widget.onSeekToReal,
+                                      touchTargets: metrics.touchTargets,
+                                      onSeekStart: () =>
+                                          setState(() => _seeking = true),
+                                      onSeekEnd: () =>
+                                          setState(() => _seeking = false),
+                                      remote: remote,
+                                      scrub: widget.scrub,
+                                      scrubberFocusNode:
+                                          widget.scrubberFocusNode,
+                                      thumbnails: widget.scrubThumbnails,
+                                      onPlayPause: () =>
+                                          widget.player.playOrPause(),
                                     ),
                                   ),
                                 ),
@@ -1091,7 +1173,23 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
             // which is exactly where people tap. `BufferingIndicator`
             // already centres itself and collapses to `SizedBox.shrink()`
             // when not buffering, so no extra `Center` is needed here.
-            IgnorePointer(child: BufferingIndicator(player: widget.player)),
+            //
+            // On touch, while the chrome is up, the play disc shows its own
+            // dark spinner instead: this white one would land on that
+            // near-white disc and vanish. This one takes over only once the
+            // hide fade has finished, not when it starts, so the fading
+            // disc's spinner is never joined by a second one.
+            if (touch)
+              ValueListenableBuilder<bool>(
+                valueListenable: _visibility.fadedOut,
+                builder: (context, fadedOut, _) => fadedOut
+                    ? IgnorePointer(
+                        child: BufferingIndicator(player: widget.player),
+                      )
+                    : const SizedBox.shrink(),
+              )
+            else
+              IgnorePointer(child: BufferingIndicator(player: widget.player)),
           ],
         );
         // Wraps the entire OSD so its owner can ask whether focus is anywhere
@@ -1110,12 +1208,113 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
   }
 }
 
-/// Row 2 of the panel: elapsed, scrubber, remaining.
-///
-/// Timecodes flank the scrubber they describe. Previously they sat at opposite
-/// ends of a full-width bar, up to ~1450px apart from each other and from the
-/// track.
-class _ScrubberRow extends StatelessWidget {
+/// Centres its child vertically in the band [top] logical pixels below the
+/// layout's top edge and [bottom] above its bottom edge, and horizontally in
+/// the whole width. The child keeps its own size; if the band is shorter than
+/// the child it still centres on the band.
+class _BandCentreDelegate extends SingleChildLayoutDelegate {
+  const _BandCentreDelegate({required this.top, required this.bottom});
+
+  final double top;
+  final double bottom;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final bandCentre = (top + (size.height - bottom)) / 2;
+    return Offset(
+      (size.width - childSize.width) / 2,
+      bandCentre - childSize.height / 2,
+    );
+  }
+
+  @override
+  bool shouldRelayout(_BandCentreDelegate old) =>
+      old.top != top || old.bottom != bottom;
+}
+
+/// The timecode row above the scrubber: elapsed on the left, remaining on
+/// the right.
+class _Timecodes extends StatelessWidget {
+  final Player player;
+  final StreamTimeline timeline;
+
+  /// Whether this is the remote tier, which draws larger timecodes.
+  final bool remote;
+
+  const _Timecodes({
+    required this.player,
+    required this.timeline,
+    required this.remote,
+  });
+
+  /// Both timecodes share this style, deliberately identical. An earlier
+  /// version styled elapsed at full white and remaining dimmer; that
+  /// asymmetry measured as the single worst-case contrast on the whole OSD
+  /// (2.32:1) in an accessibility audit.
+  ///
+  /// No text shadow: the scrim's plateau is the OSD fill, which holds white
+  /// text at ~13:1 over a pure-white frame (`osd_legibility_test.dart`).
+  static const TextStyle _timeStyle = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    color: Colors.white,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// [_timeStyle] at television size. Same colour, so the contrast
+  /// reasoning above still holds.
+  static final TextStyle _remoteTimeStyle = _timeStyle.copyWith(
+    fontSize: PlaybackChrome.remoteTimeFontSize,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<Duration>(
+      stream: player.stream.position,
+      initialData: player.state.position,
+      builder: (context, positionSnapshot) {
+        return StreamBuilder<Duration>(
+          stream: player.stream.duration,
+          initialData: player.state.duration,
+          builder: (context, durationSnapshot) {
+            final position = timeline.toReal(
+              positionSnapshot.data ?? Duration.zero,
+            );
+            final duration = timeline.resolveDuration(
+              durationSnapshot.data ?? Duration.zero,
+            );
+            final remaining = duration - position;
+            final style = remote ? _remoteTimeStyle : _timeStyle;
+
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  formatPlaybackTime(position),
+                  key: PlaybackChrome.elapsedKey,
+                  style: style,
+                ),
+                Text(
+                  '-${formatPlaybackTime(remaining.isNegative ? Duration.zero : remaining)}',
+                  key: PlaybackChrome.remainingKey,
+                  style: style,
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// The scrubber row of the bottom bar: the pointer scrubber, or on the remote
+/// tier the focusable [TvScrubber] in its own focus-memory region.
+class _Scrubber extends StatelessWidget {
   final Player player;
   final StreamTimeline timeline;
   final Future<void> Function(Duration realTarget) onSeekToReal;
@@ -1123,15 +1322,15 @@ class _ScrubberRow extends StatelessWidget {
   final VoidCallback onSeekStart;
   final VoidCallback onSeekEnd;
 
-  /// Whether this is the remote tier, which draws larger timecodes and, when
-  /// [scrub] and [scrubberFocusNode] are both given, a focusable scrubber.
+  /// Whether this is the remote tier, which draws a focusable scrubber when
+  /// [scrub] and [scrubberFocusNode] are both given.
   final bool remote;
   final ScrubController? scrub;
   final FocusNode? scrubberFocusNode;
   final ScrubThumbnails? thumbnails;
   final VoidCallback onPlayPause;
 
-  const _ScrubberRow({
+  const _Scrubber({
     required this.player,
     required this.timeline,
     required this.onSeekToReal,
@@ -1144,26 +1343,6 @@ class _ScrubberRow extends StatelessWidget {
     required this.thumbnails,
     required this.onPlayPause,
   });
-
-  /// Both timecodes share this style, deliberately identical. An earlier
-  /// version styled elapsed at full white and remaining dimmer; that
-  /// asymmetry measured as the single worst-case contrast on the whole panel
-  /// (2.32:1) in an accessibility audit.
-  ///
-  /// No text shadow: the OSD fill alone holds white text at ~13:1 over a
-  /// pure-white frame (`osd_legibility_test.dart`).
-  static const TextStyle _timeStyle = TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.w500,
-    color: Colors.white,
-    fontFeatures: [FontFeature.tabularFigures()],
-  );
-
-  /// [_timeStyle] at television size. Same colour and shadow, so the
-  /// contrast reasoning above still holds.
-  static final TextStyle _remoteTimeStyle = _timeStyle.copyWith(
-    fontSize: PlaybackChrome.remoteTimeFontSize,
-  );
 
   Widget _bar() {
     VideoProgressBar progressBar({
@@ -1207,44 +1386,5 @@ class _ScrubberRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<Duration>(
-      stream: player.stream.position,
-      initialData: player.state.position,
-      builder: (context, positionSnapshot) {
-        return StreamBuilder<Duration>(
-          stream: player.stream.duration,
-          initialData: player.state.duration,
-          builder: (context, durationSnapshot) {
-            final position = timeline.toReal(
-              positionSnapshot.data ?? Duration.zero,
-            );
-            final duration = timeline.resolveDuration(
-              durationSnapshot.data ?? Duration.zero,
-            );
-            final remaining = duration - position;
-            final style = remote ? _remoteTimeStyle : _timeStyle;
-
-            return Row(
-              children: [
-                Text(
-                  formatPlaybackTime(position),
-                  key: PlaybackChrome.elapsedKey,
-                  style: style,
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: _bar()),
-                const SizedBox(width: 12),
-                Text(
-                  '-${formatPlaybackTime(remaining.isNegative ? Duration.zero : remaining)}',
-                  key: PlaybackChrome.remainingKey,
-                  style: style,
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => _bar();
 }

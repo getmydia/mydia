@@ -25,16 +25,14 @@ class TransportSurface extends StatelessWidget {
 
   /// Renders only the play/pause button (40px) — no ±10s seek, no episode
   /// nav — regardless of which callbacks are supplied. Used below the mobile
-  /// breakpoint (`PanelMetrics.touchTargets`): ±10s already has a gesture
-  /// equivalent there (double-tap, see `gesture_controls.dart`), and the
-  /// in-bar transport must be narrow enough to (a) let `ChromePanel`'s row-1
-  /// stay genuinely, symmetrically centered via equal-flex `Expanded` on both
-  /// sides — not the narrower "flex: 0" trick, which pinned the transport up
-  /// to 187.5px off-center at some mobile widths — and (b) leave
-  /// `SecondaryCluster` enough of its own equal-flex share to render at full
-  /// (40px) size. Episode nav specifically has no touch-reachable
-  /// replacement once dropped here; see the wiring comment in
-  /// `playback_chrome.dart` for what that means and what still needs a home.
+  /// breakpoint (`ChromeMetrics.compactTransport`): ±10s already has a
+  /// gesture equivalent there (double-tap, see `gesture_controls.dart`), and
+  /// the in-bar transport must be narrow enough to (a) let
+  /// `ChromeBottomBar`'s control row stay symmetrically centred via
+  /// equal-flex `Expanded` on both sides, and (b) leave `SecondaryCluster`
+  /// enough of its own equal-flex share. On touch the transport is
+  /// `TouchTransport` in the centre instead, which is where a phone gets
+  /// its seek discs back.
   final bool compact;
 
   /// Optional externally-owned node for the play/pause button.
@@ -63,8 +61,8 @@ class TransportSurface extends StatelessWidget {
   /// 2, not the original 8: the transport cluster was the only part of the
   /// control row never squeezed, at 256px with episode navigation wired, and
   /// that width was what kept a 4th `SecondaryCluster` button from fitting
-  /// below the desktop tier. See `chrome_panel_overflow_test.dart` for the
-  /// per-width budget this feeds.
+  /// below the desktop tier. See `chrome_bottom_bar_overflow_test.dart` for
+  /// the per-width budget this feeds.
   static const double gap = 2.0;
 
   /// The play/pause glyph, cross-fading and scaling between states.

@@ -4,6 +4,7 @@ import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../l10n/l10n.dart';
 import '../glass_surface.dart';
+import 'control_button.dart';
 
 /// The glyph for the mode in effect, shared by the top-bar pill and the TV
 /// cluster button so the two never disagree.
@@ -19,18 +20,21 @@ String scalingTooltip(AppLocalizations l10n, VideoScaling scaling) =>
       VideoScaling.fill => l10n.videoScalingFill,
     };
 
-/// A 36px-tall pill in the OSD material ([GlassSurface.osd]).
+/// A 36px-tall pill in the unblurred OSD pill material
+/// ([GlassSurface.osdPill]).
 ///
-/// Each piece of top chrome carries its own surface, which is what makes a
-/// full-width scrim unnecessary. Text and icons carry no shadow: the OSD fill
-/// holds their contrast on its own (`osd_legibility_test.dart`).
+/// Used for the back pill and the corner overlays. The top bar sits on
+/// `ChromeScrim`'s top band, whose plateau is the same OSD fill, so the bare
+/// title beside the pills stays legible over bright video. Text and icons
+/// carry no shadow: the OSD fill holds their contrast on its own
+/// (`osd_legibility_test.dart`).
 class GlassPill extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
 
   /// Pill height. Defaults to [defaultHeight]; `UpNextPrompt` passes 44 at the
-  /// touch tier so its two hit targets clear the 44px floor. The three
-  /// top-bar pills take the default and are unchanged.
+  /// touch tier so its two hit targets clear the 44px floor. The top bar's
+  /// back pill takes the default.
   final double height;
 
   const GlassPill({
@@ -40,7 +44,8 @@ class GlassPill extends StatelessWidget {
     this.height = defaultHeight,
   });
 
-  /// Default pill height. Matched across all three top-bar pills.
+  /// Default pill height, shared by the back pill and the top bar's actions
+  /// pill.
   static const double defaultHeight = 36.0;
 
   @override
@@ -66,8 +71,7 @@ class GlassPill extends StatelessWidget {
       ),
     );
 
-    content = GlassSurface.osd(
-      elevation: OsdElevation.pill,
+    content = GlassSurface.osdPill(
       borderRadius: const BorderRadius.all(
         Radius.circular(DepthTokens.radiusOsdPill),
       ),
@@ -87,16 +91,17 @@ class GlassPill extends StatelessWidget {
   }
 }
 
-/// The playback screen's top chrome: back, title, scaling and cast pills.
+/// The playback screen's top chrome: a back pill, the bare left-aligned
+/// title, and one actions pill holding the scaling and cast controls.
 ///
 /// Replaces the former left-aligned chevron-and-title row that lived in
 /// `player_screen.dart`, so all playback chrome is owned by one widget.
 class ChromeTopBar extends StatelessWidget {
-  /// Media title. When null the title pill is omitted.
+  /// Media title. When null no title text renders and the actions pill
+  /// stays at the end of the row.
   final String? title;
 
-  /// Back action. When null the back pill is inert but still rendered, so the
-  /// title stays optically centered.
+  /// Back action. When null the back pill is inert but still rendered.
   final VoidCallback? onBack;
 
   /// Whether the back pill renders at all.
@@ -139,112 +144,111 @@ class ChromeTopBar extends StatelessWidget {
   static const Key castKey = Key('chrome-cast');
   static const Key scalingKey = Key('chrome-scaling');
 
-  /// Bar width from which the title gets half the row (flex 2 against two
-  /// side slots of flex 1) instead of a third.
-  ///
-  /// At 560px a quarter of the bar is 140px, comfortably over the roughly
-  /// 93px the scaling and cast pills need side by side (two icon pills of
-  /// about 44.5px and an 8px gap). Below it the side slots get a little over
-  /// a third each ([narrowSideFlex] against [narrowTitleFlex] for the title),
-  /// which keeps back, scaling and cast inside their slots on a 320px phone
-  /// once the chrome's 16px side padding is taken off.
-  static const double wideBreakpoint = 560.0;
-  static const int narrowSideFlex = 9;
-  static const int narrowTitleFlex = 8;
+  /// The single pill holding the scaling and cast controls.
+  static const Key actionsPillKey = Key('osd-top-actions');
+
+  /// Gap between back, title and the actions pill.
+  static const double gap = 12.0;
 
   @override
   Widget build(BuildContext context) {
     final titleText = title;
     final cast = castAction;
+    final l10n = context.l10n;
+    const side = GlassPill.defaultHeight;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= wideBreakpoint;
-        final sideFlex = wide ? 1 : narrowSideFlex;
-        final titleFlex = wide ? 2 : narrowTitleFlex;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              flex: sideFlex,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: !showBack
-                    ? const SizedBox.shrink()
-                    : GlassPill(
-                        key: backKey,
-                        onTap: onBack,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.chevron_left_rounded),
-                            const SizedBox(width: 2),
-                            Text(context.l10n.commonBack),
-                          ],
-                        ),
-                      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        if (showBack) ...[
+          Tooltip(
+            message: l10n.commonBack,
+            // The Semantics below already carries the label; without this
+            // the tooltip would announce Back a second time.
+            excludeFromSemantics: true,
+            child: Semantics(
+              label: l10n.commonBack,
+              button: true,
+              onTap: onBack,
+              excludeSemantics: true,
+              child: GlassPill(
+                key: backKey,
+                onTap: onBack,
+                child: const Icon(Icons.chevron_left_rounded, size: 22),
               ),
             ),
-            if (titleText != null)
-              Flexible(
-                // The two side slots stay equal so the title remains centered.
-                // Half the row for the title on wide bars, a little under a
-                // third below [wideBreakpoint] where the side slots need the
-                // room for the scaling and cast pills. The title pill
-                // ellipsizes.
-                flex: titleFlex,
-                // A bare Flexible only bounds its child's max width; Flutter
-                // anchors a loose-fit child (GlassPill shrink-wraps to its own
-                // text width) to the *leading* edge of its allotted slot, not
-                // the slot's center. Without this Center, the title pill sits
-                // left-aligned within the middle 50% of the row instead of
-                // centered on the row as a whole — confirmed via
-                // tester.getRect in chrome_top_bar_test.dart (a bug that a
-                // property assertion like "title pill exists" cannot catch).
-                child: Center(
-                  child: GlassPill(
-                    key: titleKey,
-                    child: Text(
-                      titleText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xCCFFFFFF), // white @ 0.80
-                      ),
-                    ),
+          ),
+          const SizedBox(width: gap),
+        ],
+        Expanded(
+          child: titleText == null
+              ? const SizedBox.shrink()
+              : Text(
+                  titleText,
+                  key: titleKey,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.start,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xD9FFFFFF), // white @ 0.85
                   ),
                 ),
-              ),
-            Expanded(
-              flex: sideFlex,
-              child: Align(
-                alignment: Alignment.centerRight,
+        ),
+        if (onScalingTap != null || cast != null) ...[
+          const SizedBox(width: gap),
+          SizedBox(
+            height: side,
+            child: GlassSurface.osdPill(
+              key: actionsPillKey,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (onScalingTap != null)
-                      Tooltip(
-                        message: scalingTooltip(context.l10n, scaling),
-                        child: GlassPill(
-                          key: scalingKey,
-                          onTap: onScalingTap,
-                          child: Icon(scalingIcon(scaling)),
-                        ),
+                      ControlButton(
+                        key: scalingKey,
+                        icon: scalingIcon(scaling),
+                        size: side,
+                        iconSize: 19,
+                        tooltip: scalingTooltip(l10n, scaling),
+                        onTap: onScalingTap,
                       ),
-                    if (onScalingTap != null && cast != null)
-                      const SizedBox(width: 8),
-                    if (cast != null)
-                      GlassPill(key: castKey, onTap: onCastTap, child: cast),
+                    if (cast != null) _castButton(cast, side),
                   ],
                 ),
               ),
             ),
-          ],
-        );
-      },
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// The cast affordance in a square tap target. The whole square is the tap
+  /// target, not the glyph; with no [onCastTap] it stays inert.
+  Widget _castButton(Widget cast, double side) {
+    final target = SizedBox(
+      key: castKey,
+      width: side,
+      height: side,
+      child: Center(
+        child: IconTheme.merge(
+          data: const IconThemeData(size: 19, color: Color(0xEBFFFFFF)),
+          child: cast,
+        ),
+      ),
+    );
+    if (onCastTap == null) return target;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onCastTap,
+        child: target,
+      ),
     );
   }
 }

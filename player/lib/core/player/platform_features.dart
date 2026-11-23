@@ -54,7 +54,7 @@ class PlatformFeatures {
   /// both have a physical keyboard. This was previously `isDesktop` alone,
   /// which left a narrowed desktop *or web* browser window with no in-bar
   /// episode-nav buttons (viewport-width-gated, not platform-gated — see
-  /// `PanelMetrics.touchTargets`/`TransportSurface.compact`), no
+  /// `ChromeMetrics.compactTransport`/`TransportSurface.compact`), no
   /// `UpNextOverlay` (autoplay-only, next-episode-only), and — before this
   /// fix — no keyboard fallback either, since [supportsKeyboardShortcuts]
   /// was false on web. `isDesktop` itself is left alone: its live consumers

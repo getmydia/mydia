@@ -2,10 +2,56 @@ import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 
 void main() {
   StatsMetrics? resolve(double w, double h, {bool tv = false}) =>
       StatsMetrics.resolve(viewport: Size(w, h), directionalPrimary: tv);
+
+  // The bar is taller with a touch-sized scrubber, so a touch tablet's
+  // panel has to stop higher than a pointer's at the same viewport.
+  test('with touchPrimary the panel still clears the taller touch bar', () {
+    const viewport = Size(1024, 720);
+    final touch = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: false,
+      touchPrimary: true,
+    )!;
+    final pointer = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: false,
+    )!;
+    final touchBar = ChromeMetrics.resolve(
+      width: viewport.width,
+      touchPrimary: true,
+    );
+
+    final panelBottom = StatsMetrics.topInset + touch.maxHeight;
+    expect(
+      viewport.height - touchBar.barHeight - panelBottom,
+      greaterThanOrEqualTo(ChromeMetrics.cornerGap),
+    );
+    expect(touch.maxHeight, lessThan(pointer.maxHeight));
+  });
+
+  // The panel and the bar both sit inside the safe area, so a home
+  // indicator below and a notch above eat into the room between them.
+  test('verticalSafeInset shrinks the room above the bar', () {
+    const viewport = Size(1024, 720);
+    final bare = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: false,
+      touchPrimary: true,
+    )!;
+    final inset = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: false,
+      touchPrimary: true,
+      verticalSafeInset: 24 + 21,
+    )!;
+
+    expect(inset.maxHeight, bare.maxHeight - 45);
+  });
 
   test('a desktop window takes the full panel', () {
     final metrics = resolve(1280, 720);

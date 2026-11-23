@@ -205,11 +205,11 @@ while passing 2/2 as the only file and passing the `Test / Player` CI job. That 
 cross-test pollution in the local run. Re-run the file alone; if it passes in
 isolation, confirm against CI rather than bisecting the suite.
 
-`test/presentation/widgets/video_controls/chrome_panel_golden_test.dart` is gated
-`@TestOn('mac-os')`, so it skips silently on Linux and on CI's ubuntu-latest.
-Changes to the OSD tokens in `DepthTokens` or anything feeding
-`GlassSurface.osd` invalidate its committed goldens with no Linux run
-noticing. Regenerate on a Mac with
+`test/presentation/widgets/video_controls/chrome_bottom_bar_golden_test.dart` is
+gated `@TestOn('mac-os')`, so it skips silently on Linux and on CI's
+ubuntu-latest. Changes to the OSD tokens in `DepthTokens`, `ChromeScrim`,
+`GlassSurface.osdPill` or the `ChromeBottomBar` layout invalidate its committed
+goldens with no Linux run noticing. Regenerate on a Mac with
 `cd player && flutter test --update-goldens <path>`.
 
 ## A worktree-built APK cannot replace a release install

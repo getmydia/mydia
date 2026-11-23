@@ -317,8 +317,8 @@ PlayerKeyCommand? resolvePlayerKey(KeyEvent event, PlayerKeyContext context) {
       return const KeyConsumed();
 
     // Previous/next episode. This is the only reachable path to episode
-    // navigation on a narrow window: below `PanelMetrics.touchTargets`'s
-    // breakpoint, `ChromePanel`'s in-bar transport drops to play/pause
+    // navigation on a narrow window: below `ChromeMetrics.compactTransport`'s
+    // breakpoint, `ChromeBottomBar`'s in-bar transport drops to play/pause
     // only (see `TransportSurface.compact`), and that gate is on viewport
     // *width*, not `PlatformFeatures.isMobile`, so a narrowed desktop or
     // web browser window loses the in-bar buttons too, with no
