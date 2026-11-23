@@ -105,10 +105,7 @@ class _UpNextPromptState extends State<UpNextPrompt> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-        right: ChromeMetrics.cornerInsetRight,
-        bottom: widget.metrics.cornerInsetBottom,
-      ),
+      padding: widget.metrics.cornerPaddingOf(context),
       child: Align(
         alignment: Alignment.bottomRight,
         child: FocusScope(

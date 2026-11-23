@@ -42,6 +42,27 @@ void main() {
       );
     });
 
+    testWidgets('base track rests 4 px tall in white at 0.22', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ProgressBarSurface(progress: 0.4, buffered: 0.6, onSeekTo: (_) {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
+        4.0,
+      );
+      final track = tester.widget<AnimatedContainer>(
+        find.byKey(ProgressBarSurface.trackKey),
+      );
+      expect(
+        (track.decoration! as BoxDecoration).color,
+        Colors.white.withValues(alpha: 0.22),
+      );
+    });
+
     testWidgets('thumb is 14 at rest and 18 when focused', (tester) async {
       await tester.pumpWidget(
         _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
@@ -89,7 +110,7 @@ void main() {
       final restingTrack = tester.getSize(
         find.byKey(ProgressBarSurface.trackKey),
       );
-      expect(restingTrack.height, 6.0);
+      expect(restingTrack.height, 4.0);
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: Offset.zero);
@@ -279,7 +300,7 @@ void main() {
         );
         expect(
           tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
-          6.0,
+          4.0,
         );
       },
     );

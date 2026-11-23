@@ -6385,7 +6385,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
-    final panelMetrics = ChromeMetrics.resolve(
+    final chromeMetrics = ChromeMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
       touchPrimary: InputCapabilities.touchPrimary,
     );
@@ -6415,7 +6415,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   segment: segment,
                   position: position,
                   onSkip: (target) => seekToReal(target.end),
-                  metrics: panelMetrics,
+                  metrics: chromeMetrics,
                 );
               },
             ),
@@ -6428,7 +6428,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             child: UpNextPrompt(
               target: _upNext.target!,
               countdown: _upNext.countdown!,
-              metrics: panelMetrics,
+              metrics: chromeMetrics,
               onPlayNow: _upNext.playNext,
               onDismiss: _upNext.cancel,
               onEngagedChanged: _upNext.setEngaged,

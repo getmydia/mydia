@@ -59,6 +59,22 @@ class ChromeMetrics {
   /// Bottom inset for a corner overlay so it always clears the bar.
   double get cornerInsetBottom => barHeight + cornerGap;
 
+  /// Padding that puts a bottom-right corner overlay above the bar and clear
+  /// of the safe-area insets.
+  ///
+  /// The bar sits inside a `SafeArea`, so it floats [barHeight] above the
+  /// home indicator rather than above the screen edge; a corner overlay laid
+  /// out against the full screen has to add the same inset back or it lands
+  /// on the bar. Reads [MediaQuery.paddingOf], so inside an ancestor that
+  /// already consumed the padding it adds nothing twice.
+  EdgeInsets cornerPaddingOf(BuildContext context) {
+    final safe = MediaQuery.paddingOf(context);
+    return EdgeInsets.only(
+      right: cornerInsetRight + safe.right,
+      bottom: cornerInsetBottom + safe.bottom,
+    );
+  }
+
   /// Resolve metrics for a viewport [width] and the viewer's input type,
   /// using the breakpoints in `core/layout/breakpoints.dart`
   /// (mobile < 600, tablet 600-899, desktop >= 900).

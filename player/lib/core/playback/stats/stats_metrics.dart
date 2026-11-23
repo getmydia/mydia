@@ -96,13 +96,19 @@ class StatsMetrics {
   ///
   /// [touchPrimary] matters because the bar is taller with a touch-sized
   /// scrubber, so it has to match what `PlaybackChrome` resolves.
+  ///
+  /// [verticalSafeInset] is the safe-area padding above plus below the
+  /// panel's `SafeArea`. The bar sits inside the same safe area, so on a
+  /// phone with a home indicator the room between the two shrinks by it.
   static StatsMetrics? resolve({
     required Size viewport,
     required bool directionalPrimary,
     bool touchPrimary = false,
+    double verticalSafeInset = 0,
   }) {
     final available =
         viewport.height -
+        verticalSafeInset -
         topInset -
         ChromeMetrics.resolve(
           width: viewport.width,

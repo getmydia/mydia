@@ -34,6 +34,25 @@ void main() {
     expect(touch.maxHeight, lessThan(pointer.maxHeight));
   });
 
+  // The panel and the bar both sit inside the safe area, so a home
+  // indicator below and a notch above eat into the room between them.
+  test('verticalSafeInset shrinks the room above the bar', () {
+    const viewport = Size(1024, 720);
+    final bare = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: false,
+      touchPrimary: true,
+    )!;
+    final inset = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: false,
+      touchPrimary: true,
+      verticalSafeInset: 24 + 21,
+    )!;
+
+    expect(inset.maxHeight, bare.maxHeight - 45);
+  });
+
   test('a desktop window takes the full panel', () {
     final metrics = resolve(1280, 720);
 

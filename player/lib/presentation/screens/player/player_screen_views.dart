@@ -150,7 +150,7 @@ class CastPlaceholderView extends StatelessWidget {
     final skipSegment = isStale || session.isSyncing
         ? null
         : segmentAt(castPosition);
-    final panelMetrics = ChromeMetrics.resolve(
+    final chromeMetrics = ChromeMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
       touchPrimary: InputCapabilities.touchPrimary,
     );
@@ -207,7 +207,7 @@ class CastPlaceholderView extends StatelessWidget {
               segment: skipSegment,
               position: castPosition,
               onSkip: onSkip,
-              metrics: panelMetrics,
+              metrics: chromeMetrics,
             ),
           ),
         Positioned(
@@ -249,6 +249,7 @@ class PlayerStatsPanel extends StatelessWidget {
       viewport: MediaQuery.sizeOf(context),
       directionalPrimary: InputCapabilities.directionalPrimary,
       touchPrimary: InputCapabilities.touchPrimary,
+      verticalSafeInset: MediaQuery.paddingOf(context).vertical,
     );
     if (metrics == null) return const SizedBox.shrink();
 

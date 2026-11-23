@@ -91,10 +91,7 @@ class SkipSegmentButton extends StatelessWidget {
     }
 
     return Padding(
-      padding: EdgeInsets.only(
-        right: ChromeMetrics.cornerInsetRight,
-        bottom: metrics.cornerInsetBottom,
-      ),
+      padding: metrics.cornerPaddingOf(context),
       child: Align(
         alignment: Alignment.bottomRight,
         child: GlassPill(

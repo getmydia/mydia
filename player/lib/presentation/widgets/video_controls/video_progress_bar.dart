@@ -84,7 +84,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
   /// Hover, a drag, or keyboard focus: any of them draws the bar larger.
   bool get _emphasized => _active || widget.focused;
 
-  double get _trackHeight => _emphasized ? 8.0 : 6.0;
+  double get _trackHeight => _emphasized ? 8.0 : 4.0;
 
   double get _thumbSize => _emphasized
       ? VideoProgressBar.activeThumbSize
