@@ -23,6 +23,7 @@
 /* Begin PBXBuildFile section */
 		331C80D8294CF71000263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C80D7294CF71000263BE5 /* RunnerTests.swift */; };
 		D1A0B0000000000000000008 /* MpvSurfacePluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0B0000000000000000007 /* MpvSurfacePluginTests.swift */; };
+		A7C3D9E1F2B4058617293A4E /* WindowPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C3D9E1F2B4058617293A4D /* WindowPluginTests.swift */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
 		D1A0A0000000000000000002 /* AppMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0A0000000000000000001 /* AppMenu.swift */; };
@@ -34,6 +35,7 @@
 		D1A0B0000000000000000004 /* MpvHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0B0000000000000000003 /* MpvHostView.swift */; };
 		D1A0B0000000000000000006 /* MpvSurfacePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0B0000000000000000005 /* MpvSurfacePlugin.swift */; };
 		DB1D492815371EB6D1A895FC /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD6C4E9DB1D492815371EB6 /* NativeTabBarPlugin.swift */; };
+		A7C3D9E1F2B4058617293A4C /* WindowPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C3D9E1F2B4058617293A4B /* WindowPlugin.swift */; };
 		90D2346A848FEEC4E0049A26 /* MydiaSidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39D7F9E90D2346A848FEEC4 /* MydiaSidebarViewController.swift */; };
 		163054AA33AA206F975A977C /* MydiaSplitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F22BC9C1163054AA33AA206F /* MydiaSplitViewController.swift */; };
 		9662172D40B0C564573C3D04 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 48DB42E4A89642A07E4CA1C9 /* Pods_Runner.framework */; };
@@ -75,6 +77,7 @@
 		331C80D5294CF71000263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		331C80D7294CF71000263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		D1A0B0000000000000000007 /* MpvSurfacePluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MpvSurfacePluginTests.swift; sourceTree = "<group>"; };
+		A7C3D9E1F2B4058617293A4D /* WindowPluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPluginTests.swift; sourceTree = "<group>"; };
 		333000ED22D3DE5D00554162 /* Warnings.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Warnings.xcconfig; sourceTree = "<group>"; };
 		335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneratedPluginRegistrant.swift; sourceTree = "<group>"; };
 		33CC10ED2044A3C60003C045 /* player.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = player.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -89,6 +92,7 @@
 		D1A0B0000000000000000003 /* MpvHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MpvHostView.swift; sourceTree = "<group>"; };
 		D1A0B0000000000000000005 /* MpvSurfacePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MpvSurfacePlugin.swift; sourceTree = "<group>"; };
 		EDD6C4E9DB1D492815371EB6 /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
+		A7C3D9E1F2B4058617293A4B /* WindowPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPlugin.swift; sourceTree = "<group>"; };
 		B39D7F9E90D2346A848FEEC4 /* MydiaSidebarViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MydiaSidebarViewController.swift; sourceTree = "<group>"; };
 		F22BC9C1163054AA33AA206F /* MydiaSplitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MydiaSplitViewController.swift; sourceTree = "<group>"; };
 		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
@@ -138,6 +142,7 @@
 			children = (
 				331C80D7294CF71000263BE5 /* RunnerTests.swift */,
 				D1A0B0000000000000000007 /* MpvSurfacePluginTests.swift */,
+				A7C3D9E1F2B4058617293A4D /* WindowPluginTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -215,6 +220,7 @@
 				D1A0A0000000000000000003 /* CloudKitPlugin.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				EDD6C4E9DB1D492815371EB6 /* NativeTabBarPlugin.swift */,
+				A7C3D9E1F2B4058617293A4B /* WindowPlugin.swift */,
 				D1A0B0000000000000000009 /* MpvSurface */,
 				B39D7F9E90D2346A848FEEC4 /* MydiaSidebarViewController.swift */,
 				F22BC9C1163054AA33AA206F /* MydiaSplitViewController.swift */,
@@ -480,6 +486,7 @@
 			files = (
 				331C80D8294CF71000263BE5 /* RunnerTests.swift in Sources */,
 				D1A0B0000000000000000008 /* MpvSurfacePluginTests.swift in Sources */,
+				A7C3D9E1F2B4058617293A4E /* WindowPluginTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -489,6 +496,7 @@
 			files = (
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				DB1D492815371EB6D1A895FC /* NativeTabBarPlugin.swift in Sources */,
+				A7C3D9E1F2B4058617293A4C /* WindowPlugin.swift in Sources */,
 				D1A0B0000000000000000002 /* MpvApi.swift in Sources */,
 				D1A0B0000000000000000004 /* MpvHostView.swift in Sources */,
 				D1A0B0000000000000000006 /* MpvSurfacePlugin.swift in Sources */,
