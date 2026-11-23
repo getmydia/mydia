@@ -1,4 +1,7 @@
 import 'package:material_ui/material_ui.dart';
+
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/player/video_scaling.dart';
@@ -219,6 +222,22 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('back exposes a labelled tap action to semantics', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      var backed = false;
+      await tester.pumpWidget(_host(ChromeTopBar(onBack: () => backed = true)));
+
+      final node = tester.getSemantics(find.byKey(ChromeTopBar.backKey));
+      expect(node.label, 'Back');
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      tester.semantics.tap(find.semantics.byLabel('Back'));
+      await tester.pump();
+      expect(backed, isTrue);
+      handle.dispose();
     });
 
     testWidgets('long title ellipsizes at 320 px with cast and scaling', (

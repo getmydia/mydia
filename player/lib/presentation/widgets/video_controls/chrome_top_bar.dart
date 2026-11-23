@@ -161,6 +161,7 @@ class ChromeTopBar extends StatelessWidget {
             child: Semantics(
               label: l10n.commonBack,
               button: true,
+              onTap: onBack,
               excludeSemantics: true,
               child: GlassPill(
                 key: backKey,
