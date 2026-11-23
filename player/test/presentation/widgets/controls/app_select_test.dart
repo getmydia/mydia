@@ -330,6 +330,39 @@ void main() {
     expect(log, ['c']);
   });
 
+  testWidgets('disabled while the menu is open, a pick does nothing', (
+    tester,
+  ) async {
+    final log = <String>[];
+    var enabled = true;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return AppSelect<String>(
+              key: const Key('select'),
+              items: _items,
+              value: 'a',
+              enabled: enabled,
+              onChanged: log.add,
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('select')));
+    await tester.pumpAndSettle();
+    rebuild(() => enabled = false);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('item-c')));
+    await tester.pumpAndSettle();
+
+    expect(log, isEmpty);
+  });
+
   testWidgets('a nullable value type keeps null as a real choice', (
     tester,
   ) async {

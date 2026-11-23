@@ -180,10 +180,10 @@ class RenderFrostedDialogBody extends RenderBox
       final available = constraints.hasBoundedHeight
           ? constraints.maxHeight
           : _viewportHeight;
-      // The fixed sections fit: the content takes what they leave, and the
-      // actions stay pinned. They do not: the whole body scrolls, and the
+      // The fixed sections leave room: the content takes it, and the actions
+      // stay pinned. They leave none: the whole body scrolls, and the
       // content shows up to a viewport of its own on the way.
-      final room = fixed <= available ? available - fixed : available;
+      final room = fixed < available ? available - fixed : available;
       heights[scrolling] = sizeChild(
         children[scrolling],
         BoxConstraints(minWidth: width, maxWidth: width, maxHeight: room),

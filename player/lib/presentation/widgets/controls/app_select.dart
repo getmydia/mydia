@@ -127,7 +127,9 @@ class _AppSelectState<T> extends State<AppSelect<T>> {
       ],
     );
     _open = false;
-    if (!mounted || picked == null || picked >= items.length) return;
+    // Disabled while the menu was open: the pick no longer counts.
+    if (!mounted || !widget.enabled) return;
+    if (picked == null || picked >= items.length) return;
     final value = items[picked].value;
     if (value == widget.value) return;
     widget.onChanged(value);

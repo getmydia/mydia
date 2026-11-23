@@ -5,6 +5,7 @@ import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/glass/glass_dialog.dart';
+import 'package:player/presentation/widgets/glass/glass_dialog_layout.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 
 ThemeData _theme({required bool liquid}) =>
@@ -397,6 +398,30 @@ void _frostedLayoutTests() {
       );
       await tester.tap(cancel);
       expect(cancels, 1);
+    });
+
+    testWidgets('fixed sections exactly as tall as the viewport still show '
+        'the content', (tester) async {
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: SizedBox(
+              height: 100,
+              child: FrostedDialogBody(
+                scrolling: 1,
+                minWidth: 200,
+                maxWidth: 200,
+                children: [
+                  SizedBox(height: 100),
+                  SizedBox(key: Key('content'), height: 40),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.getSize(find.byKey(const Key('content'))).height, 40);
     });
 
     testWidgets('no AlertDialog and no splash in Frosted', (tester) async {
