@@ -128,6 +128,14 @@ class ChromeTopBar extends StatelessWidget {
   /// The mode in effect, which picks the pill's glyph.
   final VideoScaling scaling;
 
+  /// Controls drawn in their own pill just before the actions pill. On a
+  /// touch phone this is the track buttons (subtitles, audio, quality),
+  /// moved up from the bottom bar so the bar can be a single row.
+  final Widget? trailing;
+
+  /// Whether to use [compactGap] between the groups, on a touch phone.
+  final bool compact;
+
   const ChromeTopBar({
     super.key,
     this.title,
@@ -137,6 +145,8 @@ class ChromeTopBar extends StatelessWidget {
     this.onCastTap,
     this.onScalingTap,
     this.scaling = VideoScaling.fit,
+    this.trailing,
+    this.compact = false,
   });
 
   static const Key backKey = Key('chrome-back');
@@ -147,8 +157,14 @@ class ChromeTopBar extends StatelessWidget {
   /// The single pill holding the scaling and cast controls.
   static const Key actionsPillKey = Key('osd-top-actions');
 
-  /// Gap between back, title and the actions pill.
+  /// The pill holding [trailing].
+  static const Key trailingPillKey = Key('osd-top-trailing');
+
+  /// Gap between back, title and the pills.
   static const double gap = 12.0;
+
+  /// [gap] when [compact].
+  static const double compactGap = 8.0;
 
   @override
   Widget build(BuildContext context) {
@@ -156,6 +172,8 @@ class ChromeTopBar extends StatelessWidget {
     final cast = castAction;
     final l10n = context.l10n;
     const side = GlassPill.defaultHeight;
+    final gap = compact ? compactGap : ChromeTopBar.gap;
+    final trailing = this.trailing;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -178,7 +196,7 @@ class ChromeTopBar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: gap),
+          SizedBox(width: gap),
         ],
         Expanded(
           child: titleText == null
@@ -196,8 +214,21 @@ class ChromeTopBar extends StatelessWidget {
                   ),
                 ),
         ),
+        if (trailing != null) ...[
+          SizedBox(width: gap),
+          SizedBox(
+            height: side,
+            child: GlassSurface.osdPill(
+              key: trailingPillKey,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Center(widthFactor: 1, child: trailing),
+              ),
+            ),
+          ),
+        ],
         if (onScalingTap != null || cast != null) ...[
-          const SizedBox(width: gap),
+          SizedBox(width: gap),
           SizedBox(
             height: side,
             child: GlassSurface.osdPill(

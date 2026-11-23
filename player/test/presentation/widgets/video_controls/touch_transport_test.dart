@@ -85,6 +85,36 @@ void main() {
     );
   });
 
+  testWidgets('compact shrinks the discs and the gaps', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        TouchTransport(
+          player: player,
+          onBack10: () {},
+          onForward10: () {},
+          compact: true,
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byKey(TransportSurface.playPauseKey)),
+      const Size(
+        TouchTransport.compactPlaySize,
+        TouchTransport.compactPlaySize,
+      ),
+    );
+    expect(
+      tester.widget<ControlButton>(find.byKey(TransportSurface.back10Key)).size,
+      TouchTransport.compactSeekSize,
+    );
+    final back = tester.getRect(find.byKey(TransportSurface.back10Key));
+    final play = tester.getRect(find.byKey(TransportSurface.playPauseKey));
+    expect(play.left - back.right, TouchTransport.compactGap);
+    expect(TouchTransport.compactPlaySize, lessThan(TouchTransport.playSize));
+    expect(TouchTransport.compactGap, lessThan(TouchTransport.gap));
+  });
+
   testWidgets(
     'shows previous and next when showEpisodeNav and callbacks are set',
     (tester) async {

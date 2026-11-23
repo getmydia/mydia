@@ -276,6 +276,7 @@ void main() {
     const width = 1920.0;
     final cornerInsetBottom = ChromeMetrics.resolve(
       width: width,
+      height: 1080,
       touchPrimary: false,
     ).cornerInsetBottom;
     final viewport = Size(

@@ -84,8 +84,49 @@ void main() {
       });
     }
 
+    test('compactTouch is a touch phone, by its shortest side', () {
+      // (width, height, touchPrimary, compactTouch)
+      const cases = <(double, double, bool, bool)>[
+        (760, 350, true, true), // landscape phone
+        (390, 844, true, true), // portrait phone
+        (1280, 720, true, false), // touch tablet
+        (760, 350, false, false), // short desktop window
+        (400, 300, false, false),
+      ];
+      for (final c in cases) {
+        expect(
+          ChromeMetrics.resolve(
+            width: c.$1,
+            height: c.$2,
+            touchPrimary: c.$3,
+          ).compactTouch,
+          c.$4,
+          reason: '${c.$1}x${c.$2} touch: ${c.$3}',
+        );
+      }
+    });
+
+    test('compactTouch drops volume, tightens padding and the bar', () {
+      final m = ChromeMetrics.resolve(
+        width: 760,
+        height: 350,
+        touchPrimary: true,
+      );
+      expect(m.showVolume, isFalse);
+      expect(m.horizontalPadding, 12);
+      expect(m.barHeight, 56);
+      expect(
+        m.barHeight,
+        ChromeBottomBar.heightFor(touchTargets: true, compactTouch: true),
+      );
+    });
+
     test('touchPrimary enlarges targets without compacting the transport', () {
-      final m = ChromeMetrics.resolve(width: 800, touchPrimary: true);
+      final m = ChromeMetrics.resolve(
+        width: 800,
+        height: 800,
+        touchPrimary: true,
+      );
       expect(m.touchTargets, isTrue);
       expect(m.compactTransport, isFalse);
       expect(m.showVolume, isTrue);
@@ -100,13 +141,17 @@ void main() {
   group('ChromeBottomBar', () {
     for (final width in <double>[320, 600, 1280]) {
       for (final touch in [true, false]) {
+        final metrics = ChromeMetrics.resolve(
+          width: width,
+          height: 800,
+          touchPrimary: touch,
+        );
+        // A 320 px touch viewport is a phone, which draws
+        // CompactChromeBottomBar; that bar has its own group below.
+        if (metrics.compactTouch) continue;
         testWidgets('rendered height equals ChromeMetrics.barHeight at '
             '${width}px (touch: $touch)', (tester) async {
           _setView(tester, width);
-          final metrics = ChromeMetrics.resolve(
-            width: width,
-            touchPrimary: touch,
-          );
           await tester.pumpWidget(_host(metrics));
           expect(
             tester.getSize(find.byType(ChromeBottomBar)).height,
@@ -248,5 +293,64 @@ void main() {
       expect(bar.overlaps(corner), isFalse);
       expect(bar.top - corner.bottom, closeTo(ChromeMetrics.cornerGap, 0.5));
     });
+  });
+
+  group('CompactChromeBottomBar', () {
+    Widget compactHost(ChromeMetrics metrics) => MaterialApp(
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.bottomCenter,
+          child: CompactChromeBottomBar(
+            metrics: metrics,
+            elapsed: const Text('17:03', key: Key('e')),
+            remaining: const Text('-06:56', key: Key('r')),
+            scrubber: const SizedBox(key: Key('s')),
+          ),
+        ),
+      ),
+    );
+
+    for (final size in const <Size>[
+      Size(320, 568),
+      Size(568, 320),
+      Size(760, 350),
+      Size(932, 430),
+    ]) {
+      testWidgets('one row of barHeight at $size', (tester) async {
+        _setView(tester, size.width, size.height);
+        final metrics = ChromeMetrics.resolve(
+          width: size.width,
+          height: size.height,
+          touchPrimary: true,
+        );
+        expect(metrics.compactTouch, isTrue);
+        await tester.pumpWidget(compactHost(metrics));
+
+        expect(
+          tester.getSize(find.byType(CompactChromeBottomBar)).height,
+          closeTo(metrics.barHeight, 0.01),
+        );
+        final elapsed = tester.getRect(find.byKey(const Key('e')));
+        final scrubber = tester.getRect(find.byKey(const Key('s')));
+        final remaining = tester.getRect(find.byKey(const Key('r')));
+        // Elapsed | scrubber | remaining, on one line.
+        expect(elapsed.right, lessThanOrEqualTo(scrubber.left));
+        expect(scrubber.right, lessThanOrEqualTo(remaining.left));
+        expect(elapsed.center.dy, closeTo(scrubber.center.dy, 0.5));
+        expect(remaining.center.dy, closeTo(scrubber.center.dy, 0.5));
+        // The scrubber takes every pixel the timecodes leave.
+        expect(
+          scrubber.width,
+          closeTo(
+            size.width -
+                2 * metrics.horizontalPadding -
+                2 * CompactChromeBottomBar.timecodeGap -
+                elapsed.width -
+                remaining.width,
+            0.5,
+          ),
+        );
+      });
+    }
   });
 }

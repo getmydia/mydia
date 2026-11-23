@@ -23,6 +23,7 @@ void main() {
     )!;
     final touchBar = ChromeMetrics.resolve(
       width: viewport.width,
+      height: viewport.height,
       touchPrimary: true,
     );
 

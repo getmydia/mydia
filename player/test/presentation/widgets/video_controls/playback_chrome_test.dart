@@ -1121,7 +1121,7 @@ void main() {
       final panelTop = tester.getTopLeft(find.byType(ChromeSubtitleLift)).dy;
       expect(
         lift.bottoms.last,
-        closeTo(900 - panelTop + ChromeSubtitleLift.gap, 0.5),
+        closeTo(900 - panelTop + ChromeSubtitleLift.defaultGap, 0.5),
       );
 
       visibility.hide();
@@ -1152,6 +1152,37 @@ void main() {
       final subtitleBottom = 720 - lift.bottoms.last;
       final bar = tester.getRect(find.byType(ChromeBottomBar));
       expect(subtitleBottom, lessThanOrEqualTo(bar.top));
+    });
+
+    testWidgets('on a touch phone captions sit just above the compact bar', (
+      tester,
+    ) async {
+      InputCapabilities.debugTouchPrimaryOverride = true;
+      addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+      tester.view.physicalSize = const Size(760, 350);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final lift = _RecordingSubtitleLift();
+      await tester.pumpWidget(
+        _host(
+          PlaybackChrome(
+            player: player,
+            timeline: StreamTimeline.zero,
+            onSeekToReal: (_) async {},
+            subtitleLift: lift,
+          ),
+        ),
+      );
+      // The touch transport's buffering spinner can animate forever.
+      await tester.pump(const Duration(seconds: 1));
+
+      final bar = tester.getRect(find.byType(CompactChromeBottomBar));
+      expect(350 - lift.bottoms.last, lessThanOrEqualTo(bar.top));
+      expect(
+        lift.bottoms.last,
+        closeTo(56 + ChromeSubtitleLift.compactGap, 0.5),
+      );
     });
   });
 
@@ -1219,6 +1250,57 @@ void main() {
           ),
           findsOneWidget,
         );
+      });
+
+      // A landscape phone: shortest side under Breakpoints.mobile.
+      const phone = Size(760, 350);
+
+      testWidgets('compact touch moves the track buttons to the top bar and '
+          'drops the control row', (tester) async {
+        await pump(tester, touch: true, size: phone);
+
+        expect(find.byType(ChromeBottomBar), findsNothing);
+        expect(find.byType(CompactChromeBottomBar), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ChromeTopBar),
+            matching: find.byType(SecondaryCluster),
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(VolumeCluster), findsNothing);
+        expect(find.byType(TouchTransport), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(CompactChromeBottomBar)).height,
+          closeTo(56, 0.5),
+        );
+      });
+
+      testWidgets('a touch tablet keeps the track buttons in the bottom bar', (
+        tester,
+      ) async {
+        await pump(tester, touch: true);
+
+        expect(find.byType(CompactChromeBottomBar), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(ChromeBottomBar),
+            matching: find.byType(SecondaryCluster),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(ChromeTopBar),
+            matching: find.byType(SecondaryCluster),
+          ),
+          findsNothing,
+        );
+      });
+
+      testWidgets('compact touch insets the top bar by 8 px', (tester) async {
+        await pump(tester, touch: true, size: phone);
+        expect(tester.getTopLeft(find.byType(ChromeTopBar)).dy, 8);
       });
 
       testWidgets('scrim fades with the chrome', (tester) async {
@@ -1429,7 +1511,7 @@ void main() {
           );
 
           final transport = tester.getRect(find.byType(TouchTransport));
-          final bottomBar = tester.getRect(find.byType(ChromeBottomBar));
+          final bottomBar = tester.getRect(find.byType(CompactChromeBottomBar));
           final topBar = tester.getRect(find.byType(ChromeTopBar));
           expect(transport.overlaps(bottomBar), isFalse);
           expect(transport.overlaps(topBar), isFalse);

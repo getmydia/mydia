@@ -99,6 +99,22 @@ Out of scope, each a possible follow-up:
   today) and the secondary pill.
 - Double-tap left/right seeking in `gesture_controls.dart` is unchanged.
 
+#### Touch phone (`ChromeMetrics.compactTouch`)
+
+Touch input with a shortest side under `Breakpoints.mobile`, either
+orientation. The two-row bar above is 148 px; on a ~350 px landscape phone
+that lifted captions to mid-screen. So on a phone:
+
+- The bottom bar is `CompactChromeBottomBar`, one 56 px row: elapsed, the
+  scrubber, `−remaining`. No control row and no volume (hardware buttons).
+- The secondary cluster (subtitles, audio, quality) moves to the top bar, in
+  its own pill before the cast/scaling pill (`ChromeTopBar.trailing`).
+- Tighter spacing: top bar inset 8 px top and 12 px sides, 8 px gaps;
+  bar side padding 12 px; caption gap 8 px (captions rest ~64 px up);
+  centre discs 56 / 44 px, 20 px apart.
+
+A touch tablet keeps the layout above.
+
 ### Pointer (desktop, web)
 
 - No centre cluster. The bottom row's transport is today's full cluster:

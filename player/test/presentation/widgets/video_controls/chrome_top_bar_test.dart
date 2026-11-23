@@ -202,6 +202,70 @@ void main() {
       );
     });
 
+    testWidgets('trailing sits in its own pill before the actions pill', (
+      tester,
+    ) async {
+      const trailing = SizedBox(key: Key('trailing'), width: 96, height: 32);
+      await tester.pumpWidget(
+        _host(
+          ChromeTopBar(
+            onScalingTap: () {},
+            castAction: const Icon(Icons.cast_rounded),
+            trailing: trailing,
+          ),
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(ChromeTopBar.trailingPillKey),
+          matching: find.byKey(const Key('trailing')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSize(find.byKey(ChromeTopBar.trailingPillKey)).height,
+        GlassPill.defaultHeight,
+      );
+      expect(
+        tester.getRect(find.byKey(ChromeTopBar.trailingPillKey)).right,
+        lessThan(tester.getRect(find.byKey(ChromeTopBar.actionsPillKey)).left),
+      );
+    });
+
+    testWidgets('compact narrows the gaps', (tester) async {
+      Future<double> titleLeft({required bool compact}) async {
+        await tester.pumpWidget(
+          _host(ChromeTopBar(title: 'Silo', onBack: () {}, compact: compact)),
+        );
+        return tester.getRect(find.byKey(ChromeTopBar.titleKey)).left -
+            tester.getRect(find.byKey(ChromeTopBar.backKey)).right;
+      }
+
+      expect(await titleLeft(compact: false), ChromeTopBar.gap);
+      expect(await titleLeft(compact: true), ChromeTopBar.compactGap);
+    });
+
+    testWidgets('no overflow at 320 px with back, title, trailing and both '
+        'actions', (tester) async {
+      tester.view.physicalSize = const Size(320 - 24, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        _host(
+          ChromeTopBar(
+            title: 'A long episode title that has to ellipsize',
+            onBack: () {},
+            onScalingTap: () {},
+            castAction: const Icon(Icons.cast_rounded),
+            trailing: const SizedBox(width: 3 * 32 + 8, height: 32),
+            compact: true,
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('the actions pill is omitted with neither action', (
       tester,
     ) async {

@@ -35,6 +35,10 @@ class TouchTransport extends StatelessWidget {
   /// Optional externally-owned node for the play/pause button.
   final FocusNode? playPauseFocusNode;
 
+  /// Smaller discs set closer together, for a touch phone, where the band
+  /// between the bars is short.
+  final bool compact;
+
   const TouchTransport({
     super.key,
     required this.player,
@@ -44,6 +48,7 @@ class TouchTransport extends StatelessWidget {
     this.onNextEpisode,
     this.showEpisodeNav = false,
     this.playPauseFocusNode,
+    this.compact = false,
   });
 
   /// Play/pause disc diameter.
@@ -58,6 +63,15 @@ class TouchTransport extends StatelessWidget {
   /// Gap between discs.
   static const double gap = 28;
 
+  /// [playSize] when [compact].
+  static const double compactPlaySize = 56;
+
+  /// [seekSize] when [compact]. Still a 44 px touch target.
+  static const double compactSeekSize = 44;
+
+  /// [gap] when [compact].
+  static const double compactGap = 20;
+
   /// Fill of the play disc (white-ish at 0.95).
   static const Color playFill = Color(0xF2F0EFED);
 
@@ -65,6 +79,8 @@ class TouchTransport extends StatelessWidget {
   static const Color playGlyph = Color(0xFF0B0B0C);
 
   static const double _playIconSize = 36;
+
+  static const double _compactPlayIconSize = 30;
 
   /// Key of the spinner the play disc shows while buffering.
   static const Key bufferingKey = Key('touch-transport-buffering');
@@ -124,8 +140,8 @@ class TouchTransport extends StatelessWidget {
                 onActivate: toggle,
                 circular: true,
                 child: Container(
-                  width: playSize,
-                  height: playSize,
+                  width: compact ? compactPlaySize : playSize,
+                  height: compact ? compactPlaySize : playSize,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     color: playFill,
@@ -156,7 +172,9 @@ class TouchTransport extends StatelessWidget {
                             isPlaying
                                 ? Icons.pause_rounded
                                 : Icons.play_arrow_rounded,
-                            size: _playIconSize,
+                            size: compact
+                                ? _compactPlayIconSize
+                                : _playIconSize,
                             color: playGlyph,
                           ),
                   ),
@@ -174,6 +192,8 @@ class TouchTransport extends StatelessWidget {
     final l10n = context.l10n;
     final previous = showEpisodeNav ? onPreviousEpisode : null;
     final next = showEpisodeNav ? onNextEpisode : null;
+    final seekSize = compact ? compactSeekSize : TouchTransport.seekSize;
+    final spacer = SizedBox(width: compact ? compactGap : gap);
 
     return StreamBuilder<bool>(
       stream: player.stream.playing,
@@ -194,7 +214,7 @@ class TouchTransport extends StatelessWidget {
                 tooltip: l10n.videoPreviousEpisode,
                 onTap: previous,
               ),
-              const SizedBox(width: gap),
+              spacer,
             ],
             _disc(
               key: TransportSurface.back10Key,
@@ -206,9 +226,9 @@ class TouchTransport extends StatelessWidget {
               tooltip: l10n.videoRewind10,
               onTap: onBack10,
             ),
-            const SizedBox(width: gap),
+            spacer,
             _playPause(context, isPlaying),
-            const SizedBox(width: gap),
+            spacer,
             _disc(
               key: TransportSurface.forward10Key,
               memoryId: TransportSurface.forward10Key,
@@ -220,7 +240,7 @@ class TouchTransport extends StatelessWidget {
               onTap: onForward10,
             ),
             if (next != null) ...[
-              const SizedBox(width: gap),
+              spacer,
               _disc(
                 key: TransportSurface.nextEpisodeKey,
                 memoryId: TransportSurface.nextEpisodeKey,
