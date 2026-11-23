@@ -23,6 +23,8 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/home/home_scope.dart';
 import 'package:player/presentation/screens/home/home_screen.dart';
 import 'package:player/presentation/screens/sources/source_browse_providers.dart';
+import 'package:player/presentation/widgets/focus_emphasis.dart';
+import 'package:player/presentation/widgets/horizontal_rail.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
@@ -161,6 +163,23 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
 
       expectFocusIn(heroMore);
+    });
+
+    testWidgets('Continue Watching leaves tile room, not poster room', (
+      tester,
+    ) async {
+      await pumpHome(tester);
+      await focusIn(tester, cw(0));
+      // Library rows keep the poster class (source_poster_focus_tv_test).
+      FocusSize? sizeOf(Key row) => tester
+          .widget<HorizontalRail>(
+            find.descendant(
+              of: find.byKey(row),
+              matching: find.byType(HorizontalRail),
+            ),
+          )
+          .focusSize;
+      expect(sizeOf(continueWatching), FocusSize.tile);
     });
 
     testWidgets('a row entered for the first time lands on its first card', (

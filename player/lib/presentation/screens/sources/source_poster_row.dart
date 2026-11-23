@@ -23,6 +23,7 @@ class SourcePosterRow extends StatelessWidget {
     this.showHeading = true,
     this.itemWidth,
     this.height,
+    this.focusSize = FocusSize.poster,
   });
 
   /// Item width and rail height when the items are not posters. Default to
@@ -36,9 +37,15 @@ class SourcePosterRow extends StatelessWidget {
   static const posterWidth = 140.0;
   static const rowHeight = 250.0;
 
-  /// The size class of the posters this row holds, which its rail leaves
-  /// room for on the television tier (see `HorizontalRail.focusSize`).
-  static const focusSize = FocusSize.poster;
+  /// The size class of the items this row holds, which its rail leaves room
+  /// for on the television tier (see `HorizontalRail.focusSize`). Posters by
+  /// default; Continue Watching's landscape cards pass
+  /// [landscapeFocusSize].
+  final FocusSize? focusSize;
+
+  /// The size class of Continue Watching's landscape cards, shared with the
+  /// loading skeleton so both rails leave the same room.
+  static const landscapeFocusSize = FocusSize.tile;
 
   final String title;
 

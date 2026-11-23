@@ -64,6 +64,7 @@ class _HomeContinueWatchingRowState
       railId: 'continue',
       items: items,
       itemWidth: ContinueWatchingCard.artSize.width,
+      focusSize: SourcePosterRow.landscapeFocusSize,
       height: ContinueWatchingCard.heightFor(
         context,
         hasCaption: items.any(

@@ -7,6 +7,7 @@ import '../../../core/theme/palette.dart';
 import '../sources/continue_watching_card.dart';
 import '../sources/source_home_hero.dart';
 import '../sources/source_poster_row.dart';
+import '../../widgets/focus_emphasis.dart';
 import '../../widgets/horizontal_rail.dart';
 
 /// The home screen's loading state.
@@ -255,7 +256,7 @@ class _ShimmerRail extends StatelessWidget {
     // poster on the television tier; the skeleton leaves the same.
     final bleed = HorizontalRail.focusBleed(
       railHeight,
-      SourcePosterRow.focusSize,
+      landscape ? SourcePosterRow.landscapeFocusSize : FocusSize.poster,
     );
     final radius = landscape ? AppTheme.radiusCard : 8.0;
     // Overflow the viewport so the rail has no empty tail that fills in later.

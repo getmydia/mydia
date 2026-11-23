@@ -222,6 +222,45 @@ void main() {
       );
     });
 
+    testWidgets('a landscape row leaves tile room, not poster room', (
+      tester,
+    ) async {
+      _tvView(tester);
+      const height = 200.0;
+      await _pump(
+        tester,
+        ListView(
+          children: [
+            SourcePosterRow(
+              title: 'Shelf',
+              railId: 'shelf',
+              items: _items,
+              itemWidth: 280,
+              height: height,
+              focusSize: SourcePosterRow.landscapeFocusSize,
+            ),
+          ],
+        ),
+      );
+
+      final bleed = FocusEmphasis.bleed(height, FocusSize.tile).ceilToDouble();
+      expect(
+        tester
+            .getSize(
+              find.descendant(
+                of: find.byType(HorizontalRail),
+                matching: find.byType(Viewport),
+              ),
+            )
+            .height,
+        height + bleed * 2,
+      );
+      expect(
+        tester.widget<HorizontalRail>(find.byType(HorizontalRail)).focusSize,
+        FocusSize.tile,
+      );
+    });
+
     for (final (label, index) in [
       ('the first cell', 0),
       ('a middle cell', 6),
