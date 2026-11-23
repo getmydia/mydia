@@ -757,6 +757,16 @@ main thread deadlocks. With the threads apart, the main thread stays free for
 mpv. Flutter logs a deprecation warning for the key at startup; if a release
 removes it, the surface needs another answer before upgrading.
 
+The window has to work around the same choice. window_manager 0.7's
+nativeapi calls AppKit synchronously on whatever thread calls it, and from
+Dart's thread it cannot even find the window: `getCurrent()` returns nothing.
+So on macOS every window call and window event goes through
+`macos/Runner/WindowPlugin.swift` on `dev.mydia.player/window`, whose handlers
+run on the main thread (`lib/core/window/mac_window_channel.dart`,
+`nativeWindowController()`). Windows and Linux still use nativeapi. A new
+window operation needs a method there too; one that only goes through
+nativeapi silently does nothing on macOS.
+
 Two more rules follow from the same `DispatchQueue.main.sync`:
 
 - `MpvSurfacePlugin` never calls mpv on the main thread. Every write and read

@@ -17,6 +17,7 @@ import 'package:player/l10n/gen/app_localizations.dart';
 import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
+import 'package:player/core/player/player_exit_guard.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
@@ -452,6 +453,55 @@ void main() {
       isTrue,
       reason: 'the one-shot must be re-armed and applied for the new file',
     );
+  });
+
+  testWidgets('quitting the app disposes the playing player first', (
+    tester,
+  ) async {
+    // On quit the engine frees media_kit's mpv wakeup callback; a player
+    // still alive then crashes on mpv's core thread. The exit request must
+    // dispose it, which clears that callback, before the app exits.
+    final link = _link();
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+    expect(player.disposed, isFalse);
+
+    final exit = PlayerExitGuard.instance.onExitRequested();
+    await _pumpUntilSwitched(tester, () => player.disposed);
+
+    expect(player.disposed, isTrue);
+    expect(player.disposeCallCount, 1);
+    await tester.runAsync(() => exit);
+  });
+
+  testWidgets('quitting just after leaving the player waits for its dispose', (
+    tester,
+  ) async {
+    // Leaving the player starts a dispose that runs on after the screen is
+    // gone. A quit in that window must still wait for it.
+    final link = _link();
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+
+    final gate = player.disposeGate = Completer<void>();
+    await tester.pumpWidget(const SizedBox());
+    await _pumpUntilSwitched(tester, () => player.disposeStarted);
+
+    var answered = false;
+    final exit = PlayerExitGuard.instance.onExitRequested().then((r) {
+      answered = true;
+      return r;
+    });
+    await tester.runAsync(pumpEventQueue);
+    expect(answered, isFalse, reason: 'the dispose is still running');
+
+    gate.complete();
+    await tester.runAsync(() => exit);
+    expect(player.disposed, isTrue);
   });
 
   testWidgets('the old player is disposed when the file changes', (

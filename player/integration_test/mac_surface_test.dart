@@ -44,6 +44,7 @@ import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/playback/stats/stats_report.dart' show StatsRowId;
 import 'package:player/core/settings/stats_overlay_setting.dart';
 import 'package:player/core/update/update_provider.dart';
+import 'package:player/core/window/mac_window_channel.dart';
 import 'package:player/core/window/native_window_host.dart';
 import 'package:player/core/window/window_controller_native.dart';
 import 'package:player/core/window/window_fullscreen_controller.dart';
@@ -376,7 +377,7 @@ Future<Duration> _close(WidgetTester tester, _Rig rig) async {
 }
 
 /// The app's window, as `desktop_window_native.dart` drives it.
-const _window = WindowManagerController();
+final _window = nativeWindowController();
 
 /// Moves the window onto the built-in panel, the Mac's only EDR screen
 /// here. Returns that display's name, or null when there is none.
@@ -429,9 +430,15 @@ void main() {
     // follows `windowFullscreenSignal`, which only this listener updates:
     // without it the screen never learns it entered fullscreen, and the
     // second `f` asks to enter again instead of leaving.
-    final fullscreen = WindowFullscreenController(
-      window: const WindowManagerController(),
+    // On macOS the host only hears window events through `WindowPlugin`'s
+    // channel, attached here with the seeded state as the app attaches it.
+    final window = nativeWindowController();
+    NativeWindowHost.instance.attachMacChannel(
+      MacWindowChannel.instance,
+      fullScreen: await window.isFullScreen(),
+      maximized: await window.isMaximized(),
     );
+    final fullscreen = WindowFullscreenController(window: window);
     await fullscreen.seed();
     NativeWindowHost.instance.addListener(fullscreen);
   });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
@@ -141,6 +143,123 @@ void main() {
       windowSignal.value = true;
       // Should not have received the update after dispose
       expect(changes, [false]);
+    });
+
+    test('on macOS, toggle exits when the window is fullscreen even though '
+        'the signal missed the transition', () async {
+      final windowSignal = ValueNotifier<bool>(false);
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: windowSignal,
+        isWindows: false,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => true,
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(windowSignal.value);
+      await pumpEventQueue();
+
+      expect(nativeExitCalls, 1);
+      expect(nativeEnterCalls, 0);
+    });
+
+    test('toggle enters when the live window is not fullscreen', () async {
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: ValueNotifier<bool>(true),
+        isWindows: false,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => false,
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(true);
+      await pumpEventQueue();
+
+      expect(nativeEnterCalls, 1);
+      expect(nativeExitCalls, 0);
+    });
+
+    test('toggle falls back to the observed state when the window cannot be '
+        'read', () async {
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: ValueNotifier<bool>(true),
+        isWindows: false,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => throw StateError('no window'),
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(true);
+      await pumpEventQueue();
+
+      expect(nativeExitCalls, 1);
+      expect(nativeEnterCalls, 0);
+    });
+
+    test(
+      'a toggle whose window read lands after dispose does nothing',
+      () async {
+        final read = Completer<bool>();
+        var nativeCalls = 0;
+
+        final backend = NativeFullscreenBackend(
+          onChange: (_) {},
+          isDesktop: true,
+          windowSignal: ValueNotifier<bool>(false),
+          isWindows: false,
+          onEnterNative: () => nativeCalls++,
+          onExitNative: () => nativeCalls++,
+          readWindowFullscreen: () => read.future,
+        );
+
+        backend.toggle(false);
+        backend.dispose();
+        read.complete(true);
+        await pumpEventQueue();
+
+        expect(nativeCalls, 0);
+      },
+    );
+
+    test('on Windows, toggle goes by the observed state: nativeapi never '
+        'sees media_kit\'s fullscreen and always reads false', () async {
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: ValueNotifier<bool>(true),
+        isWindows: true,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => false,
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(true);
+      await pumpEventQueue();
+
+      expect(nativeExitCalls, 1);
+      expect(nativeEnterCalls, 0);
     });
 
     test('on native mobile there is no fullscreen route: the player is '

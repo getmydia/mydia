@@ -234,6 +234,9 @@ class _FakeBackend implements FullscreenBackend {
   void exit() => exitCalls++;
 
   @override
+  void toggle(bool observed) => observed ? exit() : enter();
+
+  @override
   void dispose() {
     disposed = true;
     _ready.dispose();

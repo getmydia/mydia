@@ -14,6 +14,9 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
   /// factory registration hold it only through their handlers.
   private var mpvSurface: MpvSurfacePlugin?
 
+  /// Window calls and events for Dart, on the main thread. See WindowPlugin.
+  private var windowPlugin: WindowPlugin?
+
   /// Height of the band the Flutter title row draws into.
   /// kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart.
   private let titleBandHeight: CGFloat = 40
@@ -89,6 +92,8 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
     nativeTabBar = NativeTabBarPlugin(
       messenger: flutterViewController.engine.binaryMessenger,
       split: split, sidebar: sidebar, window: self)
+    windowPlugin = WindowPlugin(
+      messenger: flutterViewController.engine.binaryMessenger, window: self)
     mpvSurface = MpvSurfacePlugin.register(
       with: flutterViewController.registrar(forPlugin: "MpvSurfacePlugin"), window: self)
 

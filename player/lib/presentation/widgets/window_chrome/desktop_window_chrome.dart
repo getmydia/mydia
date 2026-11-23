@@ -90,7 +90,7 @@ class DesktopWindowChrome extends StatelessWidget {
         return _WindowChrome(
           layout: _layout,
           frameState: _frameState,
-          controller: _controller ?? const WindowManagerController(),
+          controller: _controller ?? nativeWindowController(),
           buttonsHidden: _buttonsHidden ?? windowButtonsHidden,
           child: child,
         );

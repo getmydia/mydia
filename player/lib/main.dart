@@ -40,6 +40,7 @@ import 'core/platform/native_tab_bar_support.dart';
 import 'core/focus/focus_memory.dart';
 import 'core/player/input_capabilities.dart';
 import 'core/player/platform_features.dart';
+import 'core/player/player_exit_guard.dart';
 import 'core/player/subtitle_language_prefs.dart';
 import 'core/player/video_scaling.dart';
 import 'core/navigation/sidebar_layout_providers.dart';
@@ -108,6 +109,14 @@ void main() async {
     runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
+
+        // Disposes any playing player before the app quits; without it the
+        // engine frees media_kit's mpv callback first and mpv crashes on
+        // its own thread. See core/player/player_exit_guard.dart.
+        // Registers itself with the binding for the life of the app.
+        AppLifecycleListener(
+          onExitRequested: PlayerExitGuard.instance.onExitRequested,
+        );
 
         // Register the bundled Inter and Outfit fonts' licenses. Deliberately out here
         // rather than in `_startApp`: `addLicense` only stores the callback,
