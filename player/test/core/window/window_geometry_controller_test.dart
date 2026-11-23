@@ -213,7 +213,8 @@ void main() {
       addTearDown(controller.dispose);
 
       controller.onWindowResize();
-      await settle();
+      // The maximized save keeps the stored rect only if this one landed.
+      await settleUntilSaved(store);
 
       window.maximized = true;
       window.bounds = const Rect.fromLTWH(0, 25, 1920, 1055);
@@ -237,7 +238,8 @@ void main() {
       addTearDown(controller.dispose);
 
       controller.onWindowResize();
-      await settle();
+      // The maximized save keeps the stored rect only if this one landed.
+      await settleUntilSaved(store);
 
       window.maximized = true;
       window.bounds = const Rect.fromLTWH(0, 25, 1920, 1055);
