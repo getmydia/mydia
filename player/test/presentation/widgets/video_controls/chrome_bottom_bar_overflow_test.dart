@@ -54,44 +54,8 @@ Widget _bar(double width, {bool quality = true, bool alwaysOnTop = false}) {
   );
 }
 
-// 320px with the quality button is out of budget by construction, exactly as
-// it was for `ChromePanel`: four 32px buttons at zero gap (128px) plus the
-// pill's 8px inset need 136px of a 120px equal-flex slot
-// ((320 - 2 * 16 - 48) / 2). Without quality, three buttons (96px + 8px) fit.
-// If that changes, move 320 into the uniform loop with quality: true.
 void main() {
-  testWidgets('ChromeBottomBar at 320px (quality: false): no overflow', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 600);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(_bar(320, quality: false));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('ChromeBottomBar at 320px (quality: true): still overflows by '
-      'construction, see the note above main', (tester) async {
-    tester.view.physicalSize = const Size(320, 600);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(_bar(320));
-    await tester.pumpAndSettle();
-
-    final exception = tester.takeException();
-    expect(
-      exception,
-      isNotNull,
-      reason: 'if this no longer overflows, fold 320 into the loop below',
-    );
-    expect(exception.toString(), contains('RenderFlex'));
-  });
-
-  for (final width in <double>[599, 600, 899, 900, 1280, 1920]) {
+  for (final width in <double>[320, 599, 600, 899, 900, 1280, 1920]) {
     testWidgets('ChromeBottomBar at ${width}px: no RenderFlex overflow', (
       tester,
     ) async {
@@ -99,10 +63,12 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(_bar(width));
-      await tester.pumpAndSettle();
+      for (final quality in const [false, true]) {
+        await tester.pumpWidget(_bar(width, quality: quality));
+        await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
+        expect(tester.takeException(), isNull, reason: 'quality: $quality');
+      }
     });
   }
 

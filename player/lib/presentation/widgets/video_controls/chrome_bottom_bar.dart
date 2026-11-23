@@ -221,13 +221,21 @@ class ChromeBottomBar extends StatelessWidget {
                 Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: GlassSurface.osdPill(
-                      key: secondaryPillKey,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: _pillInset,
+                    // scaleDown is a no-op wherever the pill fits its slot
+                    // and only shrinks it where it cannot (320 px with all
+                    // four buttons), so equal-flex centring is never traded
+                    // for an overflow.
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: GlassSurface.osdPill(
+                        key: secondaryPillKey,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: _pillInset,
+                          ),
+                          child: secondary,
                         ),
-                        child: secondary,
                       ),
                     ),
                   ),

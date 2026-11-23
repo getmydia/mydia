@@ -114,7 +114,7 @@ void main() {
       }
     }
 
-    for (final width in <double>[400, 1280]) {
+    for (final width in <double>[320, 400, 1280]) {
       testWidgets('transport is centred on the bar at ${width}px, with and '
           'without volume', (tester) async {
         _setView(tester, width);
