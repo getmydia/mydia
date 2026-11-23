@@ -51,7 +51,7 @@ class PlaybackVideoSection extends ConsumerWidget {
     // instance fields.
     final current = settings;
     final quality = current == null
-        ? QualityRung.auto
+        ? null
         : QualityRung.fromStorageKey(current.defaultQuality) ??
               QualityRung.auto;
     final l10n = context.l10n;
@@ -63,8 +63,8 @@ class PlaybackVideoSection extends ConsumerWidget {
           key: const Key('default-quality-row'),
           title: l10n.settingsDefaultQualityTitle,
           subtitle: l10n.settingsDefaultQualitySubtitle,
-          value: l10n.qualityName(quality),
-          onTap: current == null
+          value: quality == null ? null : l10n.qualityName(quality),
+          onTap: quality == null
               ? null
               : () => _pickQuality(context, ref, quality),
         ),

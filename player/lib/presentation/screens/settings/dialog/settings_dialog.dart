@@ -279,7 +279,6 @@ class SettingsPane extends StatelessWidget {
     required this.title,
     this.description,
     this.actions = const [],
-    this.capWidth = true,
     required this.child,
   });
 
@@ -289,9 +288,6 @@ class SettingsPane extends StatelessWidget {
   final String? description;
   final List<Widget> actions;
 
-  /// Caps the content at 680 (600 plus the body padding). The connections hub
-  /// sets this false: it has its own cap and centering.
-  final bool capWidth;
   final Widget child;
 
   @override
@@ -369,17 +365,7 @@ class SettingsPane extends StatelessWidget {
                 ),
               ),
             ),
-          Expanded(
-            child: capWidth
-                ? Align(
-                    alignment: Alignment.topLeft,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 680),
-                      child: child,
-                    ),
-                  )
-                : child,
-          ),
+          Expanded(child: child),
         ],
       ),
     );

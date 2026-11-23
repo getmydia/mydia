@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../../core/theme/palette.dart';
 import '../../../../l10n/l10n.dart';
+import '../widgets/settings_avatar.dart';
 import 'settings_dialog.dart';
 
 /// The sidebar's width with labels. Compact mode is a 64px icon rail.
@@ -242,68 +243,57 @@ class _AccountCard extends StatelessWidget {
     final username = account.username;
     final host = _hostOf(account.serverUrl);
     final radius = BorderRadius.circular(12);
-    return Material(
-      key: const Key('settings-sidebar-account'),
-      color: palette.surfaceHigh,
-      borderRadius: radius,
-      child: InkWell(
+    return Semantics(
+      button: true,
+      child: Material(
+        key: const Key('settings-sidebar-account'),
+        color: palette.surfaceHigh,
         borderRadius: radius,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                SettingsAvatar(
+                  username: username,
+                  size: 34,
                   color: palette.surfaceBright,
                 ),
-                child: username.isEmpty
-                    ? Icon(Icons.person, size: 17, color: palette.textSecondary)
-                    : Text(
-                        username.substring(0, 1).toUpperCase(),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        username.isEmpty
+                            ? context.l10n.settingsIdentitySignedIn
+                            : username,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.w600,
                           color: palette.textPrimary,
                         ),
                       ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      username.isEmpty
-                          ? context.l10n.settingsIdentitySignedIn
-                          : username,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: palette.textPrimary,
-                      ),
-                    ),
-                    if (host.isNotEmpty)
-                      Text(
-                        host,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: palette.textSecondary,
+                      if (host.isNotEmpty)
+                        Text(
+                          host,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: palette.textSecondary,
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

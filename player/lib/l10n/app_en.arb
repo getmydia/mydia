@@ -112,17 +112,9 @@
   "@settingsAutoSkipTitle": {
     "description": "Switch that skips intros and end credits automatically during playback."
   },
-  "settingsAutoSkipSubtitle": "Off shows a skip button instead",
-  "@settingsAutoSkipSubtitle": {
-    "description": "Subtitle of the skip intros switch: when it is off, the player shows a button to skip instead."
-  },
   "settingsAutoSkipCommercialsTitle": "Skip commercials",
   "@settingsAutoSkipCommercialsTitle": {
     "description": "Switch that skips commercial breaks marked in a recording automatically during playback."
-  },
-  "settingsAutoSkipCommercialsSubtitle": "Off shows a skip button instead",
-  "@settingsAutoSkipCommercialsSubtitle": {
-    "description": "Subtitle of the skip commercials switch: when it is off, the player shows a button to skip instead."
   },
   "settingsStatsOverlayTitle": "Stats for nerds",
   "@settingsStatsOverlayTitle": {
@@ -237,10 +229,6 @@
   "settingsMaterialTitle": "Material",
   "@settingsMaterialTitle": {
     "description": "Heading above the Liquid Glass / Frosted picker in Appearance settings."
-  },
-  "settingsGlassMaterialSubtitle": "Glass controls and panels",
-  "@settingsGlassMaterialSubtitle": {
-    "description": "Subtitle of the Liquid Glass switch, which draws controls and panels as glass."
   },
   "settingsIdentitySignedIn": "Signed in",
   "@settingsIdentitySignedIn": {

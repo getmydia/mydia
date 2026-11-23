@@ -93,6 +93,17 @@ class _IdleRegistrations extends NodeRegistrations {
 
 var _boxCounter = 0;
 
+/// Whether the primary focus sits inside the widget [finder] matches.
+bool _hasFocusIn(Finder finder) {
+  final element = finder.evaluate().single;
+  var inside = false;
+  FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
+    inside = identical(e, element);
+    return !inside;
+  });
+  return inside;
+}
+
 void main() {
   group('Settings focus memory (requires MYDIA_FORCE_TV=true)', () {
     late TvShell shell;
@@ -222,6 +233,127 @@ void main() {
         indexOf(const Key('language-row')),
         greaterThan(indexOf(const Key('auto-skip-commercials-switch'))),
       );
+    });
+
+    /// The option [i] of the grid keyed [grid]; every grid numbers its options
+    /// `settings-choice-<i>`, so the grid scopes the lookup.
+    Finder choice(Key grid, int i) => find.descendant(
+      of: find.byKey(grid),
+      matching: find.byKey(Key('settings-choice-$i')),
+    );
+
+    void expectOnChoice(WidgetTester tester, Key grid, int i) {
+      final element = choice(grid, i).evaluate().single;
+      final focus = FocusManager.instance.primaryFocus;
+      var inside = false;
+      focus?.context?.visitAncestorElements((e) {
+        inside = identical(e, element);
+        return !inside;
+      });
+      expect(
+        inside,
+        isTrue,
+        reason: 'expected choice $i of $grid, focus is on ${describeFocus()}',
+      );
+    }
+
+    const themeGrid = Key('theme-preset-row');
+
+    testWidgets('D-pad walks from Skipping into the theme grid and on', (
+      tester,
+    ) async {
+      await pumpSettings(tester);
+      final cards = find
+          .descendant(
+            of: find.byKey(themeGrid),
+            matching: find.byWidgetPredicate(
+              (w) => w.key.toString().startsWith("[<'settings-choice-"),
+            ),
+          )
+          .evaluate()
+          .length;
+      expect(cards, greaterThan(1));
+
+      await focusIn(tester, const Key('auto-skip-commercials-switch'));
+
+      // Down from the last Skipping row enters the grid.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      final entry = [
+        for (var i = 0; i < cards; i++)
+          if (choice(themeGrid, i).evaluate().isNotEmpty &&
+              _hasFocusIn(choice(themeGrid, i)))
+            i,
+      ];
+      expect(entry, hasLength(1), reason: 'focus is on ${describeFocus()}');
+      final first = entry.single;
+
+      // Right walks the cards in order, and stops at the last.
+      for (var i = first + 1; i < cards; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+        expectOnChoice(tester, themeGrid, i);
+      }
+
+      // The Material grid is not offered on a television (Liquid Glass is
+      // not available there), so the next stop down is Language.
+      expect(find.byKey(const Key('glass-material-row')), findsNothing);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expectFocusIn(const Key('language-row'));
+
+      // And back up lands in the grid again.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      final back = [
+        for (var i = 0; i < cards; i++)
+          if (_hasFocusIn(choice(themeGrid, i))) i,
+      ];
+      expect(back, hasLength(1), reason: 'focus is on ${describeFocus()}');
+    });
+
+    testWidgets('focus order: quality < skipping < theme grid < language', (
+      tester,
+    ) async {
+      await pumpSettings(tester);
+      final items = find
+          .byType(FocusMemoryItem, skipOffstage: false)
+          .evaluate()
+          .map((e) => e.widget as FocusMemoryItem)
+          .toList();
+      int indexOf(Key key) => items
+          .firstWhere(
+            (i) => find
+                .descendant(
+                  of: find.byWidget(i, skipOffstage: false),
+                  matching: find.byKey(key, skipOffstage: false),
+                )
+                .evaluate()
+                .isNotEmpty,
+          )
+          .index;
+
+      final quality = indexOf(const Key('default-quality-row'));
+      final skipping = indexOf(const Key('auto-skip-segments-switch'));
+      final theme = indexOf(themeGrid);
+      final language = indexOf(const Key('language-row'));
+      expect(quality, lessThan(skipping));
+      expect(skipping, lessThan(theme));
+      expect(theme, lessThan(language));
+    });
+
+    testWidgets('re-entering the list lands on the first theme card', (
+      tester,
+    ) async {
+      await pumpSettings(tester);
+      await focusIn(tester, const Key('auto-skip-commercials-switch'));
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      // Walk off the entry card, so a restored card would not be card 0.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(_hasFocusIn(choice(themeGrid, 0)), isFalse);
+
+      await focusIn(tester, cast);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      // The whole grid is one FocusMemoryItem, so memory restores the item,
+      // not the card inside it, and the traversal enters on its first card.
+      expectOnChoice(tester, themeGrid, 0);
     });
 
     testWidgets('the list is re-entered on the row that left it', (

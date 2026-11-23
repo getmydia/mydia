@@ -16,8 +16,7 @@ class SettingsRow extends StatelessWidget {
   final String title;
   final String? subtitle;
 
-  /// Muted trailing text on `.navigation`; the select button's text on
-  /// `.select`.
+  /// The select button's text on `.select`. Null draws no button.
   final String? valueLabel;
 
   /// Colour of a small status dot drawn before the subtitle. `.navigation`
@@ -39,18 +38,16 @@ class SettingsRow extends StatelessWidget {
 
   /// A row that opens another screen.
   ///
-  /// A null [onTap] dims the row. That is how the quality row reads while
-  /// preferences are unavailable.
+  /// A null [onTap] dims the row.
   const SettingsRow.navigation({
     super.key,
     required this.title,
     this.subtitle,
-    String? value,
     this.subtitleDotColor,
     required this.onTap,
     this.autofocus = false,
   }) : _kind = _RowKind.navigation,
-       valueLabel = value,
+       valueLabel = null,
        trailing = null,
        danger = false,
        toggleValue = false,
@@ -102,7 +99,7 @@ class SettingsRow extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
-    required String value,
+    required String? value,
     required this.onTap,
   }) : _kind = _RowKind.select,
        valueLabel = value,
@@ -150,11 +147,7 @@ class SettingsRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (valueLabel != null && _kind == _RowKind.navigation) ...[
-              const SizedBox(width: 12),
-              _ValueText(valueLabel!),
-            ],
-            if (_kind == _RowKind.select) ...[
+            if (_kind == _RowKind.select && valueLabel != null) ...[
               const SizedBox(width: 12),
               // The row is the focus target; the button is only a look.
               ExcludeFocus(child: _SelectValue(valueLabel!)),
@@ -260,20 +253,6 @@ class _SelectValue extends StatelessWidget {
           Icon(Icons.expand_more, size: 16, color: palette.textSecondary),
         ],
       ),
-    );
-  }
-}
-
-class _ValueText extends StatelessWidget {
-  const _ValueText(this.value);
-
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      value,
-      style: TextStyle(fontSize: 13.5, color: context.palette.textSecondary),
     );
   }
 }

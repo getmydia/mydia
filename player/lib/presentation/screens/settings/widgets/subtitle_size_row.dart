@@ -17,7 +17,7 @@ class SubtitleSizeSettingsRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final size =
         ref.watch(subtitleSizeSettingProvider).value ?? SubtitleSize.medium;
-    return SettingsRow.navigation(
+    return SettingsRow.select(
       key: const Key('subtitle-size-row'),
       title: context.l10n.settingsSubtitleSizeTitle,
       subtitle: context.l10n.settingsSubtitleSizeSubtitle,

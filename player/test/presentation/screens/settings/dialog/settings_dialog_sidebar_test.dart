@@ -178,6 +178,37 @@ void main() {
     expect(selections, [SettingsCategory.connections]);
   });
 
+  testWidgets('account card exposes button semantics', (tester) async {
+    await _pump(tester);
+    final card = find.byKey(const Key('settings-sidebar-account'));
+    expect(
+      find.ancestor(
+        of: card,
+        matching: find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.button == true,
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('account card avatar keeps a whole emoji grapheme', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      account: const SettingsSidebarAccount(
+        username: '\u{1F600}smile',
+        serverUrl: 'https://media.example.test',
+      ),
+    );
+    final card = find.byKey(const Key('settings-sidebar-account'));
+    expect(
+      find.descendant(of: card, matching: find.text('\u{1F600}')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('no account, no card', (tester) async {
     await _pump(tester, account: null);
     expect(find.byKey(const Key('settings-sidebar-account')), findsNothing);

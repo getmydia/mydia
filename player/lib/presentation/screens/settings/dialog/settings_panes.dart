@@ -151,8 +151,6 @@ class _ConnectionsPageState extends State<_ConnectionsPage> {
   @override
   Widget build(BuildContext context) => SettingsPane(
     title: null,
-    // The hub keeps its own width cap and centering.
-    capWidth: false,
     child: ConnectionsHubBody(
       padding: _bodyPadding,
       initialSection: _section,

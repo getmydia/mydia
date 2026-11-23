@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../core/theme/depth_tokens.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../../l10n/l10n.dart';
+import 'settings_avatar.dart';
 
 /// Who you are and which server you are on.
 ///
@@ -34,7 +35,15 @@ class SettingsIdentity extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 22),
       child: Row(
         children: [
-          _Avatar(username: username),
+          SettingsAvatar(
+            username: username,
+            size: 38,
+            color: Colors.white.withValues(alpha: 0.06),
+            border: Border.all(
+              color: DepthTokens.rimColor,
+              width: DepthTokens.rimWidth,
+            ),
+          ),
           const SizedBox(width: 13),
           Expanded(
             child: Column(
@@ -69,45 +78,6 @@ class SettingsIdentity extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// The initial on a flat disc.
-///
-/// Neutral rather than gold: `colors.dart` reserves the primary hue for main
-/// actions, selected items, and links, and keeps chrome neutral so poster art
-/// carries the colour. An avatar initial is none of those three.
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.username});
-
-  final String username;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    return Container(
-      width: 38,
-      height: 38,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(
-          color: DepthTokens.rimColor,
-          width: DepthTokens.rimWidth,
-        ),
-      ),
-      child: username.isEmpty
-          ? Icon(Icons.person, size: 18, color: palette.textSecondary)
-          : Text(
-              username.substring(0, 1).toUpperCase(),
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: palette.textPrimary,
-              ),
-            ),
     );
   }
 }

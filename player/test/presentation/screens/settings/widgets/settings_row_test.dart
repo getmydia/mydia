@@ -27,15 +27,12 @@ FocusNode _node(WidgetTester tester, String title) {
 void main() {
   _focusTests();
   group('SettingsRow.navigation', () {
-    testWidgets('shows its title, subtitle, and trailing value', (
-      tester,
-    ) async {
+    testWidgets('shows its title, subtitle, and chevron', (tester) async {
       await _pump(
         tester,
         SettingsRow.navigation(
           title: 'Default quality',
           subtitle: 'Used when a title has no saved preference',
-          value: '1080p',
           onTap: () {},
         ),
       );
@@ -45,7 +42,6 @@ void main() {
         find.text('Used when a title has no saved preference'),
         findsOneWidget,
       );
-      expect(find.text('1080p'), findsOneWidget);
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     });
 
@@ -181,6 +177,19 @@ void main() {
   });
 
   group('SettingsRow.select', () {
+    testWidgets('a null value draws no value button', (tester) async {
+      await _pump(
+        tester,
+        const SettingsRow.select(
+          title: 'Default quality',
+          value: null,
+          onTap: null,
+        ),
+      );
+      expect(find.byKey(const Key('settings-row-select-value')), findsNothing);
+      expect(find.byIcon(Icons.expand_more), findsNothing);
+    });
+
     testWidgets('shows value and chevron-down', (tester) async {
       await _pump(
         tester,
