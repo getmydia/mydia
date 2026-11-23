@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -76,9 +78,15 @@ class GlassButton extends StatelessWidget {
       );
       // The visual is 40 high; touch keeps a 48 high target, and a tap in
       // the margin above or below fires the press too.
-      final target = ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: _frostedHitTarget),
-        child: Center(widthFactor: 1, heightFactor: 1, child: visual),
+      // Padding rather than a centring wrapper: it passes the parent's width
+      // constraints through, so a button under a tight width still fills it.
+      final margin = math.max(
+        0.0,
+        (_frostedHitTarget - (height ?? AppTheme.secondaryButtonHeight)) / 2,
+      );
+      final target = Padding(
+        padding: EdgeInsets.symmetric(vertical: margin),
+        child: visual,
       );
       if (onPressed == null) return target;
       return GestureDetector(

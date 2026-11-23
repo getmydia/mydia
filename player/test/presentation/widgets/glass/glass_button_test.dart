@@ -150,6 +150,27 @@ void main() {
     expect(taps, 1);
   });
 
+  testWidgets('Frosted fills a tight width', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: _theme(liquid: false),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: double.infinity,
+              child: GlassButton(label: 'x', onPressed: () {}),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(OutlinedButton)).width,
+      tester.getSize(find.byType(Scaffold)).width,
+    );
+  });
+
   testWidgets('Frosted: an explicit height wins', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
