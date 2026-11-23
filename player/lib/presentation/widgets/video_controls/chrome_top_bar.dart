@@ -23,16 +23,18 @@ String scalingTooltip(AppLocalizations l10n, VideoScaling scaling) =>
 /// A 36px-tall pill in the unblurred OSD pill material
 /// ([GlassSurface.osdPill]).
 ///
-/// Each piece of top chrome carries its own surface, which is what makes a
-/// full-width scrim unnecessary. Text and icons carry no shadow: the OSD fill
-/// holds their contrast on its own (`osd_legibility_test.dart`).
+/// Used for the back pill and the corner overlays. The top bar sits on
+/// `ChromeScrim`'s top band, whose plateau is the same OSD fill, so the bare
+/// title beside the pills stays legible over bright video. Text and icons
+/// carry no shadow: the OSD fill holds their contrast on its own
+/// (`osd_legibility_test.dart`).
 class GlassPill extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
 
   /// Pill height. Defaults to [defaultHeight]; `UpNextPrompt` passes 44 at the
-  /// touch tier so its two hit targets clear the 44px floor. The three
-  /// top-bar pills take the default and are unchanged.
+  /// touch tier so its two hit targets clear the 44px floor. The top bar's
+  /// back pill takes the default.
   final double height;
 
   const GlassPill({
@@ -42,7 +44,8 @@ class GlassPill extends StatelessWidget {
     this.height = defaultHeight,
   });
 
-  /// Default pill height. Matched across all three top-bar pills.
+  /// Default pill height, shared by the back pill and the top bar's actions
+  /// pill.
   static const double defaultHeight = 36.0;
 
   @override
@@ -88,12 +91,14 @@ class GlassPill extends StatelessWidget {
   }
 }
 
-/// The playback screen's top chrome: back, title, scaling and cast pills.
+/// The playback screen's top chrome: a back pill, the bare left-aligned
+/// title, and one actions pill holding the scaling and cast controls.
 ///
 /// Replaces the former left-aligned chevron-and-title row that lived in
 /// `player_screen.dart`, so all playback chrome is owned by one widget.
 class ChromeTopBar extends StatelessWidget {
-  /// Media title. When null the title pill is omitted.
+  /// Media title. When null no title text renders and the actions pill
+  /// stays at the end of the row.
   final String? title;
 
   /// Back action. When null the back pill is inert but still rendered.

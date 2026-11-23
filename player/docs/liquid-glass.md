@@ -15,7 +15,7 @@ and volume shading inside, and blooms a press glow under the pointer. Glass
 casts the profile's drop shadow for depth.
 It is tuned to the iOS 27 look. With the setting off, the app keeps the
 frosted `GlassSurface` recipes and Material controls, and the playback OSD
-(`GlassSurface.osd`) never uses Liquid Glass.
+(`GlassSurface.osd` and `GlassSurface.osdPill`) never uses Liquid Glass.
 
 | Piece | File |
 | --- | --- |
