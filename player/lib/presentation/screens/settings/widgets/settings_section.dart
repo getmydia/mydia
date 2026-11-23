@@ -70,7 +70,9 @@ class SettingsCard extends StatelessWidget {
 /// would make screen readers spell or shout it, and would break `find.text`
 /// against the label a caller actually passed.
 class SettingsSection extends StatelessWidget {
-  final String label;
+  /// The header above the card. Null when the page already names the section;
+  /// focus ids then use an empty label.
+  final String? label;
   final List<Widget> children;
 
   /// A short explanation shown under the card.
@@ -96,7 +98,7 @@ class SettingsSection extends StatelessWidget {
                 // The label and the row's own key where it has one: a row
                 // shown conditionally then does not shift its neighbours'
                 // ids. The position stands in only for unkeyed rows.
-                id: (label, row.key ?? i),
+                id: (label ?? '', row.key ?? i),
                 index: order * SettingsFocusOrder.rowsPerSection + i,
                 child: row,
               ),
@@ -104,17 +106,18 @@ class SettingsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.palette.textPrimary.withValues(alpha: 0.8),
+        if (label case final label?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.palette.textPrimary.withValues(alpha: 0.8),
+              ),
             ),
           ),
-        ),
         SettingsCard(children: rows),
         if (footer case final footer?)
           Padding(

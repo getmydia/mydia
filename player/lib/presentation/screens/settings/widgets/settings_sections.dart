@@ -388,19 +388,22 @@ class VersionFooter extends StatelessWidget {
   }
 }
 
-/// Device-level look: the language, the theme preset and the glass material.
+/// Device-level look: the theme preset, the glass material and the language.
+/// [showLabel] is false where a pane title already says "Appearance".
 class AppearanceSettingsSection extends StatelessWidget {
-  const AppearanceSettingsSection({super.key});
+  const AppearanceSettingsSection({super.key, this.showLabel = true});
+
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) => SettingsSection(
-    label: context.l10n.settingsAppearanceSection,
+    label: showLabel ? context.l10n.settingsAppearanceSection : null,
     children: [
-      const LanguageSettingsRow(),
       const ThemePresetSettingsRow(),
       // Conditional here so a TV does not get a divider above nothing.
       if (GlassMaterial.liquid.isAvailableOn(defaultTargetPlatform))
         const GlassMaterialSettingsRow(),
+      const LanguageSettingsRow(),
     ],
   );
 }

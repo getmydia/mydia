@@ -230,17 +230,17 @@ void main() {
       await pumpSettings(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
       // One more press than rows: the backup switch is not a ringed row.
-      for (var i = 0; i < 7; i++) {
+      for (var i = 0; i < 5; i++) {
         await press(tester, LogicalKeyboardKey.arrowDown);
       }
-      expectOnRow(tester, 6);
+      expectOnRow(tester, 4);
       // However focus reaches the cast button from here, coming back down
-      // returns to row 6, not the row nearest the button.
+      // returns to row 4, not the row nearest the button.
       await focusIn(tester, cast);
 
       await press(tester, LogicalKeyboardKey.arrowDown);
 
-      expectOnRow(tester, 6);
+      expectOnRow(tester, 4);
     });
 
     testWidgets('LEFT from a row reaches the rail, RIGHT returns', (

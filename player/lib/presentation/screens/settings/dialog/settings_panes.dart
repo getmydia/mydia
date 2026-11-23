@@ -36,7 +36,7 @@ Widget settingsRootPage(SettingsCategory category) => switch (category) {
     category: SettingsCategory.appearance,
     child: ListView(
       padding: _bodyPadding,
-      children: const [AppearanceSettingsSection()],
+      children: const [AppearanceSettingsSection(showLabel: false)],
     ),
   ),
   SettingsCategory.diagnostics => const _CategoryPane(
@@ -151,6 +151,8 @@ class _ConnectionsPageState extends State<_ConnectionsPage> {
   @override
   Widget build(BuildContext context) => SettingsPane(
     title: null,
+    // The hub keeps its own width cap and centering.
+    capWidth: false,
     child: ConnectionsHubBody(
       padding: _bodyPadding,
       initialSection: _section,

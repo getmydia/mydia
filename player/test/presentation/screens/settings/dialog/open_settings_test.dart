@@ -233,6 +233,18 @@ void main() {
     await open(tester);
     expect(find.byKey(const Key('theme-preset-row')), findsOneWidget);
     expect(find.byKey(const Key('language-row')), findsOneWidget);
+    // The pane title names it; the section adds no second header.
+    expect(
+      find.descendant(
+        of: find.byType(SettingsPane),
+        matching: find.text('Appearance'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('theme-preset-row'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('language-row'))).dy),
+    );
   });
 
   testWidgets('off desktop, appearance routes to /settings', (tester) async {
