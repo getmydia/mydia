@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/controls/press_scale.dart';
+import 'package:player/presentation/widgets/focus_emphasis.dart';
 import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_interaction.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -102,7 +104,47 @@ void main() {
     expect(find.byType(OutlinedButton), findsOneWidget);
     await tester.tap(find.byKey(_key));
     expect(taps, 1);
-    expect(tester.getSize(find.byType(OutlinedButton)).height, 48);
+    expect(tester.getSize(find.byType(OutlinedButton)).height, 40);
+  });
+
+  testWidgets('Frosted is a 40pt hairline button in a press-scaled emphasis', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(() {}, liquid: false));
+    final button = tester.widget<OutlinedButton>(find.byType(OutlinedButton));
+    final style = button.style!;
+    expect(style.side!.resolve({})!.color, const Color(0x24FFFFFF));
+    expect(
+      style.side!.resolve({WidgetState.focused})!.color,
+      const Color(0x24FFFFFF),
+    );
+    final emphasis = tester.widget<FocusEmphasis>(find.byType(FocusEmphasis));
+    expect(emphasis.size, FocusSize.control);
+    expect(emphasis.borderRadius, BorderRadius.circular(10));
+    expect(
+      find.descendant(
+        of: find.byType(FocusEmphasis),
+        matching: find.byType(PressScale),
+      ),
+      findsOneWidget,
+    );
+    final ctx = tester.element(find.byType(OutlinedButton));
+    final theme = Theme.of(ctx).outlinedButtonTheme.style!;
+    expect(theme.backgroundColor!.resolve({}), const Color(0x12FFFFFF));
+    final shape = theme.shape!.resolve({}) as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.circular(10));
+  });
+
+  testWidgets('Frosted: an explicit height wins', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: _theme(liquid: false),
+        home: Center(
+          child: GlassButton(label: 'x', onPressed: () {}, height: 52),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byType(OutlinedButton)).height, 52);
   });
 
   testWidgets('a null onPressed disables the glass press', (tester) async {

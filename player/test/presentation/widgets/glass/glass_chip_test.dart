@@ -137,7 +137,7 @@ void main() {
     );
   });
 
-  testWidgets('Frosted chip keeps its Material height', (tester) async {
+  testWidgets('Frosted chip is a 30pt outlined chip, no gold', (tester) async {
     await tester.pumpWidget(
       _host(
         GlassChip(
@@ -148,7 +148,38 @@ void main() {
         liquid: false,
       ),
     );
-    expect(tester.getSize(find.byType(ChoiceChip)).height, 48);
+    expect(tester.getSize(find.byType(ChoiceChip)).height, 30);
+    final chip = tester.widget<ChoiceChip>(find.byType(ChoiceChip));
+    final shape = chip.shape! as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.circular(8));
+    expect(shape.side.color, const Color(0x24FFFFFF));
+    final ctx = tester.element(find.byType(ChoiceChip));
+    expect(chip.labelStyle!.fontSize, 12.5);
+    expect(chip.labelStyle!.fontWeight, FontWeight.w500);
+    expect(chip.labelStyle!.color, ctx.palette.textPrimary);
+    expect(chip.selectedColor, Colors.white);
+    expect(chip.backgroundColor, isNot(ctx.palette.primary));
+  });
+
+  testWidgets('Frosted selected chip is white with a dark label', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(
+        GlassChip(
+          label: const Text('Sort A'),
+          selected: true,
+          multiSelect: true,
+          onSelected: (_) {},
+        ),
+        liquid: false,
+      ),
+    );
+    final chip = tester.widget<FilterChip>(find.byType(FilterChip));
+    final ctx = tester.element(find.byType(FilterChip));
+    expect(chip.selectedColor, Colors.white);
+    expect(chip.labelStyle!.color, ctx.palette.background);
+    expect(tester.getSize(find.byType(FilterChip)).height, 30);
   });
 
   testWidgets('Liquid Glass: a glass capsule that toggles', (tester) async {

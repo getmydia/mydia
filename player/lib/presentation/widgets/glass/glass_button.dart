@@ -4,6 +4,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
+import '../../../core/theme/surface_roles.dart';
+import '../controls/press_scale.dart';
 import '../focus_emphasis.dart';
 import '../glass_surface.dart';
 import 'glass_hit_target.dart';
@@ -28,8 +30,8 @@ class GlassButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final IconData? icon;
 
-  /// The control's height. Unset, it is 48 off Liquid Glass and the kit's
-  /// 34 pt Medium button on it; an explicit value wins on both.
+  /// The control's height. Unset, it is the Frosted secondary button's 40 and
+  /// the kit's 34 pt Medium button on Liquid Glass; an explicit value wins on both.
   final double? height;
 
   /// Keys the tappable widget on both paths.
@@ -38,17 +40,18 @@ class GlassButton extends StatelessWidget {
   /// Shares the enclosing `BackdropGroup`'s blur pass (glass path only).
   final bool grouped;
 
-  static const double _frostedHeight = 48;
-
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
     if (!GlassStyle.of(context)) {
+      final roles = context.surfaceRoles;
       final style = OutlinedButton.styleFrom(
-        minimumSize: Size(0, height ?? _frostedHeight),
-        // FocusEmphasis below draws the television focus ring; the theme's
-        // focus border would sit inside it as a second one.
-        side: BorderSide.none,
+        minimumSize: Size(0, height ?? AppTheme.secondaryButtonHeight),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        // The hairline holds in every state: FocusEmphasis below draws the
+        // television focus ring, and the theme's focus border would sit
+        // inside it as a second one.
+        side: BorderSide(color: roles.hairlineStrong),
       );
       final button = icon == null
           ? OutlinedButton(
@@ -65,10 +68,9 @@ class GlassButton extends StatelessWidget {
               label: Text(label),
             );
       return FocusEmphasis(
-        borderRadius: const BorderRadius.all(
-          Radius.circular(AppTheme.radiusButton),
-        ),
-        child: button,
+        size: FocusSize.control,
+        borderRadius: BorderRadius.circular(roles.radiusControl),
+        child: PressScale(enabled: onPressed != null, child: button),
       );
     }
     final glassHeight = height ?? LiquidGeometry.buttonMedium;

@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
+import '../../../core/theme/surface_roles.dart';
 import '../glass_surface.dart';
 import 'glass_hit_target.dart';
 import 'glass_interaction.dart';
@@ -38,19 +39,41 @@ class GlassChip extends StatelessWidget {
   final Key? chipKey;
 
   static const double _height = LiquidGeometry.buttonMedium;
+  static const double _frostedHeight = 30;
+  static const double _frostedRadius = 8;
 
   @override
   Widget build(BuildContext context) {
     final onSelected = this.onSelected;
     final avatar = this.avatar;
     if (!GlassStyle.of(context)) {
-      return multiSelect
+      final palette = context.palette;
+      final foreground = selected ? palette.background : palette.textPrimary;
+      final shape = RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_frostedRadius),
+        side: BorderSide(color: context.surfaceRoles.hairlineStrong),
+      );
+      final labelStyle = TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w500,
+        color: foreground,
+      );
+      final chip = multiSelect
           ? FilterChip(
               key: chipKey,
               avatar: avatar,
               label: label,
               selected: selected,
               onSelected: onSelected,
+              showCheckmark: false,
+              shape: shape,
+              side: BorderSide.none,
+              backgroundColor: Colors.transparent,
+              selectedColor: Colors.white,
+              labelStyle: labelStyle,
+              iconTheme: IconThemeData(color: foreground),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             )
           : ChoiceChip(
               key: chipKey,
@@ -58,7 +81,17 @@ class GlassChip extends StatelessWidget {
               label: label,
               selected: selected,
               onSelected: onSelected,
+              showCheckmark: false,
+              shape: shape,
+              side: BorderSide.none,
+              backgroundColor: Colors.transparent,
+              selectedColor: Colors.white,
+              labelStyle: labelStyle,
+              iconTheme: IconThemeData(color: foreground),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             );
+      return SizedBox(height: _frostedHeight, child: chip);
     }
     final palette = context.palette;
     final foreground = selected ? palette.background : palette.textPrimary;
