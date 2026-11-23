@@ -150,6 +150,19 @@ void main() {
     }
   }
 
+  /// [settleUntilSaved] for a save that replaces an earlier one: polls until
+  /// [done] holds for what is stored, giving up after about two seconds.
+  Future<void> settleUntil(
+    InMemoryWindowGeometryStore store,
+    bool Function(WindowGeometry stored) done,
+  ) async {
+    for (var i = 0; i < 50; i++) {
+      final stored = store.get();
+      if (stored != null && done(stored)) return;
+      await settle();
+    }
+  }
+
   group('tracking', () {
     test('coalesces a burst of resize events into one save', () async {
       final window = FakeWindowController(
@@ -249,7 +262,7 @@ void main() {
       window.maximized = false;
       window.bounds = const Rect.fromLTWH(100, 100, 900, 600);
       controller.onWindowUnmaximize();
-      await settle();
+      await settleUntil(store, (stored) => !stored.maximized);
 
       expect(store.get()!.maximized, isFalse);
       expect(store.get()!.bounds, const Rect.fromLTWH(100, 100, 900, 600));

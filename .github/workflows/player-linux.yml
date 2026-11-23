@@ -52,6 +52,8 @@ jobs:
             ninja-build \
             pkg-config \
             libgtk-3-dev \
+            libx11-dev \
+            libxi-dev \
             liblzma-dev \
             libsecret-1-dev \
             libmpv-dev

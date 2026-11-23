@@ -1,5 +1,5 @@
-/// Native desktop window management, backed by `window_manager` and
-/// `screen_retriever`.
+/// Native desktop window management, backed by window_manager's and
+/// screen_retriever's native API (nativeapi), through [NativeWindowHost].
 ///
 /// `dart.library.io` is also true on iOS and Android, so every entry point
 /// here gates on [PlatformFeatures.isDesktop] as well.
@@ -10,18 +10,10 @@
 /// [startWindowDrag] runs from a pointer handler where an exception would
 /// surface as a red screen mid-playback.
 ///
-/// A genuinely synchronous throw is possible one step before any plugin call,
-/// evaluating the `windowManager` getter: it lazily constructs a
-/// `WindowManager._()` singleton that calls `setMethodCallHandler` before a
-/// Flutter binding may exist, which is an assertion failure rather than a
-/// `MissingPluginException`. In the running app this never fires, but
-/// `desktop_window_test.dart` calls these entry points from bare `test()`s
-/// with no binding, so every access hits it. That is what the outer `try`
-/// blocks are for.
+/// nativeapi's calls are synchronous FFI calls, and every one can throw: when
+/// the native library is not loaded, or before a window can be found. That is
+/// what the `try` blocks are for.
 library;
-
-import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 // Re-exports hive_ce, so this one import covers both Hive and Box.
@@ -31,6 +23,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../player/platform_features.dart';
 import '../storage/app_hive.dart';
+import 'native_window_host.dart';
 import 'player_window_session.dart';
 import 'player_window_sizer.dart';
 import 'player_window_sizer_native.dart';
@@ -54,18 +47,19 @@ PlayerWindowSession? _playerSession;
 Future<void> initDesktopWindow() async {
   if (!PlatformFeatures.isDesktop) return;
 
+  final host = NativeWindowHost.instance;
   try {
-    await windowManager.ensureInitialized();
+    host.requireWindow();
   } catch (e) {
-    debugPrint('[DesktopWindow] Failed to initialize window manager: $e');
-    // Without the plugin there is no window to restore or track. Dragging is
+    debugPrint('[DesktopWindow] Failed to find the native window: $e');
+    // Without a window there is nothing to restore or track. Dragging is
     // separately guarded, so there is nothing further to do here.
     return;
   }
 
   if (defaultTargetPlatform == TargetPlatform.windows) {
     try {
-      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+      host.requireWindow().titleBarStyle = TitleBarStyle.hidden;
     } catch (e) {
       debugPrint('[DesktopWindow] Failed to set title bar style: $e');
     }
@@ -81,7 +75,7 @@ Future<void> initDesktopWindow() async {
   await controller.restore();
 
   try {
-    windowManager.addListener(controller);
+    host.addListener(controller);
     _geometry = controller;
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to track window geometry: $e');
@@ -95,7 +89,7 @@ Future<void> initDesktopWindow() async {
   try {
     // Without the listener a fullscreen exit is only noticed by the
     // session's timeout, which still ends it, just later.
-    windowManager.addListener(session);
+    host.addListener(session);
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to watch fullscreen exit: $e');
   }
@@ -108,7 +102,7 @@ Future<void> initDesktopWindow() async {
       window: const WindowManagerController(),
     );
     await fullscreen.seed();
-    windowManager.addListener(fullscreen);
+    host.addListener(fullscreen);
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to track fullscreen state: $e');
   }
@@ -122,7 +116,7 @@ Future<void> initDesktopWindow() async {
       window: const WindowManagerController(),
     );
     await maximized.seed();
-    windowManager.addListener(maximized);
+    host.addListener(maximized);
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to track maximized state: $e');
   }
@@ -130,34 +124,25 @@ Future<void> initDesktopWindow() async {
 
 /// Reads the current displays as work areas.
 ///
-/// `visiblePosition` and `visibleSize` are the screen minus menu bars, docks
-/// and taskbars. A display reporting either as null is skipped rather than
-/// guessed at — a wrong rect here puts the window somewhere unreachable.
+/// `workArea` is the screen minus menu bars, docks and taskbars. A display
+/// reporting an empty one is skipped rather than guessed at — a wrong rect
+/// here puts the window somewhere unreachable.
 Future<List<WorkArea>> _readWorkAreas() async {
   try {
-    final displays = await screenRetriever.getAllDisplays();
-    final primary = await screenRetriever.getPrimaryDisplay();
-
-    final areas = <WorkArea>[];
-    for (final display in displays) {
-      final position = display.visiblePosition;
-      final size = display.visibleSize;
-      if (position == null || size == null) continue;
-      if (size.width <= 0 || size.height <= 0) continue;
-
-      areas.add(
-        WorkArea(
-          bounds: Rect.fromLTWH(
-            position.dx,
-            position.dy,
-            size.width,
-            size.height,
-          ),
-          isPrimary: display.id == primary.id,
-        ),
-      );
+    final displays = DisplayManager.instance.getAll();
+    try {
+      final areas = <WorkArea>[];
+      for (final display in displays) {
+        final bounds = display.workArea.toRect();
+        if (bounds.width <= 0 || bounds.height <= 0) continue;
+        areas.add(WorkArea(bounds: bounds, isPrimary: display.isPrimary));
+      }
+      return areas;
+    } finally {
+      for (final display in displays) {
+        display.dispose();
+      }
     }
-    return areas;
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to read displays: $e');
     return const [];
@@ -183,12 +168,7 @@ Future<WindowGeometryStore> _openStore() async {
 void startWindowDrag() {
   if (!PlatformFeatures.isDesktop) return;
   try {
-    unawaited(
-      windowManager.startDragging().catchError(
-        (Object e) =>
-            debugPrint('[DesktopWindow] Failed to start window drag: $e'),
-      ),
-    );
+    NativeWindowHost.instance.requireWindow().startDragging();
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to start window drag: $e');
   }
@@ -202,14 +182,7 @@ void startWindowDrag() {
 void setWindowAlwaysOnTop(bool value) {
   if (!PlatformFeatures.isDesktop) return;
   try {
-    unawaited(
-      windowManager
-          .setAlwaysOnTop(value)
-          .catchError(
-            (Object e) =>
-                debugPrint('[DesktopWindow] Failed to set always-on-top: $e'),
-          ),
-    );
+    NativeWindowHost.instance.requireWindow().isAlwaysOnTop = value;
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to set always-on-top: $e');
   }
@@ -220,8 +193,9 @@ void setWindowAlwaysOnTop(bool value) {
 Future<void> raiseDesktopWindow() async {
   if (!PlatformFeatures.isDesktop) return;
   try {
-    await windowManager.show();
-    await windowManager.focus();
+    NativeWindowHost.instance.requireWindow()
+      ..show()
+      ..focus();
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to raise window: $e');
   }
@@ -241,7 +215,7 @@ PlayerWindowSizer createPlayerWindowSizer() {
     readWorkAreas: _readWorkAreas,
     onDetached: () {
       try {
-        windowManager.removeListener(sizer);
+        NativeWindowHost.instance.removeListener(sizer);
       } catch (e) {
         debugPrint('[DesktopWindow] Failed to unregister sizer: $e');
       }
@@ -249,7 +223,7 @@ PlayerWindowSizer createPlayerWindowSizer() {
   );
 
   try {
-    windowManager.addListener(sizer);
+    NativeWindowHost.instance.addListener(sizer);
   } catch (e) {
     // Without the listener the aspect snap still works; the lock just is not
     // dropped on maximize or fullscreen.

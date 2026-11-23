@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'window_controller.dart';
+import 'window_event_listener.dart';
 import 'window_geometry.dart';
 import 'window_geometry_math.dart';
 import 'window_geometry_store.dart';
@@ -17,7 +17,7 @@ typedef WorkAreaReader = Future<List<WorkArea>> Function();
 /// Every method swallows its failures: this runs inside `_startApp`, which
 /// documents an invariant that nothing after
 /// `WidgetsFlutterBinding.ensureInitialized()` escapes uncaught.
-class WindowGeometryController with WindowListener {
+class WindowGeometryController with WindowEventListener {
   final WindowController _window;
   final WindowGeometryStore _store;
   final WorkAreaReader _readWorkAreas;
@@ -121,9 +121,8 @@ class WindowGeometryController with WindowListener {
     _pending = null;
   }
 
-  // `onWindowResized`/`onWindowMoved` are documented `@platforms macos,windows`
-  // and never fire on Linux, so we take the continuous variants and lean on
-  // the debounce to make that affordable.
+  // Resize and move arrive once per change, many times a second during a
+  // drag; the debounce makes that affordable.
   @override
   void onWindowResize() => _schedule();
 
