@@ -3,9 +3,9 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'window_controller.dart';
+import 'window_event_listener.dart';
 import 'window_geometry_controller.dart';
 
 /// Runs a callback once the current frame is done.
@@ -34,7 +34,7 @@ void runAfterCurrentFrame(VoidCallback callback) {
 /// The session ends only when the last member has left and a frame has
 /// passed with nobody rejoining. Then it restores the browse window, drops
 /// the aspect lock and resumes geometry persistence. Nothing here throws.
-class PlayerWindowSession with WindowListener {
+class PlayerWindowSession with WindowEventListener {
   final WindowController _window;
   final WindowGeometryController _geometry;
   final AfterFrameScheduler _afterFrame;

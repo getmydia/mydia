@@ -44,6 +44,7 @@ import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/playback/stats/stats_report.dart' show StatsRowId;
 import 'package:player/core/settings/stats_overlay_setting.dart';
 import 'package:player/core/update/update_provider.dart';
+import 'package:player/core/window/native_window_host.dart';
 import 'package:player/core/window/window_controller_native.dart';
 import 'package:player/core/window/window_fullscreen_controller.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
@@ -56,7 +57,6 @@ import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
 import 'package:player/presentation/widgets/video_surface/mydia_subtitle_view.dart';
 import 'package:player/presentation/widgets/video_surface/player_video_surface.dart';
 import 'package:screen_retriever/screen_retriever.dart';
-import 'package:window_manager/window_manager.dart';
 
 import '../test/presentation/screens/player/player_screen_test_harness.dart';
 import '../test/presentation/screens/player/session/fake_playback_session.dart';
@@ -375,14 +375,17 @@ Future<Duration> _close(WidgetTester tester, _Rig rig) async {
   return watch.elapsed;
 }
 
+/// The app's window, as `desktop_window_native.dart` drives it.
+const _window = WindowManagerController();
+
 /// Moves the window onto the built-in panel, the Mac's only EDR screen
 /// here. Returns that display's name, or null when there is none.
 Future<String?> _moveToBuiltInDisplay() async {
-  final displays = await screenRetriever.getAllDisplays();
+  final displays = DisplayManager.instance.getAll();
   for (final d in displays) {
     debugPrint(
-      '[mac_surface_test] display ${d.name} at '
-      '${d.visiblePosition} size ${d.size}',
+      '[mac_surface_test] display ${d.name} work area '
+      '${d.workArea.toRect()} size ${d.size.toSize()}',
     );
   }
   final builtIn = displays
@@ -393,8 +396,8 @@ Future<String?> _moveToBuiltInDisplay() async {
       )
       .firstOrNull;
   if (builtIn == null) return null;
-  final origin = builtIn.visiblePosition ?? Offset.zero;
-  await windowManager.setBounds(
+  final origin = builtIn.workArea.toRect().topLeft;
+  await _window.setBounds(
     Rect.fromLTWH(origin.dx + 40, origin.dy + 40, 1280, 720),
   );
   return builtIn.name;
@@ -422,9 +425,7 @@ void main() {
 
   setUpAll(() async {
     await ensureTestBootstrap();
-    // `main` does this in the app; window_manager crashes without it.
-    await windowManager.ensureInitialized();
-    // So does `desktop_window_native.dart`. The player's fullscreen state
+    // As `desktop_window_native.dart` does in the app. The player's fullscreen state
     // follows `windowFullscreenSignal`, which only this listener updates:
     // without it the screen never learns it entered fullscreen, and the
     // second `f` asks to enter again instead of leaving.
@@ -432,7 +433,7 @@ void main() {
       window: const WindowManagerController(),
     );
     await fullscreen.seed();
-    windowManager.addListener(fullscreen);
+    NativeWindowHost.instance.addListener(fullscreen);
   });
   setUp(_log.clear);
 
@@ -595,7 +596,7 @@ void main() {
     // On an unlocked Mac each transition animates for about a second; keep
     // the 12 s clip from ending (and pausing) halfway through the test.
     await p.setPlaylistMode(PlaylistMode.single);
-    final before = await windowManager.getBounds();
+    final before = await _window.getBounds();
     debugPrint(
       '[mac_surface_test] bounds before fullscreen $before '
       'osd ${await _prop(p, 'osd-dimensions')}',
@@ -605,7 +606,7 @@ void main() {
     await _waitFor(
       tester,
       'fullscreen',
-      windowManager.isFullScreen,
+      _window.isFullScreen,
       timeout: const Duration(seconds: 10),
     );
     // The transition animates; let it finish and draw.
@@ -619,7 +620,7 @@ void main() {
     await _waitFor(
       tester,
       'windowed',
-      () async => !await windowManager.isFullScreen(),
+      () async => !await _window.isFullScreen(),
       timeout: const Duration(seconds: 10),
     );
     await tester.pump(const Duration(seconds: 2));
@@ -631,7 +632,7 @@ void main() {
     // path. Whether the picture follows the window is for a person to see.
     debugPrint(
       '[mac_surface_test] fullscreen osd width $fullscreenSize; '
-      'after: bounds ${await windowManager.getBounds()} '
+      'after: bounds ${await _window.getBounds()} '
       'osd ${await _prop(p, 'osd-dimensions')}',
     );
     // No detach happened along the way: the view survived.
@@ -640,11 +641,11 @@ void main() {
     await _close(tester, rig);
     // With the screen locked, AppKit can hand the window back 11 px tall;
     // the next test's loading view would overflow it. Wait for the restore.
-    await windowManager.setBounds(before);
+    await _window.setBounds(before);
     await _waitFor(
       tester,
       'window bounds restored',
-      () async => (await windowManager.getBounds()).height >= before.height - 1,
+      () async => (await _window.getBounds()).height >= before.height - 1,
       timeout: const Duration(seconds: 5),
     );
   });

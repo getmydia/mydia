@@ -1,13 +1,11 @@
 import 'dart:ui';
 
-/// The slice of `window_manager` this module needs.
+/// The slice of the native window this module needs.
 ///
 /// Narrow on purpose: `WindowGeometryController`, `PlayerWindowSizer` and the
-/// window chrome widgets talk to this instead of the `windowManager`
-/// singleton, which lets their tests run with no Flutter binding. Reading the
-/// `windowManager` getter constructs a `WindowManager._()` that calls
-/// `setMethodCallHandler` before a binding may exist, which is an assertion
-/// failure. See `desktop_window_native.dart`.
+/// window chrome widgets talk to this instead of nativeapi's `Window`, which
+/// lets their tests run with fakes and no native library. See
+/// `desktop_window_native.dart`.
 abstract interface class WindowController {
   Future<Rect> getBounds();
   Future<void> setBounds(Rect bounds);

@@ -1,16 +1,14 @@
 import 'package:flutter/foundation.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'window_controller.dart';
+import 'window_event_listener.dart';
 import 'window_maximized.dart';
 
 /// Keeps [windowMaximized] in step with the OS window.
 ///
-/// Takes a [WindowController] rather than reading the `windowManager`
-/// singleton, matching `WindowFullscreenController`: reading that getter
-/// constructs a `WindowManager._()` which calls `setMethodCallHandler` before
-/// a Flutter binding may exist, so tests that touch it assert-fail.
-class WindowMaximizedController with WindowListener {
+/// Takes a [WindowController] rather than the native window, matching
+/// `WindowFullscreenController`, so its tests need no native library.
+class WindowMaximizedController with WindowEventListener {
   WindowMaximizedController({
     required this._window,
     ValueNotifier<bool>? signal,
