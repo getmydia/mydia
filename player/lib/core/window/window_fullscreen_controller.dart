@@ -1,20 +1,18 @@
 import 'package:flutter/foundation.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'window_controller.dart';
+import 'window_event_listener.dart';
 import 'window_fullscreen.dart';
 
 /// Keeps [windowFullscreen] in step with the OS window.
 ///
-/// Takes a [WindowController] rather than reading the `windowManager`
-/// singleton, matching `WindowGeometryController`: reading that getter
-/// constructs a `WindowManager._()` which calls `setMethodCallHandler` before
-/// a Flutter binding may exist, so tests that touch it assert-fail.
+/// Takes a [WindowController] rather than the native window, matching
+/// `WindowGeometryController`, so its tests need no native library.
 ///
 /// This exists rather than reusing `PlayerScreen`'s own `_isFullscreen` field
 /// because the green button, the View menu and Cmd+Ctrl+F also fullscreen the
 /// window, and that field never learns about any of them.
-class WindowFullscreenController with WindowListener {
+class WindowFullscreenController with WindowEventListener {
   WindowFullscreenController({
     required this._window,
     ValueNotifier<bool>? signal,

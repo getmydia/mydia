@@ -95,17 +95,16 @@ dependencies:
   hive_ce: ^2.24.0
   hive_ce_flutter: ^2.6.0
   freezed_annotation: ^3.1.0
-  # Held at 0.5.x, as is screen_retriever at 0.2.x (Dependabot ignores both).
-  # From window_manager 0.6 and screen_retriever 0.3 both sit on nativeapi,
-  # whose cnativeapi build hook compiles a C++ core from source for every
-  # target, Android and iOS included, and needs pkg-config gtk+-3.0, x11 and
-  # xi in every Linux build environment (`flutter test` too). Moving takes
-  # those build inputs plus a port of lib/core/window/ off the deprecated
-  # legacy.dart API.
-  window_manager: ^0.5.2
+  # window_manager and screen_retriever sit on nativeapi, whose cnativeapi
+  # build hook compiles a C++ core from source for every target, Android and
+  # iOS included. On Linux it needs pkg-config gtk+-3.0, x11 and xi in every
+  # build environment, `flutter test` too; Nix shells and checks get them
+  # through nativeapi-pkg-config.nix. lib/core/window/ uses the native API,
+  # never the deprecated legacy.dart bridge.
+  window_manager: ^0.7.1
   # Direct, not transitive: window geometry restore needs the display work
   # areas to decide whether a saved rect is still reachable.
-  screen_retriever: ^0.2.2
+  screen_retriever: ^0.4.1
   # The folder picker of Add folder (files libraries, desktop).
   file_selector: ^1.1.0
   # Keeps qr on 3.x: qr_flutter 4.1.0, the latest, requires qr ^3.0.1.

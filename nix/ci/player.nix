@@ -227,6 +227,17 @@
       # cargokit.yaml. flutter_rust_bridge loads the library by the fixed name
       # libmydia_player_p2p.so through the runner's $ORIGIN/lib rpath, so the
       # bundle carries the file byte for byte (no fixup).
+      # `pkg-config` for nativeapi's build hook, which window_manager and
+      # screen_retriever depend on. It compiles a C++ core on every Linux
+      # `flutter test` and `flutter build linux` and asks pkg-config for GTK 3,
+      # X11 and Xi, but Flutter runs hooks with PKG_CONFIG_PATH stripped, so
+      # this pkg-config carries the search path itself. It must come before
+      # pkgs.pkg-config on PATH, which nativeBuildInputs order gives it. Every
+      # check that runs `flutter test` or `flutter build linux` needs it and
+      # clang.
+      nativeapiPkgConfig = import ../../player/nativeapi-pkg-config.nix { inherit pkgs; };
+      nativeapiBuildInputs = [ nativeapiPkgConfig pkgs.clang ];
+
       # Flutter's name for the host architecture in build/linux/<arch>/.
       flutterLinuxArch = if pkgs.stdenv.hostPlatform.isAarch64 then "arm64" else "x64";
 
@@ -238,6 +249,7 @@
         pkgs.clang
         pkgs.cmake
         pkgs.ninja
+        nativeapiPkgConfig
         pkgs.pkg-config
         pkgs.gtk3
         pkgs.xz
@@ -307,6 +319,7 @@
 
       playerL10nTest = mkPlayerCheck {
         name = "player-l10n-test";
+        nativeBuildInputs = nativeapiBuildInputs;
         script = ''
           flutter test test/l10n
         '';
@@ -343,7 +356,7 @@
       # Bumping very_good_cli means re-reading those two files.
       playerTest = mkPlayerCheck {
         name = "player-test";
-        nativeBuildInputs = [ ciTests.rustfs pkgs.curl pkgs.perl ];
+        nativeBuildInputs = nativeapiBuildInputs ++ [ ciTests.rustfs pkgs.curl pkgs.perl ];
         # android/, ios/ and macos/ are not in player-codegen; these tests
         # read a manifest, two plists and the Xcode project from them.
         extraSource = ci.sources.toSource ci.sources.playerTestReads;

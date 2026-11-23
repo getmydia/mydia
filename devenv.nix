@@ -243,6 +243,13 @@ in
     # provide the CLI; without it the opt-in hwaccel_live_test.exs suite could
     # never run outside the production container.
     libva-utils
+    # The player's window_manager and screen_retriever sit on nativeapi, whose
+    # cnativeapi build hook compiles a C++ core on every `flutter test` and
+    # `flutter build linux` and asks pkg-config for gtk+-3.0, x11 and xi.
+    # Flutter strips PKG_CONFIG_PATH from a hook's environment, so this
+    # pkg-config carries their search path itself; see the file. hiPrio: it
+    # shadows pkgs.pkg-config above, which it wraps.
+    (lib.hiPrio (import ./player/nativeapi-pkg-config.nix { inherit pkgs; }))
   ]);
 
   env = {
