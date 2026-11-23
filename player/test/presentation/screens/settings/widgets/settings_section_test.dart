@@ -22,11 +22,7 @@ void main() {
       SettingsSection(
         label: 'Playback',
         children: [
-          SettingsRow.navigation(
-            icon: Icons.hd,
-            title: 'Default quality',
-            onTap: () {},
-          ),
+          SettingsRow.navigation(title: 'Default quality', onTap: () {}),
         ],
       ),
     );
@@ -96,21 +92,9 @@ void main() {
         tester,
         SettingsCard(
           children: [
-            SettingsRow.navigation(
-              icon: Icons.looks_one,
-              title: 'One',
-              onTap: () {},
-            ),
-            SettingsRow.navigation(
-              icon: Icons.looks_two,
-              title: 'Two',
-              onTap: () {},
-            ),
-            SettingsRow.navigation(
-              icon: Icons.looks_3,
-              title: 'Three',
-              onTap: () {},
-            ),
+            SettingsRow.navigation(title: 'One', onTap: () {}),
+            SettingsRow.navigation(title: 'Two', onTap: () {}),
+            SettingsRow.navigation(title: 'Three', onTap: () {}),
           ],
         ),
       );

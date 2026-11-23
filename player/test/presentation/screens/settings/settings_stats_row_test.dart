@@ -28,7 +28,6 @@ void main() {
                     ref.watch(statsOverlayEnabledProvider).value ?? false;
                 return SettingsRow.toggle(
                   key: statsRowKey,
-                  icon: Icons.speed,
                   title: 'Stats for nerds',
                   subtitle: 'Live playback numbers over the video',
                   value: enabled,

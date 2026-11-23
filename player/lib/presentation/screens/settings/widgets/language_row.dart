@@ -18,7 +18,6 @@ class LanguageSettingsRow extends ConsumerWidget {
     final l10n = context.l10n;
     return SettingsRow.navigation(
       key: const Key('language-row'),
-      icon: Icons.translate,
       title: l10n.settingsLanguageTitle,
       subtitle: l10n.settingsLanguageSubtitle,
       value: locale == null

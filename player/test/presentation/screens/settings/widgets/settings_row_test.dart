@@ -33,7 +33,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.hd,
           title: 'Default quality',
           subtitle: 'Used when a title has no saved preference',
           value: '1080p',
@@ -56,7 +55,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: 'Connection details',
           subtitle: 'Connected through a relay',
           subtitleDotColor: const Color(0xFFE8722C),
@@ -77,7 +75,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: 'Connection details',
           subtitle: 'Connected through a relay',
           onTap: () {},
@@ -93,7 +90,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: 'Connection details',
           subtitleDotColor: const Color(0xFFE8722C),
           onTap: () {},
@@ -106,11 +102,7 @@ void main() {
     testWidgets('a null onTap dims the row', (tester) async {
       await _pump(
         tester,
-        const SettingsRow.navigation(
-          icon: Icons.hd,
-          title: 'Default quality',
-          onTap: null,
-        ),
+        const SettingsRow.navigation(title: 'Default quality', onTap: null),
       );
 
       final opacity = tester.widget<Opacity>(
@@ -128,11 +120,7 @@ void main() {
       var taps = 0;
       await _pump(
         tester,
-        SettingsRow.navigation(
-          icon: Icons.devices,
-          title: 'Paired devices',
-          onTap: () => taps++,
-        ),
+        SettingsRow.navigation(title: 'Paired devices', onTap: () => taps++),
       );
 
       await tester.tap(find.text('Paired devices'));
@@ -143,18 +131,6 @@ void main() {
   });
 
   group('SettingsRow restyle', () {
-    testWidgets('no icon tile is drawn', (tester) async {
-      await _pump(
-        tester,
-        SettingsRow.navigation(
-          icon: Icons.hd,
-          title: 'Default quality',
-          onTap: () {},
-        ),
-      );
-      expect(find.byIcon(Icons.hd), findsNothing);
-    });
-
     testWidgets('rows are at least 52 tall', (tester) async {
       for (final row in <Widget>[
         SettingsRow.navigation(title: 'Nav', onTap: () {}),
@@ -289,7 +265,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros and credits',
           value: false,
           onChanged: (next) => received = next,
@@ -308,7 +283,6 @@ void main() {
       await _pump(
         tester,
         const SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros and credits',
           value: false,
           onChanged: null,
@@ -326,7 +300,6 @@ void main() {
       await _pump(
         tester,
         SettingsRow.action(
-          icon: Icons.refresh,
           title: 'Check for updates',
           trailing: const Text('Check now'),
           onTap: () {},
@@ -342,12 +315,7 @@ void main() {
     ) async {
       await _pump(
         tester,
-        SettingsRow.action(
-          icon: Icons.logout,
-          title: 'Sign out',
-          danger: true,
-          onTap: () {},
-        ),
+        SettingsRow.action(title: 'Sign out', danger: true, onTap: () {}),
       );
 
       final context = tester.element(find.text('Sign out'));
@@ -364,11 +332,7 @@ void main() {
       // `.action` and `.navigation` treat a null onTap differently.
       await _pump(
         tester,
-        const SettingsRow.action(
-          icon: Icons.refresh,
-          title: 'Check for updates',
-          onTap: null,
-        ),
+        const SettingsRow.action(title: 'Check for updates', onTap: null),
       );
 
       final inkWell = tester.widget<InkWell>(find.byType(InkWell));
@@ -393,11 +357,7 @@ void _focusTests() {
       var taps = 0;
       await _pump(
         tester,
-        SettingsRow.navigation(
-          icon: Icons.hd,
-          title: 'Default quality',
-          onTap: () => taps++,
-        ),
+        SettingsRow.navigation(title: 'Default quality', onTap: () => taps++),
       );
       _node(tester, 'Default quality').requestFocus();
       await tester.pump();
@@ -411,11 +371,7 @@ void _focusTests() {
     ) async {
       await _pump(
         tester,
-        const SettingsRow.navigation(
-          icon: Icons.hd,
-          title: 'Default quality',
-          onTap: null,
-        ),
+        const SettingsRow.navigation(title: 'Default quality', onTap: null),
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
@@ -427,7 +383,6 @@ void _focusTests() {
       await _pump(
         tester,
         SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros',
           value: false,
           onChanged: (v) => received = v,
@@ -444,17 +399,8 @@ void _focusTests() {
         tester,
         Column(
           children: [
-            SettingsRow.toggle(
-              icon: Icons.fast_forward,
-              title: 'First',
-              value: false,
-              onChanged: (_) {},
-            ),
-            SettingsRow.navigation(
-              icon: Icons.hd,
-              title: 'Second',
-              onTap: () {},
-            ),
+            SettingsRow.toggle(title: 'First', value: false, onChanged: (_) {}),
+            SettingsRow.navigation(title: 'Second', onTap: () {}),
           ],
         ),
       );
@@ -482,7 +428,6 @@ void _focusTests() {
       await _pump(
         tester,
         const SettingsRow.toggle(
-          icon: Icons.fast_forward,
           title: 'Skip intros',
           value: false,
           onChanged: null,

@@ -66,7 +66,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
       children: [
         SettingsRow.navigation(
           key: const Key('default-quality-row'),
-          icon: Icons.hd,
           title: l10n.settingsDefaultQualityTitle,
           subtitle: l10n.settingsDefaultQualitySubtitle,
           value: current == null ? null : l10n.qualityName(quality),
@@ -76,7 +75,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
         ),
         SettingsRow.toggle(
           key: const Key('auto-skip-segments-switch'),
-          icon: Icons.fast_forward,
           title: l10n.settingsAutoSkipTitle,
           subtitle: l10n.settingsAutoSkipSubtitle,
           value: current?.autoSkipSegments ?? false,
@@ -88,7 +86,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
         ),
         SettingsRow.toggle(
           key: const Key('auto-skip-commercials-switch'),
-          icon: Icons.fast_forward,
           title: l10n.settingsAutoSkipCommercialsTitle,
           subtitle: l10n.settingsAutoSkipCommercialsSubtitle,
           value: current?.autoSkipCommercials ?? true,
@@ -105,7 +102,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
                 ref.watch(statsOverlayEnabledProvider).value ?? false;
             return SettingsRow.toggle(
               key: const Key('stats-overlay-switch'),
-              icon: Icons.speed,
               title: l10n.settingsStatsOverlayTitle,
               subtitle: l10n.settingsStatsOverlaySubtitle,
               value: enabled,
@@ -118,7 +114,6 @@ class PlaybackSettingsSection extends ConsumerWidget {
         if (failed)
           SettingsRow.action(
             key: const Key('settings-retry-row'),
-            icon: Icons.error_outline,
             title: l10n.settingsPreferencesLoadFailedTitle,
             subtitle: l10n.settingsPreferencesLoadFailedSubtitle,
             trailing: Text(l10n.commonRetry),
@@ -166,7 +161,6 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
   return [
     SettingsRow.toggle(
       key: const Key('remote-control-enabled-switch'),
-      icon: Icons.settings_remote,
       title: l10n.settingsRemoteControlTitle,
       subtitle: l10n.registrationStatusText(registration),
       value: controllableEnabled ?? true,
@@ -177,7 +171,6 @@ List<Widget> remoteControlRows(BuildContext context, WidgetRef ref) {
     if (registration is RegistrationFailed)
       SettingsRow.action(
         key: const Key('remote-control-retry-row'),
-        icon: Icons.refresh,
         title: l10n.settingsRetryRegistrationTitle,
         subtitle: l10n.settingsRetryRegistrationSubtitle,
         onTap: () => ref.read(nodeRegistrationsProvider.notifier).retryAll(),
@@ -222,7 +215,6 @@ List<Widget> updateRows(BuildContext context, WidgetRef ref) {
     if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
       SettingsRow.action(
         key: const Key('check-for-updates-row'),
-        icon: Icons.refresh,
         title: updateState.manualCheck.pressInstalls
             ? l10n.settingsCheckAndInstallUpdates
             : l10n.settingsCheckForUpdates,

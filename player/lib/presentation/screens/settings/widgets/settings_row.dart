@@ -13,8 +13,6 @@ enum _RowKind { navigation, toggle, action, select }
 class SettingsRow extends StatelessWidget {
   final _RowKind _kind;
 
-  /// Ignored. Rows no longer draw an icon tile; Task 3 removes this.
-  final IconData? icon;
   final String title;
   final String? subtitle;
 
@@ -45,7 +43,6 @@ class SettingsRow extends StatelessWidget {
   /// preferences are unavailable.
   const SettingsRow.navigation({
     super.key,
-    this.icon,
     required this.title,
     this.subtitle,
     String? value,
@@ -65,7 +62,6 @@ class SettingsRow extends StatelessWidget {
   /// degraded Playback section is expressed when preferences fail to load.
   const SettingsRow.toggle({
     super.key,
-    this.icon,
     required this.title,
     this.subtitle,
     required bool value,
@@ -86,7 +82,6 @@ class SettingsRow extends StatelessWidget {
   /// would make a healthy screen look broken.
   const SettingsRow.action({
     super.key,
-    this.icon,
     required this.title,
     this.subtitle,
     this.trailing,
@@ -105,7 +100,6 @@ class SettingsRow extends StatelessWidget {
   /// A null [onTap] dims the row, like `.navigation`.
   const SettingsRow.select({
     super.key,
-    this.icon,
     required this.title,
     this.subtitle,
     required String value,

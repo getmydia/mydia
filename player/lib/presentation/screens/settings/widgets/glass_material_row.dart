@@ -29,7 +29,6 @@ class GlassMaterialSettingsRow extends ConsumerWidget {
     final material = ref.watch(glassMaterialSettingProvider);
     return SettingsRow.toggle(
       key: const Key('glass-material-row'),
-      icon: Icons.blur_on,
       title: context.l10n.glassMaterialName(GlassMaterial.liquid),
       subtitle: context.l10n.settingsGlassMaterialSubtitle,
       value: material == GlassMaterial.liquid,

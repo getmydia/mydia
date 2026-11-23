@@ -302,7 +302,6 @@ class _ManageSection extends ConsumerWidget {
       label: context.l10n.settingsManageSection,
       children: [
         SettingsRow.navigation(
-          icon: Icons.lan_outlined,
           title: context.l10n.settingsDiagnostics,
           subtitle: context.l10n.connectionLabel(connection),
           subtitleDotColor: connectionToneColor(connection.tone),

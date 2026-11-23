@@ -19,7 +19,6 @@ class SubtitleSizeSettingsRow extends ConsumerWidget {
         ref.watch(subtitleSizeSettingProvider).value ?? SubtitleSize.medium;
     return SettingsRow.navigation(
       key: const Key('subtitle-size-row'),
-      icon: Icons.closed_caption,
       title: context.l10n.settingsSubtitleSizeTitle,
       subtitle: context.l10n.settingsSubtitleSizeSubtitle,
       value: context.l10n.subtitleSizeName(size),

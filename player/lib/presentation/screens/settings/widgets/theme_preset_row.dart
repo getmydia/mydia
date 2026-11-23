@@ -20,7 +20,6 @@ class ThemePresetSettingsRow extends ConsumerWidget {
     final linuxDesktop = ref.watch(linuxDesktopProvider);
     return SettingsRow.navigation(
       key: const Key('theme-preset-row'),
-      icon: Icons.palette_outlined,
       title: context.l10n.settingsThemeTitle,
       subtitle: context.l10n.settingsThemeSubtitle,
       value: context.l10n.themePresetName(preset, linuxDesktop: linuxDesktop),

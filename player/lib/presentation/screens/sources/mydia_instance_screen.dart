@@ -225,7 +225,6 @@ class MydiaInstanceBody extends ConsumerWidget {
                         children: [
                           SettingsRow.action(
                             key: const Key('mydia-instance-remove'),
-                            icon: Icons.logout,
                             title: context.l10n.sourcesInstanceRemoveRow,
                             subtitle:
                                 context.l10n.sourcesInstanceRemoveRowSubtitle,
@@ -259,7 +258,6 @@ class _ServerSection extends ConsumerWidget {
       label: l10n.commonServer,
       children: [
         SettingsRow.action(
-          icon: Icons.dns_rounded,
           title: account.displayName,
           subtitle: switch (address) {
             MydiaInstanceUrl(:final url) => url,
@@ -269,7 +267,6 @@ class _ServerSection extends ConsumerWidget {
         ),
         SettingsRow.action(
           key: const Key('mydia-instance-version'),
-          icon: Icons.info_outline,
           title: switch (compat) {
             AsyncData() =>
               version == null
@@ -299,14 +296,10 @@ class _RegistrationSection extends ConsumerWidget {
     return SettingsSection(
       label: context.l10n.sourcesInstanceThisDevice,
       children: [
-        SettingsRow.action(
-          icon: Icons.settings_remote,
-          title: context.l10n.registrationStatusText(status),
-        ),
+        SettingsRow.action(title: context.l10n.registrationStatusText(status)),
         if (status is RegistrationFailed)
           SettingsRow.action(
             key: const Key('mydia-instance-registration-retry'),
-            icon: Icons.refresh,
             title: context.l10n.settingsRetryRegistrationTitle,
             subtitle: context.l10n.settingsRetryRegistrationSubtitle,
             onTap: () =>
