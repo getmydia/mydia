@@ -15,6 +15,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.MediaItemEvents
   alias MydiaWeb.MediaLive.Show.LibraryEvents
   alias MydiaWeb.MediaLive.Show.CategoryEvents
+  alias MydiaWeb.MediaLive.Show.AvailabilityEvents
   alias MydiaWeb.MediaLive.Show.DownloadAudioEvents
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
@@ -221,6 +222,8 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_quality_profile_modal, false)
      # Download audio picker modal state, same page-level-modal reasoning.
      |> assign(:show_download_audio_modal, false)
+     # Minimum availability picker modal state, same reasoning.
+     |> assign(:show_availability_modal, false)
      # Target library picker modal state, same reasoning as above.
      |> assign(:show_target_library_modal, false)
      # Trailer modal state
@@ -555,6 +558,15 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("set_download_audio_language", params, socket),
     do: DownloadAudioEvents.set_download_audio_language(params, socket)
+
+  def handle_event("show_availability_modal", params, socket),
+    do: AvailabilityEvents.show_availability_modal(params, socket)
+
+  def handle_event("hide_availability_modal", params, socket),
+    do: AvailabilityEvents.hide_availability_modal(params, socket)
+
+  def handle_event("set_minimum_availability", params, socket),
+    do: AvailabilityEvents.set_minimum_availability(params, socket)
 
   def handle_event("show_target_library_modal", params, socket),
     do: LibraryEvents.show_target_library_modal(params, socket)

@@ -241,6 +241,11 @@ defmodule MydiaWeb.MediaLive.Show.Components do
 
           <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_row media_item={@media_item} />
 
+          <MydiaWeb.MediaLive.Show.AvailabilityComponents.availability_row
+            :if={@media_item.type == "movie"}
+            media_item={@media_item}
+          />
+
           <LibraryComponents.target_library_row
             media_item={@media_item}
             target_library={@target_library}

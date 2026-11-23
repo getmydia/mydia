@@ -601,6 +601,9 @@
   <%= if @show_download_audio_modal do %>
     <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_modal media_item={@media_item} />
   <% end %>
+  <%= if @show_availability_modal do %>
+    <MydiaWeb.MediaLive.Show.AvailabilityComponents.availability_modal media_item={@media_item} />
+  <% end %>
   <%= if @show_target_library_modal do %>
     <PickerModals.target_library_modal
       media_item={@media_item}
