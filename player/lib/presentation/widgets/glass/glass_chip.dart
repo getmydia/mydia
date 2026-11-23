@@ -4,6 +4,8 @@ import '../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../core/theme/liquid_glass/liquid_geometry.dart';
 import '../../../core/theme/palette.dart';
 import '../../../core/theme/surface_roles.dart';
+import '../controls/press_scale.dart';
+import '../focus_emphasis.dart';
 import '../glass_surface.dart';
 import 'glass_hit_target.dart';
 import 'glass_interaction.dart';
@@ -49,10 +51,12 @@ class GlassChip extends StatelessWidget {
     if (!GlassStyle.of(context)) {
       final palette = context.palette;
       final foreground = selected ? palette.background : palette.textPrimary;
-      final shape = RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_frostedRadius),
-        side: BorderSide(color: context.surfaceRoles.hairlineStrong),
-      );
+      final radius = BorderRadius.circular(_frostedRadius);
+      final shape = RoundedRectangleBorder(borderRadius: radius);
+      // Passed as the widget's own side: the chip prefers it over the
+      // theme's (none) and over the shape's, so a hairline set only on the
+      // shape never shows.
+      final side = BorderSide(color: context.surfaceRoles.hairlineStrong);
       final labelStyle = TextStyle(
         fontSize: 12.5,
         fontWeight: FontWeight.w500,
@@ -67,7 +71,7 @@ class GlassChip extends StatelessWidget {
               onSelected: onSelected,
               showCheckmark: false,
               shape: shape,
-              side: BorderSide.none,
+              side: side,
               backgroundColor: Colors.transparent,
               selectedColor: Colors.white,
               labelStyle: labelStyle,
@@ -83,7 +87,7 @@ class GlassChip extends StatelessWidget {
               onSelected: onSelected,
               showCheckmark: false,
               shape: shape,
-              side: BorderSide.none,
+              side: side,
               backgroundColor: Colors.transparent,
               selectedColor: Colors.white,
               labelStyle: labelStyle,
@@ -91,7 +95,18 @@ class GlassChip extends StatelessWidget {
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             );
-      return SizedBox(height: _frostedHeight, child: chip);
+      return GlassHitTarget(
+        height: _frostedHeight,
+        onTap: onSelected == null ? null : () => onSelected(!selected),
+        child: FocusEmphasis(
+          size: FocusSize.control,
+          borderRadius: radius,
+          child: PressScale(
+            enabled: onSelected != null,
+            child: SizedBox(height: _frostedHeight, child: chip),
+          ),
+        ),
+      );
     }
     final palette = context.palette;
     final foreground = selected ? palette.background : palette.textPrimary;

@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
 import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/controls/press_scale.dart';
+import 'package:player/presentation/widgets/focus_emphasis.dart';
 import 'package:player/presentation/widgets/glass/glass_button.dart';
 import 'package:player/presentation/widgets/glass/glass_chip.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
@@ -152,7 +154,29 @@ void main() {
     final chip = tester.widget<ChoiceChip>(find.byType(ChoiceChip));
     final shape = chip.shape! as RoundedRectangleBorder;
     expect(shape.borderRadius, BorderRadius.circular(8));
-    expect(shape.side.color, const Color(0x24FFFFFF));
+    final material = tester.widget<Material>(
+      find
+          .descendant(
+            of: find.byType(ChoiceChip),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    final rendered = material.shape! as RoundedRectangleBorder;
+    expect(rendered.side.color, const Color(0x24FFFFFF));
+    expect(rendered.side.style, BorderStyle.solid);
+    expect(rendered.borderRadius, BorderRadius.circular(8));
+    expect(
+      tester.getSize(find.byType(GlassChip)).height,
+      greaterThanOrEqualTo(44),
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FocusEmphasis),
+        matching: find.byType(PressScale),
+      ),
+      findsOneWidget,
+    );
     final ctx = tester.element(find.byType(ChoiceChip));
     expect(chip.labelStyle!.fontSize, 12.5);
     expect(chip.labelStyle!.fontWeight, FontWeight.w500);

@@ -40,6 +40,8 @@ class GlassButton extends StatelessWidget {
   /// Shares the enclosing `BackdropGroup`'s blur pass (glass path only).
   final bool grouped;
 
+  static const double _frostedHitTarget = 48;
+
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
@@ -67,10 +69,23 @@ class GlassButton extends StatelessWidget {
               icon: Icon(icon),
               label: Text(label),
             );
-      return FocusEmphasis(
+      final visual = FocusEmphasis(
         size: FocusSize.control,
         borderRadius: BorderRadius.circular(roles.radiusControl),
         child: PressScale(enabled: onPressed != null, child: button),
+      );
+      // The visual is 40 high; touch keeps a 48 high target, and a tap in
+      // the margin above or below fires the press too.
+      final target = ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _frostedHitTarget),
+        child: Center(widthFactor: 1, heightFactor: 1, child: visual),
+      );
+      if (onPressed == null) return target;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onTap: onPressed,
+        child: target,
       );
     }
     final glassHeight = height ?? LiquidGeometry.buttonMedium;

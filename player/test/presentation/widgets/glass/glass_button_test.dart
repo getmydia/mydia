@@ -135,6 +135,21 @@ void main() {
     expect(shape.borderRadius, BorderRadius.circular(10));
   });
 
+  testWidgets('Frosted keeps a 48 hit target around the 40 visual', (
+    tester,
+  ) async {
+    var taps = 0;
+    await tester.pumpWidget(_host(() => taps++, liquid: false));
+    expect(tester.getSize(find.byType(OutlinedButton)).height, 40);
+    expect(
+      tester.getSize(find.byType(GlassButton)).height,
+      greaterThanOrEqualTo(48),
+    );
+    final top = tester.getTopLeft(find.byType(OutlinedButton));
+    await tester.tapAt(top + const Offset(20, -4));
+    expect(taps, 1);
+  });
+
   testWidgets('Frosted: an explicit height wins', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
