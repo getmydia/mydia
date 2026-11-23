@@ -28,6 +28,7 @@ defmodule Mydia.Config.Schema.Paths do
   """
 
   alias Mydia.Config.Schema
+  alias Mydia.Config.Schema.AuthChangeset
 
   @excluded_sections [:database]
 
@@ -49,6 +50,15 @@ defmodule Mydia.Config.Schema.Paths do
     "media.default_quality_profile_id" => "Mydia.Settings.QualityProfiles",
     "update_check.enabled" => "Mydia.UpdateCheck.enabled?/1",
     "update_check.install_id" => "Mydia.UpdateCheck.install_id/0"
+  }
+
+  # Fields whose changeset restricts them to a fixed set. Checked here too, so a
+  # row outside the set is refused on write and skipped by the merge on its
+  # own; reaching Schema.changeset/2 instead would invalidate the whole
+  # database layer, every other admin-saved setting with it.
+  @allowed_values %{
+    "auth.oidc_default_role" => AuthChangeset.oidc_default_roles(),
+    "media.default_season_monitoring" => Schema.season_monitoring_values()
   }
 
   # Built at compile time from the schema itself. A hand-maintained list drifts
@@ -125,7 +135,7 @@ defmodule Mydia.Config.Schema.Paths do
       {:ok, {path, type}} ->
         case cast_value(type, value) do
           {:ok, casted} ->
-            {:ok, path, casted}
+            check_allowed(key, path, casted)
 
           :error ->
             {:error, "#{key}: #{inspect(value)} is not a valid #{inspect(type)}"}
@@ -133,6 +143,18 @@ defmodule Mydia.Config.Schema.Paths do
 
       :error ->
         {:error, unknown_key_reason(key)}
+    end
+  end
+
+  defp check_allowed(key, path, value) do
+    case Map.fetch(@allowed_values, key) do
+      {:ok, allowed} when not is_nil(value) ->
+        if value in allowed,
+          do: {:ok, path, value},
+          else: {:error, "#{key}: #{inspect(value)} is not one of #{Enum.join(allowed, ", ")}"}
+
+      _ ->
+        {:ok, path, value}
     end
   end
 

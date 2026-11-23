@@ -29,6 +29,7 @@ defmodule MydiaWeb.AdminSettingsLiveOidcDefaultRoleTest do
     assert has_element?(view, "#{@form} option[value='readonly']")
     assert has_element?(view, "#{@form} option[value='user']")
     refute has_element?(view, "#{@form} option[value='admin']")
+    assert has_element?(view, "#{@form} select[aria-label='Default Role for New SSO Users']")
   end
 
   test "choosing a role stores it and applies it", %{conn: conn} do

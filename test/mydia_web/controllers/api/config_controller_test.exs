@@ -18,6 +18,18 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
       assert json_response(conn, 200)
     end
 
+    # A stored "admin" would fail the merged config and take every other
+    # database-backed setting down with it, so it never reaches the table.
+    test "refuses admin as the default SSO role", %{conn: conn, token: token} do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> put("/api/v1/config/auth.oidc_default_role", %{"value" => "admin"})
+
+      assert json_response(conn, 422)
+      refute Mydia.Settings.get_config_setting_by_key("auth.oidc_default_role")
+    end
+
     # The row's category is what the admin settings page groups by, and the
     # admin toggle and the migration both file this key under remote_access.
     test "files a new remote_access.enabled row under remote_access", %{conn: conn, token: token} do

@@ -243,6 +243,7 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
           <input type="hidden" name="category" value={@category} />
           <select
             name={"settings[#{@setting.key}]"}
+            aria-label={Labels.label(@setting.key)}
             class="select select-sm select-bordered w-full sm:w-44"
           >
             <option
