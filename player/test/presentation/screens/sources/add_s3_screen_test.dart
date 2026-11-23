@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/files/backend/file_system_backend.dart';
 import 'package:player/core/sources/files/backend/s3_backend.dart';
@@ -220,7 +221,7 @@ void main() {
     await _enter(tester, 's3-endpoint', 'https://s3.eu-west-1.amazonaws.com');
     await tester.pump();
     expect(
-      tester.widget<SwitchListTile>(find.byKey(const Key('s3-style'))).value,
+      tester.widget<AppSwitchTile>(find.byKey(const Key('s3-style'))).value,
       isFalse,
     );
     await tester.tap(find.byKey(const Key('s3-style')));
@@ -455,9 +456,7 @@ void main() {
       isFalse,
     );
     expect(
-      tester
-          .widget<SwitchListTile>(find.byKey(const Key('s3-style')))
-          .onChanged,
+      tester.widget<AppSwitchTile>(find.byKey(const Key('s3-style'))).onChanged,
       isNull,
     );
 

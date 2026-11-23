@@ -16,6 +16,7 @@ import '../../../core/backup/cloud/cloud_backup_service.dart';
 import '../../../core/backup/slot_transport.dart';
 import '../../../core/theme/palette.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/controls/app_switch.dart';
 import '../../widgets/glass/glass_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../connections/connections_hub_cards.dart' show HubChip;
@@ -211,7 +212,7 @@ class _CloudBackupBodyState extends ConsumerState<CloudBackupBody> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SwitchListTile(
+            AppSwitchTile(
               key: const Key('backup-switch'),
               value: true,
               onChanged: _busy ? null : (_) => _turnOff(),

@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/sources/lock/pin_store.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
@@ -383,13 +384,13 @@ void main() {
     final plexSwitch = find.byKey(ValueKey('manage-all-servers-$plexId'));
     final stashSwitch = find.byKey(ValueKey('manage-all-servers-$stashId'));
     await tester.ensureVisible(stashSwitch);
-    expect(tester.widget<SwitchListTile>(plexSwitch).value, isTrue);
-    expect(tester.widget<SwitchListTile>(stashSwitch).value, isFalse);
+    expect(tester.widget<AppSwitchTile>(plexSwitch).value, isTrue);
+    expect(tester.widget<AppSwitchTile>(stashSwitch).value, isFalse);
 
     await tester.tap(stashSwitch);
     await tester.pumpAndSettle();
     expect((await store.load()).allServers[SourceId(stashId)], isTrue);
-    expect(tester.widget<SwitchListTile>(stashSwitch).value, isTrue);
+    expect(tester.widget<AppSwitchTile>(stashSwitch).value, isTrue);
   });
 
   testWidgets(

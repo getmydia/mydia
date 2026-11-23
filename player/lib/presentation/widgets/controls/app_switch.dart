@@ -175,3 +175,60 @@ class _FrostedSwitchState extends State<_FrostedSwitch> {
     );
   }
 }
+
+/// A list row with an [AppSwitch] at its end: the replacement for
+/// [SwitchListTile].
+///
+/// The row is the single focus stop and tapping anywhere on it toggles; the
+/// switch itself is excluded from focus, as in [SwitchListTile]. Liquid
+/// renders the stock [SwitchListTile] unchanged.
+class AppSwitchTile extends StatelessWidget {
+  const AppSwitchTile({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.title,
+    this.subtitle,
+    this.dense,
+    this.contentPadding,
+  });
+
+  final bool value;
+
+  /// Null disables the row and its switch.
+  final ValueChanged<bool>? onChanged;
+  final Widget title;
+  final Widget? subtitle;
+  final bool? dense;
+  final EdgeInsetsGeometry? contentPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    final changed = onChanged;
+    if (GlassStyle.of(context)) {
+      return SwitchListTile(
+        value: value,
+        onChanged: changed,
+        title: title,
+        subtitle: subtitle,
+        dense: dense,
+        contentPadding: contentPadding,
+      );
+    }
+    return MergeSemantics(
+      child: ListTile(
+        title: title,
+        subtitle: subtitle,
+        dense: dense,
+        contentPadding: contentPadding,
+        enabled: changed != null,
+        onTap: changed == null ? null : () => changed(!value),
+        // As in SwitchListTile: a toggle, not a button.
+        internalAddSemanticForOnTap: false,
+        trailing: ExcludeFocus(
+          child: AppSwitch(value: value, onChanged: changed),
+        ),
+      ),
+    );
+  }
+}

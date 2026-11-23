@@ -22,6 +22,7 @@ import '../../../core/ui/reduced_motion.dart';
 import '../../../l10n/l10n.dart';
 import '../detail/detail_links.dart';
 import '../../widgets/controls/app_select.dart';
+import '../../widgets/controls/app_switch.dart';
 import '../../widgets/files/experimental_badge.dart';
 import '../../widgets/files/remote_folder_picker.dart';
 import 'files_library_kind_picker.dart';
@@ -480,7 +481,7 @@ class _AddS3ScreenState extends ConsumerState<AddS3Screen> {
         obscure: true,
       ),
       const SizedBox(height: 8),
-      SwitchListTile(
+      AppSwitchTile(
         key: const Key('s3-style'),
         contentPadding: EdgeInsets.zero,
         title: Text(l10n.filesS3PathStyle),
