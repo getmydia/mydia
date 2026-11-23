@@ -104,8 +104,6 @@ void main() {
           .opacity,
       0.38,
     );
-    await tester.tap(find.byType(AppSwitch));
-    await tester.pump();
   });
 
   testWidgets('semantics mirror value and enabled', (tester) async {
@@ -175,4 +173,29 @@ void main() {
     expect(find.byType(Switch), findsOneWidget);
     expect(find.byKey(AppSwitch.trackKey), findsNothing);
   });
+
+  for (final on in [false, true]) {
+    testWidgets('focus ring keeps thumb geometry (value $on)', (tester) async {
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      await tester.pumpWidget(
+        _host(AppSwitch(value: on, onChanged: (_) {}, autofocus: true)),
+      );
+      await tester.pump();
+      final thumb = find.byKey(AppSwitch.thumbKey);
+      final track = find.byKey(AppSwitch.trackKey);
+      final c = tester.widget<AnimatedContainer>(track);
+      expect(c.foregroundDecoration, isNotNull);
+      expect(tester.getSize(track), const Size(40, 24));
+      expect(tester.getSize(thumb), const Size(20, 20));
+      expect(
+        tester.getTopLeft(thumb).dx - tester.getTopLeft(track).dx,
+        on ? 18 : 2,
+      );
+    });
+  }
 }

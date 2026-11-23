@@ -103,10 +103,15 @@ class _FrostedSwitchState extends State<_FrostedSwitch> {
       decoration: BoxDecoration(
         color: widget.value ? palette.primary : palette.border,
         borderRadius: BorderRadius.circular(AppSwitch.trackHeight / 2),
-        border: _focusHighlight
-            ? Border.all(color: Colors.white, width: 1.5)
-            : null,
       ),
+      // Painted over the track, outside layout, so focus never changes the
+      // padding or the thumb geometry.
+      foregroundDecoration: _focusHighlight
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(AppSwitch.trackHeight / 2),
+              border: Border.all(color: Colors.white, width: 1.5),
+            )
+          : null,
       child: AnimatedAlign(
         duration: duration,
         curve: Curves.easeOut,
