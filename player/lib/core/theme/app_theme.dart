@@ -72,24 +72,45 @@ class AppTheme {
       fontWeight: FontWeight.w600,
     );
     // Frosted feedback: no ripple; a faint wash on hover, a dim on press,
-    // nothing on focus (focus has its own ring).
+    // no wash on focus. Focus shows as a side instead: a 2px primary one off
+    // the television tier (below), the accent ring of [withTvFocus] on it.
+    Color? frostedOverlayFor(Set<WidgetState> states, {Color? focused}) {
+      if (states.contains(WidgetState.pressed)) return roles.pressOverlay;
+      if (states.contains(WidgetState.hovered)) return roles.hoverOverlay;
+      if (states.contains(WidgetState.focused)) return focused;
+      return Colors.transparent;
+    }
+
     final WidgetStateProperty<Color?> frostedOverlay =
-        WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.pressed)) return roles.pressOverlay;
-          if (states.contains(WidgetState.hovered)) return roles.hoverOverlay;
-          return Colors.transparent;
-        });
-    ButtonStyle frosted(ButtonStyle style, {double? height}) => style.copyWith(
+        WidgetStateProperty.resolveWith(
+          (states) => frostedOverlayFor(states, focused: Colors.transparent),
+        );
+    // Keyboard focus off the television tier. On it [withTvFocus] replaces
+    // the side, so a TV button never draws both rings.
+    WidgetStateProperty<BorderSide?>? frostedFocusSide(BorderSide? rest) =>
+        InputCapabilities.directionalPrimary
+        ? null
+        : WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.focused)
+                ? BorderSide(color: p.primary, width: 2)
+                : rest,
+          );
+    ButtonStyle frosted(
+      ButtonStyle style, {
+      double? height,
+      BorderSide? rest,
+    }) => style.copyWith(
       splashFactory: NoSplash.splashFactory,
       overlayColor: frostedOverlay,
+      side: frostedFocusSide(rest),
       shape: WidgetStatePropertyAll(frostedShape),
       textStyle: const WidgetStatePropertyAll(frostedButtonText),
       minimumSize: height == null
           ? null
           : WidgetStatePropertyAll(Size(64, height)),
     );
-    ButtonStyle styled(ButtonStyle style, {double? height}) =>
-        liquid ? style : frosted(style, height: height);
+    ButtonStyle styled(ButtonStyle style, {double? height, BorderSide? rest}) =>
+        liquid ? style : frosted(style, height: height, rest: rest);
     // Tabular figures so timecodes, durations, sizes and bitrates line up.
     TextStyle figures(TextStyle t) => liquid
         ? t
@@ -112,6 +133,11 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       splashFactory: liquid ? null : NoSplash.splashFactory,
+      // InkWell surfaces (rows, list tiles, menu items) dim like buttons
+      // instead of flashing Material's light grey highlight.
+      highlightColor: liquid ? null : roles.pressOverlay,
+      hoverColor: liquid ? null : roles.hoverOverlay,
+      splashColor: liquid ? null : Colors.transparent,
       extensions: [
         p,
         GlassStyle(liquid: liquid),
@@ -349,6 +375,7 @@ class AppTheme {
         style: withTvFocus(
           rest: liquid ? BorderSide.none : strongSide,
           styled(
+            rest: strongSide,
             OutlinedButton.styleFrom(
               foregroundColor: p.textPrimary,
               backgroundColor: liquid
@@ -371,7 +398,19 @@ class AppTheme {
 
       // Icon Button
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: p.textSecondary),
+        style: liquid
+            ? IconButton.styleFrom(foregroundColor: p.textSecondary)
+            : IconButton.styleFrom(
+                foregroundColor: p.textSecondary,
+                splashFactory: NoSplash.splashFactory,
+              ).copyWith(
+                // Same hover and press as the buttons. Focus resolves to
+                // null so Material's own focus layer still shows: icon
+                // buttons have no themed ring on or off the television.
+                overlayColor: WidgetStateProperty.resolveWith(
+                  (states) => frostedOverlayFor(states),
+                ),
+              ),
       ),
 
       // Filled Button (for primary actions)

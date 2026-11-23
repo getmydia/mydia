@@ -1,5 +1,7 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/palette.dart';
 
@@ -115,8 +117,75 @@ void main() {
     );
   });
 
+  test('InkWell surfaces dim like buttons', () {
+    expect(t.highlightColor, const Color(0x1F000000));
+    expect(t.hoverColor, const Color(0x0AFFFFFF));
+    expect(t.splashColor, Colors.transparent);
+  });
+
+  test('icon buttons take the button press and hover overlay', () {
+    final s = t.iconButtonTheme.style!;
+    expect(s.splashFactory, NoSplash.splashFactory);
+    expect(s.overlayColor!.resolve({WidgetState.pressed}), t.highlightColor);
+    expect(s.overlayColor!.resolve({WidgetState.hovered}), t.hoverColor);
+    // Null falls through to Material's focus layer.
+    expect(s.overlayColor!.resolve({WidgetState.focused}), isNull);
+  });
+
+  testWidgets('Tab focus draws a 2px primary side off the television', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: t,
+        home: Scaffold(
+          body: Column(
+            children: [
+              FilledButton(onPressed: () {}, child: const Text('Play')),
+              OutlinedButton(onPressed: () {}, child: const Text('Later')),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    BorderSide sideOf(Type button) {
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(button),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      return (material.shape! as OutlinedBorder).side;
+    }
+
+    expect(sideOf(FilledButton), BorderSide.none);
+    expect(sideOf(OutlinedButton).color, strong);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(sideOf(FilledButton), BorderSide(color: p.primary, width: 2));
+    expect(sideOf(OutlinedButton).color, strong);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(sideOf(FilledButton), BorderSide.none);
+    expect(sideOf(OutlinedButton), BorderSide(color: p.primary, width: 2));
+  }, skip: InputCapabilities.directionalPrimary);
+
   test('Liquid unchanged', () {
     final l = AppTheme.build(p, liquid: true);
+    expect(l.iconButtonTheme.style!.splashFactory, isNull);
+    final dark = ThemeData(useMaterial3: true, brightness: Brightness.dark);
+    expect(l.highlightColor, dark.highlightColor);
+    expect(l.hoverColor, dark.hoverColor);
+    expect(l.splashColor, dark.splashColor);
+    // Liquid draws no keyboard side (on a television withTvFocus does).
+    if (!InputCapabilities.directionalPrimary) {
+      expect(l.filledButtonTheme.style!.side, isNull);
+    }
     final s = l.filledButtonTheme.style!;
     expect(s.shape!.resolve({}), isA<StadiumBorder>());
     expect(s.splashFactory, NoSplash.splashFactory);
