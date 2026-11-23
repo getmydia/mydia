@@ -228,11 +228,11 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
       refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
     end
 
-    test "enqueues TMDB shows and movies stored at version 1, skips them at version 2" do
+    test "enqueues TMDB shows and movies stored at version 1, skips them when current" do
       old_show = tmdb_show("Paper Orchard", 77_001, 1)
       old_movie = tmdb_movie("Quiet Meridian", 77_003, 1)
       new_show = tmdb_show("Salt Lantern", 77_011, 2)
-      new_movie = tmdb_movie("Hollow Tide", 77_013, 2)
+      new_movie = tmdb_movie("Hollow Tide", 77_013, 3)
 
       assert :ok = perform_job(MetadataBackfill, %{})
 
@@ -245,6 +245,20 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
 
       refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: new_show.id})
       refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: new_movie.id})
+    end
+
+    test "enqueues a TMDB movie stored at version 2, before it carried digital and physical dates" do
+      movie = tmdb_movie("Glass Harbor", 77_021, 2)
+      show = tmdb_show("Ember Line", 77_023, 2)
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      assert_enqueued(
+        worker: MetadataRefresh,
+        args: %{media_item_id: movie.id, fetch_episodes: false}
+      )
+
+      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: show.id})
     end
 
     test "a no-metadata item keeps the full refresh with episodes" do

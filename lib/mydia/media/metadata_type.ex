@@ -106,6 +106,8 @@ defmodule Mydia.Media.MetadataType do
       original_title: data[:original_title],
       year: data[:year],
       release_date: parse_date(data[:release_date]),
+      digital_release_date: parse_date(data[:digital_release_date]),
+      physical_release_date: parse_date(data[:physical_release_date]),
       overview: data[:overview],
       tagline: data[:tagline],
       runtime: data[:runtime],
