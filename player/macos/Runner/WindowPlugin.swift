@@ -59,6 +59,22 @@ final class WindowPlugin: NSObject {
     topLeftRect(rect, primaryHeight: primaryHeight)
   }
 
+  /// Locks user resizes to [ratio] (width / height); 0 clears the lock.
+  ///
+  /// Never `contentAspectRatio = .zero`: AppKit divides by it when it
+  /// restores the frame on leaving fullscreen, and the resulting frame raises
+  /// NSInternalInconsistencyException in `_reallySetFrame`. The sizer drops
+  /// its lock on entering fullscreen, so that is exactly the path it took.
+  /// `contentResizeIncrements` and `contentAspectRatio` are mutually
+  /// exclusive: setting 1x1 increments is AppKit's way to clear the ratio.
+  static func applyAspectRatio(_ ratio: Double, to window: NSWindow) {
+    if ratio > 0 {
+      window.contentAspectRatio = NSSize(width: ratio, height: 1)
+    } else {
+      window.contentResizeIncrements = NSSize(width: 1, height: 1)
+    }
+  }
+
   private static var primaryHeight: CGFloat {
     NSScreen.screens.first?.frame.height ?? 0
   }
@@ -153,13 +169,7 @@ final class WindowPlugin: NSObject {
       guard let ratio = (args?["ratio"] as? NSNumber)?.doubleValue else {
         return result(badArgs(call))
       }
-      if ratio > 0 {
-        window.contentAspectRatio = NSSize(width: ratio, height: 1)
-      } else {
-        // Setting resizeIncrements is what clears an aspect ratio in AppKit.
-        window.resizeIncrements = NSSize(width: 1, height: 1)
-        window.contentAspectRatio = .zero
-      }
+      Self.applyAspectRatio(ratio, to: window)
       result(nil)
     case "startDragging":
       if let event = NSApp.currentEvent { window.performDrag(with: event) }
