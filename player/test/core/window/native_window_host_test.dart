@@ -1,6 +1,6 @@
-import 'dart:ui';
-
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/window/mac_window_channel.dart';
 import 'package:player/core/window/native_window_host.dart';
 import 'package:player/core/window/window_event_listener.dart';
 import 'package:window_manager/window_manager.dart';
@@ -31,6 +31,7 @@ class _Recorder with WindowEventListener {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   const id = 1;
   late NativeWindowHost host;
   late _Recorder recorder;
@@ -115,6 +116,110 @@ void main() {
 
     expect(recorder.calls, ['maximize']);
     expect(second.calls, ['maximize']);
+  });
+
+  group('macOS channel', () {
+    MacWindowChannel channelFor() =>
+        MacWindowChannel(channel: const MethodChannel('test/host-window'));
+
+    test('resize, move and close pass straight through', () {
+      host
+        ..handleMacEvent('resized', null)
+        ..handleMacEvent('moved', null)
+        ..handleMacEvent('closeRequested', null);
+
+      expect(recorder.calls, ['resize', 'move', 'close']);
+    });
+
+    test('maximized then unmaximized reports both', () {
+      host
+        ..handleMacEvent('maximized', null)
+        ..handleMacEvent('unmaximized', null);
+
+      expect(recorder.calls, ['maximize', 'unmaximize']);
+    });
+
+    test('restored from minimized into maximized keeps maximized', () {
+      host
+        ..handleMacEvent('maximized', null)
+        ..handleMacEvent('minimized', null)
+        ..handleMacEvent('restored', {'maximized': true})
+        ..handleMacEvent('unmaximized', null);
+
+      expect(recorder.calls, ['maximize', 'unmaximize']);
+    });
+
+    test('restored into a plain window makes a later unmaximize silent', () {
+      host
+        ..handleMacEvent('maximized', null)
+        ..handleMacEvent('minimized', null)
+        ..handleMacEvent('restored', {'maximized': false})
+        ..handleMacEvent('unmaximized', null);
+
+      expect(recorder.calls, ['maximize']);
+    });
+
+    test('duplicate fullscreen events collapse', () {
+      host
+        ..handleMacEvent('enteredFullScreen', null)
+        ..handleMacEvent('enteredFullScreen', null)
+        ..handleMacEvent('exitedFullScreen', null);
+
+      expect(recorder.calls, ['enterFullScreen', 'leaveFullScreen']);
+    });
+
+    test('seeded fullscreen suppresses the first enter', () {
+      host
+        ..attachMacChannel(channelFor(), fullScreen: true, maximized: false)
+        ..handleMacEvent('enteredFullScreen', null);
+
+      expect(recorder.calls, isEmpty);
+
+      host.handleMacEvent('exitedFullScreen', null);
+      expect(recorder.calls, ['leaveFullScreen']);
+    });
+
+    test('seeded maximized makes the first unmaximize count', () {
+      host
+        ..attachMacChannel(channelFor(), fullScreen: false, maximized: true)
+        ..handleMacEvent('unmaximized', null);
+
+      expect(recorder.calls, ['unmaximize']);
+    });
+
+    test('in channel mode the host never looks up a nativeapi window', () {
+      host.attachMacChannel(channelFor(), fullScreen: false, maximized: false);
+
+      // A real lookup would call into nativeapi, which has no library here.
+      expect(host.window, isNull);
+      expect(() => host.addListener(_Recorder()), returnsNormally);
+    });
+
+    test('pushed channel events reach listeners', () async {
+      const channel = MethodChannel('test/host-window');
+      host.attachMacChannel(
+        MacWindowChannel(channel: channel),
+        fullScreen: false,
+        maximized: false,
+      );
+
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            const StandardMethodCodec().encodeMethodCall(
+              const MethodCall('enteredFullScreen'),
+            ),
+            (_) {},
+          );
+
+      expect(recorder.calls, ['enterFullScreen']);
+    });
+
+    test('unknown events are ignored', () {
+      host.handleMacEvent('somethingNew', {'x': 1});
+
+      expect(recorder.calls, isEmpty);
+    });
   });
 }
 

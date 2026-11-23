@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'mac_window_channel.dart';
 import 'window_event_listener.dart';
 
 /// The app's one OS window, from nativeapi (window_manager 0.7's native API),
@@ -16,6 +17,13 @@ import 'window_event_listener.dart';
 /// nativeapi reports one `WindowRestoredEvent` for leaving both the maximized
 /// and the minimized state, so [onWindowUnmaximize] is told apart from what
 /// came before, as window_manager's own 0.5.x bridge does.
+///
+/// macOS is the exception to all of the above. Dart runs off the main thread
+/// there (`docs/playback.md`, "macOS keeps Dart off the main thread"), and
+/// nativeapi cannot find the window from that thread. After
+/// [attachMacChannel], events come from `macos/Runner/WindowPlugin.swift`
+/// through [handleMacEvent] instead, no nativeapi window is ever looked up,
+/// and the same bookkeeping and fan-out apply.
 class NativeWindowHost {
   NativeWindowHost._();
 
@@ -33,9 +41,14 @@ class NativeWindowHost {
   bool _minimized = false;
   bool _fullScreen = false;
 
+  /// Set by [attachMacChannel]: events come from the channel and [window]
+  /// stays null.
+  bool _macChannel = false;
+
   /// The window, or null when none can be found yet. Throws when the native
   /// library is not loaded (a bare `flutter test` VM); callers guard that.
   Window? get window {
+    if (_macChannel) return null;
     final known = _window;
     if (known != null) return known;
     final found = WindowManager.instance.getCurrent();
@@ -54,6 +67,7 @@ class NativeWindowHost {
   /// once a window is found.
   void addListener(WindowEventListener listener) {
     if (!_listeners.contains(listener)) _listeners.add(listener);
+    if (_macChannel) return;
     try {
       final found = window;
       if (found != null) _wire(found);
@@ -64,6 +78,54 @@ class NativeWindowHost {
 
   void removeListener(WindowEventListener listener) {
     _listeners.remove(listener);
+  }
+
+  /// Switches to macOS mode: events from [channel], state seeded from the
+  /// window's current [fullScreen] and [maximized], read by the caller
+  /// through the channel. Call before the first [addListener].
+  void attachMacChannel(
+    MacWindowChannel channel, {
+    required bool fullScreen,
+    required bool maximized,
+  }) {
+    _macChannel = true;
+    _fullScreen = fullScreen;
+    _maximized = maximized;
+    channel.listen(handleMacEvent);
+  }
+
+  /// Translates one `WindowPlugin` event into [WindowEventListener] calls.
+  /// Unknown events are ignored, so a newer Runner cannot break an older
+  /// build's Dart.
+  @visibleForTesting
+  void handleMacEvent(String event, Map<Object?, Object?>? args) {
+    switch (event) {
+      case 'closeRequested':
+        _emit((l) => l.onWindowClose());
+      case 'enteredFullScreen':
+        _setFullScreen(true);
+      case 'exitedFullScreen':
+        _setFullScreen(false);
+      case 'maximized':
+        _onMaximized();
+      case 'unmaximized':
+        // WindowPlugin sends this only for a zoom ending, so the window
+        // is on screen and no longer maximized.
+        _restored(maximizedNow: false);
+      case 'minimized':
+        _minimized = true;
+      case 'restored':
+        // Back from the Dock. Only bookkeeping: leaving minimized is no
+        // unmaximize, whatever state it lands in.
+        _minimized = false;
+        _maximized = args?['maximized'] == true;
+      case 'resized':
+        _emit((l) => l.onWindowResize());
+      case 'moved':
+        _emit((l) => l.onWindowMove());
+      default:
+        break;
+    }
   }
 
   void _wire(Window window) {
@@ -87,27 +149,38 @@ class NativeWindowHost {
       case WindowExitedFullScreenEvent():
         _setFullScreen(false);
       case WindowMaximizedEvent():
-        // A minimized window that was maximized comes back with this alone.
-        _minimized = false;
-        _maximized = true;
-        _emit((l) => l.onWindowMaximize());
+        _onMaximized();
       case WindowMinimizedEvent():
         _minimized = true;
       case WindowRestoredEvent():
-        final wasMinimized = _minimized;
-        final wasMaximized = _maximized;
-        _minimized = false;
         // Leaving the minimized state may land back in the maximized one.
-        _maximized = _window?.isMaximized ?? false;
-        if (!wasMinimized && wasMaximized && !_maximized) {
-          _emit((l) => l.onWindowUnmaximize());
-        }
+        _restored(maximizedNow: _window?.isMaximized ?? false);
       case WindowResizedEvent():
         _emit((l) => l.onWindowResize());
       case WindowMovedEvent():
         _emit((l) => l.onWindowMove());
       default:
         break;
+    }
+  }
+
+  void _onMaximized() {
+    // A minimized window that was maximized comes back with this alone.
+    _minimized = false;
+    _maximized = true;
+    _emit((l) => l.onWindowMaximize());
+  }
+
+  /// Leaves the minimized or maximized state for one where the window is
+  /// [maximizedNow]. Only leaving maximized for an on-screen, unmaximized
+  /// window is an unmaximize.
+  void _restored({required bool maximizedNow}) {
+    final wasMinimized = _minimized;
+    final wasMaximized = _maximized;
+    _minimized = false;
+    _maximized = maximizedNow;
+    if (!wasMinimized && wasMaximized && !_maximized) {
+      _emit((l) => l.onWindowUnmaximize());
     }
   }
 
