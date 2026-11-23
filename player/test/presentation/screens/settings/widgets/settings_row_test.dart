@@ -177,6 +177,33 @@ void main() {
   });
 
   group('SettingsRow.select', () {
+    testWidgets('the value is 30 tall and grows with large text', (
+      tester,
+    ) async {
+      Size valueSize() =>
+          tester.getSize(find.byKey(const Key('settings-row-select-value')));
+      final row = SettingsRow.select(
+        title: 'Default quality',
+        value: 'Auto',
+        onTap: () {},
+      );
+
+      await _pump(tester, row);
+      expect(valueSize().height, 30);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(3)),
+            child: Scaffold(body: ListView(children: [row])),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(valueSize().height, greaterThan(30));
+    });
+
     testWidgets('a null value draws no value button', (tester) async {
       await _pump(
         tester,

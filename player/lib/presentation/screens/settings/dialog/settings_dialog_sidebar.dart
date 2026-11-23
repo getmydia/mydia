@@ -115,6 +115,7 @@ class SettingsDialogSidebar extends StatelessWidget {
                 child: Divider(height: 1, thickness: 1, color: palette.divider),
               ),
             Padding(
+              key: ValueKey(c),
               padding: const EdgeInsets.only(bottom: 2),
               child: _CategoryItem(
                 category: c,

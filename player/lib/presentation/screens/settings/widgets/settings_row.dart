@@ -230,8 +230,9 @@ class _SelectValue extends StatelessWidget {
     final palette = context.palette;
     return Container(
       key: const Key('settings-row-select-value'),
-      constraints: const BoxConstraints(maxWidth: 200),
-      height: 30,
+      // A minimum, not a fixed height: at large text scales the value grows
+      // instead of clipping.
+      constraints: const BoxConstraints(minHeight: 30, maxWidth: 200),
       padding: const EdgeInsets.only(left: 10, right: 6),
       decoration: BoxDecoration(
         color: palette.surfaceHigh,
