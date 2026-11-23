@@ -1,12 +1,27 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 import 'package:player/presentation/screens/settings/widgets/settings_section.dart';
 
 Future<void> _pump(WidgetTester tester, Widget child) async {
   await tester.pumpWidget(
     MaterialApp(
+      home: Scaffold(body: ListView(children: [child])),
+    ),
+  );
+  await tester.pump();
+}
+
+Future<void> _pumpThemed(
+  WidgetTester tester, {
+  required bool liquid,
+  required Widget child,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.build(Palettes.projectionBooth, liquid: liquid),
       home: Scaffold(body: ListView(children: [child])),
     ),
   );
@@ -39,16 +54,37 @@ void main() {
     expect(labelY, lessThan(cardY));
   });
 
-  testWidgets('SettingsSection tracks out its label for the eyebrow style', (
+  testWidgets('eyebrow is 13/600 textSecondary without tracking in Frosted', (
     tester,
   ) async {
-    await _pump(
+    await _pumpThemed(
       tester,
-      const SettingsSection(label: 'Playback', children: [SizedBox()]),
+      liquid: false,
+      child: const SettingsSection(label: 'Playback', children: [SizedBox()]),
     );
 
     final label = tester.widget<Text>(find.text('Playback'));
-    expect(label.style?.letterSpacing, greaterThan(0));
+    expect(label.data, 'Playback');
+    expect(label.style?.fontSize, 13);
+    expect(label.style?.fontWeight, FontWeight.w600);
+    expect(label.style?.letterSpacing, anyOf(isNull, 0));
+    expect(label.style?.color, Palettes.projectionBooth.textSecondary);
+  });
+
+  testWidgets('eyebrow keeps 11/600 textDisabled with tracking in Liquid', (
+    tester,
+  ) async {
+    await _pumpThemed(
+      tester,
+      liquid: true,
+      child: const SettingsSection(label: 'Playback', children: [SizedBox()]),
+    );
+
+    final label = tester.widget<Text>(find.text('Playback'));
+    expect(label.style?.fontSize, 11);
+    expect(label.style?.fontWeight, FontWeight.w600);
+    expect(label.style?.letterSpacing, 1.2);
+    expect(label.style?.color, Palettes.projectionBooth.textDisabled);
   });
 
   testWidgets(

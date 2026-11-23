@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../core/focus/focus_memory.dart';
 import '../../../../core/player/input_capabilities.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/liquid_glass/glass_style.dart';
 import '../../../../core/theme/palette.dart';
 import '../../../widgets/glass_surface.dart';
 
@@ -52,8 +53,8 @@ class SettingsCard extends StatelessWidget {
 
 /// An eyebrow label above a [SettingsCard].
 ///
-/// The label is styled as an eyebrow with tracking, weight, and a muted tone,
-/// but the string itself is rendered as given. Transforming it to upper case
+/// The label is a muted eyebrow: tracked under Liquid, untracked under Frosted.
+/// The string itself is rendered as given. Transforming it to upper case
 /// would make screen readers spell or shout it, and would break `find.text`
 /// against the label a caller actually passed.
 class SettingsSection extends StatelessWidget {
@@ -84,6 +85,10 @@ class SettingsSection extends StatelessWidget {
                 child: row,
               ),
           ];
+    final palette = context.palette;
+    // Frosted: a quieter 13/600 label in textSecondary, no tracking. Liquid
+    // keeps its tracked 11/600 eyebrow in textDisabled.
+    final frosted = !GlassStyle.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -91,12 +96,18 @@ class SettingsSection extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
           child: Text(
             label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
-              color: context.palette.textDisabled,
-            ),
+            style: frosted
+                ? TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: palette.textSecondary,
+                  )
+                : TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                    color: palette.textDisabled,
+                  ),
           ),
         ),
         SettingsCard(children: rows),
