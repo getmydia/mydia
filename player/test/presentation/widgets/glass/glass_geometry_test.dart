@@ -160,10 +160,16 @@ void main() {
     );
   });
 
-  testWidgets('Frosted: the toast keeps radius 22', (tester) async {
+  testWidgets('Frosted: the toast is a full stadium', (tester) async {
     await tester.pumpWidget(
       _host(const ToastPill(entry: _toast), liquid: false),
     );
-    expect(_radiusOf(tester), BorderRadius.circular(ToastMetrics.radius));
+    final box = tester.widget<DecoratedBox>(
+      find.byKey(const Key('toast-pill-frosted')),
+    );
+    expect(
+      (box.decoration as BoxDecoration).borderRadius,
+      BorderRadius.circular(999),
+    );
   });
 }

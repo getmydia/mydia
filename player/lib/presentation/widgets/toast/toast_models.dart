@@ -43,10 +43,6 @@ abstract final class ToastMetrics {
   /// Widest a pill gets on a large window.
   static const double maxWidth = 420;
 
-  /// Corner radius. A single-line pill is about 44 tall, so this reads as a
-  /// full stadium. The mobile dock's pill uses the same 22.
-  static const double radius = 22;
-
   /// Clearance from the sides of the area the pill centres in.
   static const double gutter = 16;
 

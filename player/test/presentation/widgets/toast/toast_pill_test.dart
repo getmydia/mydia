@@ -10,10 +10,7 @@ import 'package:player/presentation/widgets/toast/toast_models.dart';
 import 'package:player/presentation/widgets/toast/toast_pill.dart';
 
 final _pill = find.byKey(const Key('toast-pill'));
-final _frostedBox = find.descendant(
-  of: _pill,
-  matching: find.byType(DecoratedBox),
-);
+final _frostedBox = find.byKey(const Key('toast-pill-frosted'));
 
 ToastEntry _entry(
   String message, {
@@ -129,6 +126,7 @@ void main() {
     expect(deco.color!.a, 1.0);
     expect((deco.border! as Border).top.color, const Color(0x14FFFFFF));
     expect(deco.boxShadow, hasLength(2));
+    expect(deco.borderRadius, BorderRadius.circular(999));
   });
 
   testWidgets('Frosted pill keeps its live region', (tester) async {

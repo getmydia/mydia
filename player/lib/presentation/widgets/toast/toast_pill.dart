@@ -23,7 +23,7 @@ class ToastPill extends StatelessWidget {
   /// [ToastEntry.action] is set.
   final VoidCallback? onAction;
 
-  /// Browse-chrome density: at or above
+  /// Liquid only (Frosted uses an opaque `surfaceHigh`). Browse-chrome density: at or above
   /// [DepthTokens.glassLegibilityFloor], so text stays legible over bright
   /// artwork behind the blur.
   static Color fill(MydiaPalette p) =>
@@ -161,6 +161,7 @@ class ToastPill extends StatelessWidget {
                 ),
               )
             : DecoratedBox(
+                key: const Key('toast-pill-frosted'),
                 // Frosted: an opaque card with a hairline edge and a
                 // two-layer shadow (ambient plus direct). No backdrop blur.
                 decoration: BoxDecoration(
