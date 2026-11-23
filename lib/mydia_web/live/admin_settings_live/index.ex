@@ -566,6 +566,18 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
           type: :string,
           value: config.media.tv_path,
           source: Settings.config_source("TV_PATH", "media.tv_path", all_db_settings)
+        },
+        %{
+          key: "media.minimum_availability",
+          type: :select,
+          value: config.media.minimum_availability,
+          options: MydiaWeb.MinimumAvailabilityLabels.options(),
+          source:
+            Settings.config_source(
+              "MINIMUM_AVAILABILITY",
+              "media.minimum_availability",
+              all_db_settings
+            )
         }
       ],
       "Downloads" => [

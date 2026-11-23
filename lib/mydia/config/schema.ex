@@ -46,6 +46,15 @@ defmodule Mydia.Config.Schema do
   """
   def season_monitoring_values, do: @season_monitoring_values
 
+  @minimum_availability_levels ~w(announced in_cinemas released)
+
+  @doc """
+  Valid `media.minimum_availability` levels, also accepted as a movie's own
+  override. See `Mydia.Media.MinimumAvailability`.
+  """
+  @spec minimum_availability_levels() :: [String.t()]
+  def minimum_availability_levels, do: @minimum_availability_levels
+
   @type t :: %__MODULE__{
           server: __MODULE__.Server.t() | nil,
           database: __MODULE__.Database.t() | nil,
@@ -121,6 +130,10 @@ defmodule Mydia.Config.Schema do
       field :movies_auto_organize, :boolean, default: false
       field :tv_auto_organize, :boolean, default: false
       field :auto_search_on_add, :boolean, default: true
+      # When automatic search may start looking for a movie: "announced",
+      # "in_cinemas" or "released". A movie's own minimum_availability
+      # overrides it. See Mydia.Media.MinimumAvailability.
+      field :minimum_availability, :string, default: "released"
       field :default_season_monitoring, :string, default: "all"
       field :monitor_by_default, :boolean, default: true
       field :season_refresh_threshold_hours, :integer, default: 24
@@ -525,12 +538,15 @@ defmodule Mydia.Config.Schema do
       :movies_auto_organize,
       :tv_auto_organize,
       :auto_search_on_add,
+      :minimum_availability,
       :default_season_monitoring,
       :monitor_by_default,
       :season_refresh_threshold_hours,
       :completed_show_refresh_threshold_hours,
       :trash_retention_days
     ])
+    |> validate_required([:minimum_availability])
+    |> validate_inclusion(:minimum_availability, @minimum_availability_levels)
     # movies_path and tv_path are optional legacy fields
     |> validate_number(:season_refresh_threshold_hours, greater_than: 0)
     |> validate_number(:completed_show_refresh_threshold_hours, greater_than: 0)

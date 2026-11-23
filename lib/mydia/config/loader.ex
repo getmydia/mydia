@@ -339,6 +339,11 @@ defmodule Mydia.Config.Loader do
     |> put_if_present(:auto_search_on_add, System.get_env("AUTO_SEARCH_ON_ADD"), &parse_boolean/1)
     |> put_if_present(:monitor_by_default, System.get_env("MONITOR_BY_DEFAULT"), &parse_boolean/1)
     |> put_if_present(
+      :minimum_availability,
+      System.get_env("MINIMUM_AVAILABILITY"),
+      &{:ok, &1 |> String.trim() |> String.downcase()}
+    )
+    |> put_if_present(
       :default_season_monitoring,
       System.get_env("DEFAULT_SEASON_MONITORING"),
       &{:ok, String.downcase(&1)}

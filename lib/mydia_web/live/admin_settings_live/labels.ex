@@ -38,6 +38,10 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
   def label("auth.oidc_default_role"), do: gettext("Default Role for New SSO Users")
   def label("media.movies_path"), do: gettext("Movies Path")
   def label("media.tv_path"), do: gettext("TV Path")
+
+  def label("media.minimum_availability"),
+    do: gettext("Minimum Availability (automatic movie search)")
+
   def label("downloads.monitor_interval_minutes"), do: gettext("Monitor Interval (minutes)")
   def label("downloads.min_seeders"), do: gettext("Minimum Seeders (automatic search)")
   def label("streaming.max_transcode_height"), do: gettext("Max Transcode Height")
@@ -55,6 +59,12 @@ defmodule MydiaWeb.AdminSettingsLive.Labels do
     do:
       gettext(
         "Role given to an account created by its first SSO sign-in when the identity provider's roles or groups claims grant none. Existing accounts keep their role. Admin is not offered: it would make everyone at the identity provider an admin."
+      )
+
+  def description("media.minimum_availability"),
+    do:
+      gettext(
+        "When automatic search may start looking for a movie. Announced searches as soon as it is added. In cinemas waits for its theatrical release date. Released waits for its earliest digital or physical release, or 90 days after the theatrical date when neither is known. Releases offered before then are almost always fakes. Each movie can override this, and the Search button on a movie's page ignores it."
       )
 
   def description("downloads.min_seeders"),

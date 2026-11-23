@@ -31,6 +31,7 @@ defmodule Mydia.Media.MediaItem do
           category: String.t() | nil,
           category_override: boolean(),
           download_audio_language: String.t() | nil,
+          minimum_availability: String.t() | nil,
           seasons_refreshed_at: DateTime.t() | nil,
           poster_override: String.t() | nil,
           last_upgrade_check_at: DateTime.t() | nil,
@@ -87,6 +88,10 @@ defmodule Mydia.Media.MediaItem do
     # to follow downloads.audio_language. Decides which releases search prefers,
     # never which track plays. See Mydia.Media.AudioLanguagePolicy.
     field :download_audio_language, :string
+    # This movie's minimum availability level, or nil to follow
+    # media.minimum_availability. Decides when automatic search may start
+    # looking for it. See Mydia.Media.MinimumAvailability.
+    field :minimum_availability, :string
     # Owned by the season refresh, which stamps it through
     # Media.stamp_seasons_refreshed/1; never cast from user input. It was
     # previously written by passing it to Media.update_media_item/3, which casts
@@ -137,7 +142,8 @@ defmodule Mydia.Media.MediaItem do
       :monitor_new_seasons,
       :quality_profile_id,
       :library_path_id,
-      :download_audio_language
+      :download_audio_language,
+      :minimum_availability
     ])
     |> validate_required([:type, :title])
     |> put_content_rating_age()
@@ -146,6 +152,10 @@ defmodule Mydia.Media.MediaItem do
     |> validate_year_for_movies()
     |> normalize_download_audio_language()
     |> validate_download_audio_language()
+    |> validate_inclusion(
+      :minimum_availability,
+      Mydia.Config.Schema.minimum_availability_levels()
+    )
     # Named after the partial composite indexes in
     # `20260905143012_scope_provider_id_uniqueness_by_type.exs`. A bare
     # `unique_constraint/2` expects `media_items_tmdb_id_index`, which no longer
