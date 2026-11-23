@@ -74,6 +74,9 @@ class WebFullscreenBackend implements FullscreenBackend, WebFullscreenPlatform {
   void exit() => _core.exit();
 
   @override
+  void toggle(bool observed) => observed ? exit() : enter();
+
+  @override
   void dispose() => _core.dispose();
 
   // --- WebFullscreenPlatform: capability probes ----------------------------

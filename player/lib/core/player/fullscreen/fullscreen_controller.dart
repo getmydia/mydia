@@ -77,7 +77,7 @@ class FullscreenController {
   /// needs live user activation, and an `await` between the tap and the call
   /// spends it. Changing this to `Future<void>` would break iPhone Safari in a
   /// way no test on a non-web host can catch.
-  void toggle() => _state.value ? exit() : enter();
+  void toggle() => _backend.toggle(_state.value);
 
   void enter() => _backend.enter();
 

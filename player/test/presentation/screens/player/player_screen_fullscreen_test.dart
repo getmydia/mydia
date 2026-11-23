@@ -224,6 +224,9 @@ class _TestBackend implements FullscreenBackend {
   void exit() {}
 
   @override
+  void toggle(bool observed) {}
+
+  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;

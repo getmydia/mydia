@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../window/window_controller_native.dart';
 import '../../window/window_fullscreen.dart';
 import '../platform_features.dart';
 import 'fullscreen_backend.dart';
@@ -36,8 +39,11 @@ class NativeFullscreenBackend implements FullscreenBackend {
     @visibleForTesting this._isWindows,
     @visibleForTesting VoidCallback? onEnterNative,
     @visibleForTesting VoidCallback? onExitNative,
+    @visibleForTesting Future<bool> Function()? readWindowFullscreen,
   }) : _onEnterNative = onEnterNative ?? defaultEnterNativeFullscreen,
-       _onExitNative = onExitNative ?? defaultExitNativeFullscreen;
+       _onExitNative = onExitNative ?? defaultExitNativeFullscreen,
+       _readWindowFullscreen =
+           readWindowFullscreen ?? const WindowManagerController().isFullScreen;
 
   final ValueChanged<bool> onChange;
   final ValueNotifier<bool>? _windowSignal;
@@ -45,6 +51,7 @@ class NativeFullscreenBackend implements FullscreenBackend {
   final bool? _isWindows;
   final VoidCallback _onEnterNative;
   final VoidCallback _onExitNative;
+  final Future<bool> Function() _readWindowFullscreen;
 
   bool get _effectiveIsDesktop => _isDesktop ?? PlatformFeatures.isDesktop;
   bool get _effectiveIsWindows => _isWindows ?? PlatformFeatures.isWindows;
@@ -105,6 +112,29 @@ class NativeFullscreenBackend implements FullscreenBackend {
       _effectiveWindowSignal.value = false;
       if (!_listening) onChange(false);
     }
+  }
+
+  /// Asks the window rather than trusting [observed].
+  ///
+  /// On macOS the fullscreen signal can miss a transition, and then the
+  /// observed state stays false while the window is fullscreen. Choosing from
+  /// it turned every tap into another enter, which AppKit ignores, so the
+  /// viewer had no way out during playback. The live read costs nothing that
+  /// matters here: unlike web, nothing on native needs user activation.
+  @override
+  void toggle(bool observed) {
+    if (mode == FullscreenMode.unsupported) return;
+    unawaited(_toggleFromWindow(observed));
+  }
+
+  Future<void> _toggleFromWindow(bool observed) async {
+    var fullscreen = observed;
+    try {
+      fullscreen = await _readWindowFullscreen();
+    } catch (e) {
+      debugPrint('[NativeFullscreen] Failed to read window state: $e');
+    }
+    fullscreen ? exit() : enter();
   }
 
   @override

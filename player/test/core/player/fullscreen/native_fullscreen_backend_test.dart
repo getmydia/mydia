@@ -143,6 +143,75 @@ void main() {
       expect(changes, [false]);
     });
 
+    test('on macOS, toggle exits when the window is fullscreen even though '
+        'the signal missed the transition', () async {
+      final windowSignal = ValueNotifier<bool>(false);
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: windowSignal,
+        isWindows: false,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => true,
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(windowSignal.value);
+      await pumpEventQueue();
+
+      expect(nativeExitCalls, 1);
+      expect(nativeEnterCalls, 0);
+    });
+
+    test('toggle enters when the live window is not fullscreen', () async {
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: ValueNotifier<bool>(true),
+        isWindows: false,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => false,
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(true);
+      await pumpEventQueue();
+
+      expect(nativeEnterCalls, 1);
+      expect(nativeExitCalls, 0);
+    });
+
+    test('toggle falls back to the observed state when the window cannot be '
+        'read', () async {
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: (_) {},
+        isDesktop: true,
+        windowSignal: ValueNotifier<bool>(true),
+        isWindows: false,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+        readWindowFullscreen: () async => throw StateError('no window'),
+      );
+      addTearDown(backend.dispose);
+
+      backend.toggle(true);
+      await pumpEventQueue();
+
+      expect(nativeExitCalls, 1);
+      expect(nativeEnterCalls, 0);
+    });
+
     test('on native mobile there is no fullscreen route: the player is '
         'already immersive, so the button must not draw', () {
       final changes = <bool>[];

@@ -48,6 +48,14 @@ abstract class FullscreenBackend {
 
   void exit();
 
+  /// Enters or exits, given [observed], the state this backend last reported.
+  ///
+  /// Synchronous for the same reason as [enter]. A backend whose platform can
+  /// be asked directly may check it before choosing instead of trusting
+  /// [observed]: a missed transition event otherwise leaves every tap asking
+  /// for the state the window is already in.
+  void toggle(bool observed);
+
   void dispose();
 }
 
