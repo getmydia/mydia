@@ -64,6 +64,26 @@ defmodule MydiaWeb.ChangelogLiveTest do
     assert has_element?(view, "##{latest_id} .badge", "New")
   end
 
+  # The browser owns `open` once mounted. Without this, any patch to the page
+  # re-applies the server's markup and shuts the entry the user is reading.
+  test "lets the browser keep entries open across patches", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/changelog")
+
+    entry = hd(Changelog.entries())
+    selector = "##{ChangelogLive.Index.entry_id(entry.version_string)} details"
+
+    phx_mounted =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(selector)
+      |> LazyHTML.attribute("phx-mounted")
+
+    assert [binding] = phx_mounted
+    assert binding =~ "ignore_attrs"
+    assert binding =~ "open"
+  end
+
   test "requires authentication", %{} do
     conn = Phoenix.ConnTest.build_conn()
     assert {:error, {:redirect, %{to: "/auth/login"}}} = live(conn, ~p"/changelog")
