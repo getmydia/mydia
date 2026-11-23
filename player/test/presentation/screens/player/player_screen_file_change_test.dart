@@ -476,6 +476,34 @@ void main() {
     await tester.runAsync(() => exit);
   });
 
+  testWidgets('quitting just after leaving the player waits for its dispose', (
+    tester,
+  ) async {
+    // Leaving the player starts a dispose that runs on after the screen is
+    // gone. A quit in that window must still wait for it.
+    final link = _link();
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+
+    final gate = player.disposeGate = Completer<void>();
+    await tester.pumpWidget(const SizedBox());
+    await _pumpUntilSwitched(tester, () => player.disposeStarted);
+
+    var answered = false;
+    final exit = PlayerExitGuard.instance.onExitRequested().then((r) {
+      answered = true;
+      return r;
+    });
+    await tester.runAsync(pumpEventQueue);
+    expect(answered, isFalse, reason: 'the dispose is still running');
+
+    gate.complete();
+    await tester.runAsync(() => exit);
+    expect(player.disposed, isTrue);
+  });
+
   testWidgets('the old player is disposed when the file changes', (
     tester,
   ) async {

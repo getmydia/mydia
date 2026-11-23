@@ -143,11 +143,15 @@ class NativeFullscreenBackend implements FullscreenBackend {
     } catch (e) {
       debugPrint('[NativeFullscreen] Failed to read window state: $e');
     }
+    if (_disposed) return;
     fullscreen ? exit() : enter();
   }
 
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     if (_listening) {
       _effectiveWindowSignal.removeListener(_republish);
       _listening = false;

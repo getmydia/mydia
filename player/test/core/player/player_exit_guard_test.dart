@@ -62,6 +62,44 @@ void main() {
     expect(await guard.onExitRequested(), AppExitResponse.exit);
   });
 
+  test('exit waits for a dispose that is already under way', () async {
+    final gate = Completer<void>();
+    unawaited(guard.track(gate.future));
+
+    var answered = false;
+    final response = guard.onExitRequested().then((r) {
+      answered = true;
+      return r;
+    });
+    await pumpEventQueue();
+    expect(answered, isFalse);
+
+    gate.complete();
+    expect(await response, AppExitResponse.exit);
+  });
+
+  test('a player registered while the exit waits is released before the '
+      'exit answers', () async {
+    final gate = Completer<void>();
+    guard.register(() => gate.future);
+    final response = guard.onExitRequested();
+    await pumpEventQueue();
+
+    var lateReleased = false;
+    guard.register(() async => lateReleased = true);
+    gate.complete();
+
+    expect(await response, AppExitResponse.exit);
+    expect(lateReleased, isTrue);
+  });
+
+  test('a hung tracked dispose never blocks the exit', () async {
+    guard = PlayerExitGuard(timeout: const Duration(milliseconds: 50));
+    unawaited(guard.track(Completer<void>().future));
+
+    expect(await guard.onExitRequested(), AppExitResponse.exit);
+  });
+
   test('with nothing registered the exit is immediate', () async {
     expect(await guard.onExitRequested(), AppExitResponse.exit);
   });

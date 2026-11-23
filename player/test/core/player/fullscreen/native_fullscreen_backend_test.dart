@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
@@ -211,6 +213,31 @@ void main() {
       expect(nativeExitCalls, 1);
       expect(nativeEnterCalls, 0);
     });
+
+    test(
+      'a toggle whose window read lands after dispose does nothing',
+      () async {
+        final read = Completer<bool>();
+        var nativeCalls = 0;
+
+        final backend = NativeFullscreenBackend(
+          onChange: (_) {},
+          isDesktop: true,
+          windowSignal: ValueNotifier<bool>(false),
+          isWindows: false,
+          onEnterNative: () => nativeCalls++,
+          onExitNative: () => nativeCalls++,
+          readWindowFullscreen: () => read.future,
+        );
+
+        backend.toggle(false);
+        backend.dispose();
+        read.complete(true);
+        await pumpEventQueue();
+
+        expect(nativeCalls, 0);
+      },
+    );
 
     test('on Windows, toggle goes by the observed state: nativeapi never '
         'sees media_kit\'s fullscreen and always reads false', () async {

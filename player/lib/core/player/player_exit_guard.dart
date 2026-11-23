@@ -26,27 +26,58 @@ class PlayerExitGuard {
 
   final Set<_Registration> _registrations = {};
 
+  /// Releases and disposes under way. An exit waits for every one.
+  final Set<Future<void>> _pending = {};
+
+  /// True while [onExitRequested] waits. A player registered then is
+  /// released at once, so a load that finishes mid-exit leaves nothing live.
+  bool _exiting = false;
+
   /// Registers [release], which disposes one player. Unregister once that
-  /// player is disposed by its own path.
+  /// player's own dispose has started, and hand that dispose to [track].
   PlayerExitRegistration register(Future<void> Function() release) {
     final registration = _Registration(release, _registrations.remove);
-    _registrations.add(registration);
+    if (_exiting) {
+      unawaited(track(_guarded(release)));
+    } else {
+      _registrations.add(registration);
+    }
     return registration;
   }
 
-  /// Runs every registered release, then lets the app exit. Never cancels the
-  /// exit and never throws.
+  /// Keeps an exit waiting until [dispose] completes. For a dispose that
+  /// started on its own path (leaving the player, switching files), which
+  /// can still be running when the viewer quits.
+  Future<void> track(Future<void> dispose) {
+    final guarded = _guarded(() => dispose);
+    _pending.add(guarded);
+    guarded.whenComplete(() => _pending.remove(guarded));
+    return dispose;
+  }
+
+  /// Runs every registered release and waits for every tracked dispose,
+  /// then lets the app exit. Never cancels the exit and never throws.
   Future<AppExitResponse> onExitRequested() async {
-    final releases = List.of(_registrations);
-    _registrations.clear();
-    if (releases.isEmpty) return AppExitResponse.exit;
+    _exiting = true;
     try {
-      await Future.wait(releases.map((r) => _guarded(r.release)))
-          .timeout(timeout);
+      for (final r in List.of(_registrations)) {
+        unawaited(track(_guarded(r.release)));
+      }
+      _registrations.clear();
+      await _drain().timeout(timeout);
     } on TimeoutException {
       debugPrint('[PlayerExitGuard] Player release timed out; exiting anyway');
+    } finally {
+      _exiting = false;
     }
     return AppExitResponse.exit;
+  }
+
+  /// Waits until nothing is pending, including work added while waiting.
+  Future<void> _drain() async {
+    while (_pending.isNotEmpty) {
+      await Future.wait(List.of(_pending));
+    }
   }
 
   static Future<void> _guarded(Future<void> Function() release) async {

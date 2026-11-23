@@ -5755,7 +5755,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final disposed = surfaceBinding == null
           ? player.dispose()
           : surfaceBinding.detach().then((_) => player.dispose());
-      unawaited(disposed.whenComplete(() => releaseHlsEngine(player)));
+      // Tracked so a quit right after leaving the player waits for it.
+      unawaited(
+        PlayerExitGuard.instance.track(
+          disposed.whenComplete(() => releaseHlsEngine(player)),
+        ),
+      );
     }
     _focusNode.dispose();
     _osdPlayPauseFocus.dispose();
@@ -6143,9 +6148,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `Timer.periodic` would keep sampling a player nothing is using.
   /// `_stopStatsCollector` is idempotent, so calling it again here on a
   /// path that already stopped the collector is a no-op.
-  Future<void> _disposePlayer() async {
+  ///
+  /// Tracked by [PlayerExitGuard], so a quit while it runs (a file switch,
+  /// say) waits for it to finish.
+  Future<void> _disposePlayer() {
     _exitRegistration?.unregister();
     _exitRegistration = null;
+    return PlayerExitGuard.instance.track(_disposePlayerNow());
+  }
+
+  Future<void> _disposePlayerNow() async {
     _scrub.reset();
     final player = _player;
     _player = null;
