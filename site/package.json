@@ -15,11 +15,11 @@
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.5",
     "astro": "^7.4.12",
-    "daisyui": "^5.8.0",
+    "daisyui": "^5.8.1",
     "tailwindcss": "^4.2.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261115.1",
+    "@cloudflare/workers-types": "^5.20261116.1",
     "vitest": "^5.1.0"
   },
   "overrides": {
