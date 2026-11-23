@@ -43,7 +43,7 @@ class NativeFullscreenBackend implements FullscreenBackend {
   }) : _onEnterNative = onEnterNative ?? defaultEnterNativeFullscreen,
        _onExitNative = onExitNative ?? defaultExitNativeFullscreen,
        _readWindowFullscreen =
-           readWindowFullscreen ?? const WindowManagerController().isFullScreen;
+           readWindowFullscreen ?? nativeWindowController().isFullScreen;
 
   final ValueChanged<bool> onChange;
   final ValueNotifier<bool>? _windowSignal;

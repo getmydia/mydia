@@ -161,8 +161,7 @@ class WindowTitleRow extends ConsumerWidget {
                     // everything else in the band moves the window.
                     Positioned.fill(
                       child: WindowDragBand(
-                        controller:
-                            controller ?? const WindowManagerController(),
+                        controller: controller ?? nativeWindowController(),
                         height: insets.height,
                         onPointerDown: _onBandPointerDown(),
                       ),

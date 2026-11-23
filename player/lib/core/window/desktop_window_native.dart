@@ -1,5 +1,9 @@
-/// Native desktop window management, backed by window_manager's and
-/// screen_retriever's native API (nativeapi), through [NativeWindowHost].
+/// Native desktop window management, through [NativeWindowHost].
+///
+/// On Windows and Linux it is backed by window_manager's and
+/// screen_retriever's native API (nativeapi). On macOS it goes through
+/// `macos/Runner/WindowPlugin.swift` instead ([MacWindowChannel]): Dart runs
+/// off the main thread there, and nativeapi cannot reach the window from it.
 ///
 /// `dart.library.io` is also true on iOS and Android, so every entry point
 /// here gates on [PlatformFeatures.isDesktop] as well.
@@ -15,6 +19,8 @@
 /// what the `try` blocks are for.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 // Re-exports hive_ce, so this one import covers both Hive and Box.
 import 'package:hive_ce_flutter/hive_flutter.dart';
@@ -23,6 +29,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../player/platform_features.dart';
 import '../storage/app_hive.dart';
+import 'mac_window_channel.dart';
 import 'native_window_host.dart';
 import 'player_window_session.dart';
 import 'player_window_sizer.dart';
@@ -49,7 +56,20 @@ Future<void> initDesktopWindow() async {
 
   final host = NativeWindowHost.instance;
   try {
-    host.requireWindow();
+    if (useMacWindowChannel) {
+      // Seeds the host from the window before any listener is added, so a
+      // state reached before launch is not reported as a transition.
+      final window = nativeWindowController();
+      final fullScreen = await window.isFullScreen();
+      final maximized = await window.isMaximized();
+      host.attachMacChannel(
+        MacWindowChannel.instance,
+        fullScreen: fullScreen,
+        maximized: maximized,
+      );
+    } else {
+      host.requireWindow();
+    }
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to find the native window: $e');
     // Without a window there is nothing to restore or track. Dragging is
@@ -67,7 +87,7 @@ Future<void> initDesktopWindow() async {
 
   final store = await _openStore();
   final controller = WindowGeometryController(
-    window: const WindowManagerController(),
+    window: nativeWindowController(),
     store: store,
     readWorkAreas: _readWorkAreas,
   );
@@ -82,7 +102,7 @@ Future<void> initDesktopWindow() async {
   }
 
   final session = PlayerWindowSession(
-    window: const WindowManagerController(),
+    window: nativeWindowController(),
     geometry: controller,
   );
   _playerSession = session;
@@ -99,7 +119,7 @@ Future<void> initDesktopWindow() async {
   // not also cost geometry persistence, and vice versa.
   try {
     final fullscreen = WindowFullscreenController(
-      window: const WindowManagerController(),
+      window: nativeWindowController(),
     );
     await fullscreen.seed();
     host.addListener(fullscreen);
@@ -113,7 +133,7 @@ Future<void> initDesktopWindow() async {
   // tracking or geometry persistence.
   try {
     final maximized = WindowMaximizedController(
-      window: const WindowManagerController(),
+      window: nativeWindowController(),
     );
     await maximized.seed();
     host.addListener(maximized);
@@ -128,6 +148,7 @@ Future<void> initDesktopWindow() async {
 /// reporting an empty one is skipped rather than guessed at — a wrong rect
 /// here puts the window somewhere unreachable.
 Future<List<WorkArea>> _readWorkAreas() async {
+  if (useMacWindowChannel) return MacWindowChannel.instance.getWorkAreas();
   try {
     final displays = DisplayManager.instance.getAll();
     try {
@@ -167,6 +188,10 @@ Future<WindowGeometryStore> _openStore() async {
 
 void startWindowDrag() {
   if (!PlatformFeatures.isDesktop) return;
+  if (useMacWindowChannel) {
+    _macCall('startDragging', null, 'start window drag');
+    return;
+  }
   try {
     NativeWindowHost.instance.requireWindow().startDragging();
   } catch (e) {
@@ -181,6 +206,10 @@ void startWindowDrag() {
 /// exception usefully — same contract as [startWindowDrag].
 void setWindowAlwaysOnTop(bool value) {
   if (!PlatformFeatures.isDesktop) return;
+  if (useMacWindowChannel) {
+    _macCall('setAlwaysOnTop', {'value': value}, 'set always-on-top');
+    return;
+  }
   try {
     NativeWindowHost.instance.requireWindow().isAlwaysOnTop = value;
   } catch (e) {
@@ -192,6 +221,14 @@ void setWindowAlwaysOnTop(bool value) {
 /// Never throws.
 Future<void> raiseDesktopWindow() async {
   if (!PlatformFeatures.isDesktop) return;
+  if (useMacWindowChannel) {
+    try {
+      await MacWindowChannel.instance.invoke<void>('raise');
+    } catch (e) {
+      debugPrint('[DesktopWindow] Failed to raise window: $e');
+    }
+    return;
+  }
   try {
     NativeWindowHost.instance.requireWindow()
       ..show()
@@ -210,7 +247,7 @@ PlayerWindowSizer createPlayerWindowSizer() {
 
   late final NativePlayerWindowSizer sizer;
   sizer = NativePlayerWindowSizer(
-    window: const WindowManagerController(),
+    window: nativeWindowController(),
     session: session,
     readWorkAreas: _readWorkAreas,
     onDetached: () {
@@ -230,4 +267,14 @@ PlayerWindowSizer createPlayerWindowSizer() {
     debugPrint('[DesktopWindow] Failed to watch for manual resize: $e');
   }
   return sizer;
+}
+
+/// Fires one [MacWindowChannel] call from a synchronous entry point, logging
+/// a failure the way the nativeapi branches do.
+void _macCall(String method, Object? args, String what) {
+  unawaited(
+    MacWindowChannel.instance.invoke<void>(method, args).catchError((Object e) {
+      debugPrint('[DesktopWindow] Failed to $what: $e');
+    }),
+  );
 }

@@ -376,7 +376,7 @@ Future<Duration> _close(WidgetTester tester, _Rig rig) async {
 }
 
 /// The app's window, as `desktop_window_native.dart` drives it.
-const _window = WindowManagerController();
+final _window = nativeWindowController();
 
 /// Moves the window onto the built-in panel, the Mac's only EDR screen
 /// here. Returns that display's name, or null when there is none.
@@ -430,7 +430,7 @@ void main() {
     // without it the screen never learns it entered fullscreen, and the
     // second `f` asks to enter again instead of leaving.
     final fullscreen = WindowFullscreenController(
-      window: const WindowManagerController(),
+      window: nativeWindowController(),
     );
     await fullscreen.seed();
     NativeWindowHost.instance.addListener(fullscreen);
