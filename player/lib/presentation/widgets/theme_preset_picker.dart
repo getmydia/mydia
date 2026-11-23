@@ -9,8 +9,8 @@ import '../../l10n/l10n.dart';
 import 'osd_dialog.dart';
 
 /// Shows the presets offered here and returns the one picked, or null if the
-/// viewer dismissed the dialog. Same tile shape as the subtitle size picker,
-/// so it works with D-pad focus on TV. [linuxDesktop] names the `linux`
+/// viewer dismissed the dialog. Same tile shape as the quality picker, so it
+/// works with D-pad focus on TV. [linuxDesktop] names the `linux`
 /// preset.
 Future<ThemePreset?> showThemePresetPicker(
   BuildContext context,
