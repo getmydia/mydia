@@ -540,6 +540,18 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
               "auth.oidc_link_by_email",
               all_db_settings
             )
+        },
+        %{
+          key: "auth.oidc_default_role",
+          type: :select,
+          value: config.auth.oidc_default_role,
+          options: oidc_default_role_options(),
+          source:
+            Settings.config_source(
+              "OIDC_DEFAULT_ROLE",
+              "auth.oidc_default_role",
+              all_db_settings
+            )
         }
       ],
       "Media" => [
@@ -744,6 +756,20 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     {%{}, types}
     |> Ecto.Changeset.cast(attrs_with_string_category, Map.keys(types))
     |> Ecto.Changeset.validate_required([:key, :category])
+  end
+
+  # Labels for AuthChangeset.oidc_default_roles/0, in the same order.
+  defp oidc_default_role_options do
+    labels = %{
+      "guest" => gettext("Guest"),
+      "readonly" => gettext("Read Only"),
+      "user" => gettext("User")
+    }
+
+    Enum.map(
+      Mydia.Config.Schema.AuthChangeset.oidc_default_roles(),
+      &{&1, Map.fetch!(labels, &1)}
+    )
   end
 
   defp category_string_to_atom(category_string) do

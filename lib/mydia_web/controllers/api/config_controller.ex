@@ -530,6 +530,7 @@ defmodule MydiaWeb.Api.ConfigController do
       "auth.oidc_client_secret" => "OIDC_CLIENT_SECRET",
       "auth.oidc_scopes" => "OIDC_SCOPES",
       "auth.oidc_link_by_email" => "OIDC_LINK_BY_EMAIL",
+      "auth.oidc_default_role" => "OIDC_DEFAULT_ROLE",
       "auth.local_enabled" => "LOCAL_AUTH_ENABLED",
       "media.movies_path" => "MOVIES_PATH",
       "media.tv_path" => "TV_PATH",

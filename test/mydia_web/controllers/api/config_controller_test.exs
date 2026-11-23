@@ -18,6 +18,18 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
       assert json_response(conn, 200)
     end
 
+    # A stored "admin" would fail the merged config and take every other
+    # database-backed setting down with it, so it never reaches the table.
+    test "refuses admin as the default SSO role", %{conn: conn, token: token} do
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> put("/api/v1/config/auth.oidc_default_role", %{"value" => "admin"})
+
+      assert json_response(conn, 422)
+      refute Mydia.Settings.get_config_setting_by_key("auth.oidc_default_role")
+    end
+
     # The row's category is what the admin settings page groups by, and the
     # admin toggle and the migration both file this key under remote_access.
     test "files a new remote_access.enabled row under remote_access", %{conn: conn, token: token} do
@@ -106,7 +118,8 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
 
   describe "auth settings set by environment variable" do
     setup %{conn: conn, token: token} do
-      originals = Map.new(~w(OIDC_LINK_BY_EMAIL OIDC_SCOPES), &{&1, System.get_env(&1)})
+      originals =
+        Map.new(~w(OIDC_LINK_BY_EMAIL OIDC_SCOPES OIDC_DEFAULT_ROLE), &{&1, System.get_env(&1)})
 
       on_exit(fn ->
         Enum.each(originals, fn
@@ -120,7 +133,8 @@ defmodule MydiaWeb.Api.ConfigControllerTest do
 
     for {key, env, value} <- [
           {"auth.oidc_link_by_email", "OIDC_LINK_BY_EMAIL", "true"},
-          {"auth.oidc_scopes", "OIDC_SCOPES", "openid email"}
+          {"auth.oidc_scopes", "OIDC_SCOPES", "openid email"},
+          {"auth.oidc_default_role", "OIDC_DEFAULT_ROLE", "readonly"}
         ] do
       test "#{key} reports #{env} as its source and refuses UI edits", %{conn: conn} do
         System.put_env(unquote(env), unquote(value))

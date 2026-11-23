@@ -307,6 +307,46 @@ defmodule MydiaWeb.AuthControllerLinkTest do
     end
   end
 
+  describe "role of a new SSO account" do
+    # An admin already exists, so the first-user promotion stays out of the way.
+    setup do
+      create_admin_user()
+      :ok
+    end
+
+    defp with_claims(auth, claims) do
+      update_in(auth.extra.raw_info.userinfo, &Map.merge(&1, claims))
+    end
+
+    defp sign_in(conn, auth) do
+      conn = conn |> init_test_session(%{}) |> callback(auth)
+      assert redirected_to(conn) == "/"
+      Accounts.get_user_by_oidc(auth.uid, "oidc")
+    end
+
+    test "is guest when the IdP sends no role claims", %{conn: conn} do
+      assert sign_in(conn, auth("sub-role", "fern@example.test")).role == "guest"
+    end
+
+    test "follows oidc_default_role", %{conn: conn} do
+      put_auth(oidc_default_role: "readonly")
+      assert sign_in(conn, auth("sub-role", "fern@example.test")).role == "readonly"
+    end
+
+    test "a groups claim wins over the default", %{conn: conn} do
+      auth = auth("sub-role", "fern@example.test") |> with_claims(%{"groups" => ["users"]})
+      assert sign_in(conn, auth).role == "user"
+    end
+
+    test "is kept on later sign-ins when the default changes", %{conn: conn} do
+      user = sign_in(conn, auth("sub-role", "fern@example.test"))
+      {:ok, _} = Accounts.update_user(user, %{role: "user"})
+
+      put_auth(oidc_default_role: "readonly")
+      assert sign_in(build_conn(), auth("sub-role", "fern@example.test")).role == "user"
+    end
+  end
+
   describe "callback auto-linking by email" do
     setup do
       put_auth(oidc_link_by_email: true)

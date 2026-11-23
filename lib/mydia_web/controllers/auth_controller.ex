@@ -398,8 +398,9 @@ defmodule MydiaWeb.AuthController do
 
   defp blank_to_nil(_value), do: nil
 
-  # Determine user role from OIDC claims
-  # Can be customized based on your OIDC provider's group/role claims
+  # Role for an account created by this sign-in, from the userinfo roles and
+  # groups claims, else `auth.oidc_default_role`. An existing account keeps its
+  # role: `OidcIdentity.upsert/3` drops this on update.
   defp determine_role(auth) do
     # Access raw_info struct fields (not using bracket notation on structs)
     raw_info = auth.extra.raw_info
@@ -413,8 +414,7 @@ defmodule MydiaWeb.AuthController do
       "admin" in roles or "administrators" in groups -> "admin"
       "user" in roles or "users" in groups -> "user"
       "readonly" in roles or "readers" in groups -> "readonly"
-      # Default role
-      true -> "user"
+      true -> Mydia.Config.get().auth.oidc_default_role
     end
   end
 

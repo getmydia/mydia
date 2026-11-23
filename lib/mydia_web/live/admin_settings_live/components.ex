@@ -235,6 +235,32 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
         </span>
       <% (is_nil(@setting.value) or @setting.value == "") and not @editable -> %>
         <span class="badge badge-ghost badge-sm">{gettext("Not set")}</span>
+      <% @editable and Map.has_key?(@setting, :options) -> %>
+        <form
+          id={"setting-form-#{String.replace(@setting.key, ".", "-")}"}
+          phx-change="update_setting_form"
+        >
+          <input type="hidden" name="category" value={@category} />
+          <select
+            name={"settings[#{@setting.key}]"}
+            aria-label={Labels.label(@setting.key)}
+            class="select select-sm select-bordered w-full sm:w-44"
+          >
+            <option
+              :for={{value, label} <- @setting.options}
+              value={value}
+              selected={value == @setting.value}
+            >
+              {label}
+            </option>
+          </select>
+        </form>
+      <% Map.has_key?(@setting, :options) -> %>
+        <kbd class="kbd kbd-sm">
+          {Enum.find_value(@setting.options, @setting.value, fn {value, label} ->
+            value == @setting.value && label
+          end)}
+        </kbd>
       <% @editable -> %>
         <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-44">
           <input
