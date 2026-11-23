@@ -481,7 +481,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_plugins_live/components.ex:447
 #: lib/mydia_web/live/admin_quality_profiles_live/components.ex:167
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:127
-#: lib/mydia_web/live/changelog_live/index.html.heex:32
+#: lib/mydia_web/live/changelog_live/index.html.heex:35
 #, elixir-autogen, elixir-format
 msgid "New"
 msgstr ""

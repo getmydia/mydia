@@ -18,9 +18,12 @@
         id={entry_id(entry.version_string)}
         class="card bg-base-100 shadow-sm"
       >
+        <%!-- The server opens unseen releases on first render; after that the
+             browser owns `open`, or any patch shuts the entry being read. --%>
         <details
           class="changelog-entry"
           open={MapSet.member?(@unseen_versions, entry.version_string)}
+          phx-mounted={JS.ignore_attributes(["open"])}
         >
           <summary class="px-5 py-4 cursor-pointer flex items-center gap-3 list-none">
             <.icon name="hero-chevron-right" class="w-4 h-4 shrink-0 opacity-60" />
