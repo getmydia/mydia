@@ -194,6 +194,10 @@
   "@settingsThemeSubtitle": {
     "description": "Subtitle of the theme row: the theme is stored per device."
   },
+  "settingsMaterialTitle": "Material",
+  "@settingsMaterialTitle": {
+    "description": "Heading above the Liquid Glass / Frosted picker in Appearance settings."
+  },
   "settingsGlassMaterialSubtitle": "Glass controls and panels",
   "@settingsGlassMaterialSubtitle": {
     "description": "Subtitle of the Liquid Glass switch, which draws controls and panels as glass."

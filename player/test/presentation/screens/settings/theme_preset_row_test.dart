@@ -46,6 +46,7 @@ void main() {
       final count = ThemePreset.availableOn(TargetPlatform.android).length;
       expect(_choice(count - 1), findsOneWidget);
       expect(_choice(count), findsNothing);
+      expect(find.text('Colours on this device'), findsOneWidget);
       expect(find.text('Projection Booth'), findsOneWidget);
       expect(find.text('OLED Black'), findsOneWidget);
       expect(find.text('macOS'), findsNothing);

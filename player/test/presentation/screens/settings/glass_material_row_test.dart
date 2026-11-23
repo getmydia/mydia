@@ -42,6 +42,7 @@ void main() {
     expect(find.byKey(const Key('settings-choice-1')), findsOneWidget);
     expect(find.text('Liquid Glass'), findsOneWidget);
     expect(find.text('Frosted'), findsOneWidget);
+    expect(find.text('Material'), findsOneWidget);
 
     await tester.tap(find.text('Liquid Glass'));
     await tester.pumpAndSettle();
@@ -51,6 +52,42 @@ void main() {
     await tester.tap(find.text('Frosted'));
     await tester.pumpAndSettle();
     expect(container.read(glassMaterialSettingProvider), GlassMaterial.frosted);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('announces the selected material as checked in a group', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(MockAuthStorage()));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.byKey(const Key('settings-choice-1'))),
+      isSemantics(
+        label: 'Frosted',
+        isInMutuallyExclusiveGroup: true,
+        hasCheckedState: true,
+        isChecked: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+        isFocusable: true,
+      ),
+    );
+    expect(
+      tester.getSemantics(find.byKey(const Key('settings-choice-0'))),
+      isSemantics(
+        label: 'Liquid Glass',
+        isInMutuallyExclusiveGroup: true,
+        hasCheckedState: true,
+        isChecked: false,
+        hasTapAction: true,
+        hasFocusAction: true,
+        isFocusable: true,
+      ),
+    );
+    handle.dispose();
     debugDefaultTargetPlatformOverride = null;
   });
 

@@ -7,6 +7,7 @@ import '../../../../core/theme/theme_preset.dart';
 import '../../../../core/theme/theme_providers.dart';
 import '../../../../l10n/l10n.dart';
 import 'settings_choice_grid.dart';
+import 'settings_grid_heading.dart';
 import 'theme_preset_preview.dart';
 
 /// The Appearance section's theme picker: a grid of previews. The preset
@@ -22,20 +23,34 @@ class ThemePresetSettingsRow extends ConsumerWidget {
     final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: SettingsChoiceGrid<ThemePreset>(
-        key: const Key('theme-preset-row'),
-        label: l10n.settingsThemeTitle,
-        selected: preset,
-        choices: [
-          for (final option in ThemePreset.availableOn(defaultTargetPlatform))
-            SettingsChoice<ThemePreset>(
-              value: option,
-              label: l10n.themePresetName(option, linuxDesktop: linuxDesktop),
-              preview: _Preview(preset: option),
-            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SettingsGridHeading(
+            title: l10n.settingsThemeTitle,
+            caption: l10n.settingsThemeSubtitle,
+          ),
+          SettingsChoiceGrid<ThemePreset>(
+            key: const Key('theme-preset-row'),
+            label: l10n.settingsThemeTitle,
+            selected: preset,
+            choices: [
+              for (final option in ThemePreset.availableOn(
+                defaultTargetPlatform,
+              ))
+                SettingsChoice<ThemePreset>(
+                  value: option,
+                  label: l10n.themePresetName(
+                    option,
+                    linuxDesktop: linuxDesktop,
+                  ),
+                  preview: _Preview(preset: option),
+                ),
+            ],
+            onSelected: (picked) =>
+                ref.read(themePresetSettingProvider.notifier).set(picked),
+          ),
         ],
-        onSelected: (picked) =>
-            ref.read(themePresetSettingProvider.notifier).set(picked),
       ),
     );
   }

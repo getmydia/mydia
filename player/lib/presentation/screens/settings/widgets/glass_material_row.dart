@@ -7,6 +7,7 @@ import '../../../../core/theme/palette.dart';
 import '../../../../core/theme/theme_providers.dart';
 import '../../../../l10n/l10n.dart';
 import 'settings_choice_grid.dart';
+import 'settings_grid_heading.dart';
 
 /// The Appearance section's material picker (Liquid Glass or Frosted).
 /// Device-local like the theme. Absent where only Frosted is offered (TV).
@@ -31,27 +32,32 @@ class GlassMaterialSettingsRow extends ConsumerWidget {
     final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: SettingsChoiceGrid<GlassMaterial>(
-        key: const Key('glass-material-row'),
-        label: l10n.settingsGlassMaterialSubtitle,
-        columns: 2,
-        layout: SettingsChoiceLayout.inline,
-        selected: material,
-        choices: [
-          SettingsChoice<GlassMaterial>(
-            value: GlassMaterial.liquid,
-            label: l10n.glassMaterialName(GlassMaterial.liquid),
-            description: l10n.settingsGlassMaterialSubtitle,
-            preview: const _MaterialPreview(liquid: true),
-          ),
-          SettingsChoice<GlassMaterial>(
-            value: GlassMaterial.frosted,
-            label: l10n.glassMaterialName(GlassMaterial.frosted),
-            preview: const _MaterialPreview(liquid: false),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SettingsGridHeading(title: l10n.settingsMaterialTitle),
+          SettingsChoiceGrid<GlassMaterial>(
+            key: const Key('glass-material-row'),
+            label: l10n.settingsMaterialTitle,
+            columns: 2,
+            layout: SettingsChoiceLayout.inline,
+            selected: material,
+            choices: [
+              SettingsChoice<GlassMaterial>(
+                value: GlassMaterial.liquid,
+                label: l10n.glassMaterialName(GlassMaterial.liquid),
+                preview: const _MaterialPreview(liquid: true),
+              ),
+              SettingsChoice<GlassMaterial>(
+                value: GlassMaterial.frosted,
+                label: l10n.glassMaterialName(GlassMaterial.frosted),
+                preview: const _MaterialPreview(liquid: false),
+              ),
+            ],
+            onSelected: (picked) =>
+                ref.read(glassMaterialSettingProvider.notifier).set(picked),
           ),
         ],
-        onSelected: (picked) =>
-            ref.read(glassMaterialSettingProvider.notifier).set(picked),
       ),
     );
   }
