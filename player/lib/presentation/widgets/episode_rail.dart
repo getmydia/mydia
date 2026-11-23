@@ -4,6 +4,7 @@ import '../../core/layout/breakpoints.dart';
 import '../../domain/detail/detail_views.dart';
 import '../screens/detail/detail_actions.dart';
 import 'episode_rail_card.dart';
+import 'focus_emphasis.dart';
 import 'horizontal_rail.dart';
 
 /// A horizontal rail of [EpisodeRailCard]s.
@@ -38,6 +39,8 @@ class EpisodeRail extends StatelessWidget {
       leftFadeKey: const ValueKey('episode-rail-left-fade'),
       rightFadeKey: const ValueKey('episode-rail-right-fade'),
       itemId: (index) => episodes[index].target.ref,
+      // EpisodeRailCard grows by the tile class when focused on a television.
+      focusSize: FocusSize.tile,
       itemBuilder: (context, index) {
         final episode = episodes[index];
         return EpisodeRailCard(
