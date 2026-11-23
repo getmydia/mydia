@@ -52,6 +52,14 @@ void main() {
       AppTheme.secondaryButtonHeight,
     );
     expect(t.outlinedButtonTheme.style!.side!.resolve({})!.color, strong);
+    expect(
+      t.outlinedButtonTheme.style!.backgroundColor!.resolve({}),
+      const Color(0x12FFFFFF),
+    );
+    final text = t.filledButtonTheme.style!.textStyle!.resolve({})!;
+    expect(text.fontFamily, 'Inter');
+    expect(text.fontWeight, FontWeight.w600);
+    expect(text.fontSize, 15);
   });
 
   test('switch colors', () {
@@ -88,6 +96,12 @@ void main() {
     expect(d.borderRadius, BorderRadius.circular(8));
     expect(d.border, Border.all(color: hairline));
     expect(t.cardTheme.shape, rr(14, hairline));
+    expect(t.cardTheme.surfaceTintColor, Colors.transparent);
+    expect(t.tooltipTheme.waitDuration, isNull);
+    expect(
+      t.listTileTheme.shape,
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    );
   });
 
   test('tabular figures', () {
@@ -107,6 +121,19 @@ void main() {
     expect(s.shape!.resolve({}), isA<StadiumBorder>());
     expect(s.splashFactory, NoSplash.splashFactory);
     expect(l.textTheme.bodyMedium!.fontFeatures, isNull);
-    expect(l.cardTheme.shape, isNot(rr(14, hairline)));
+    expect(
+      l.cardTheme.shape,
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      ),
+    );
+    expect(
+      l.elevatedButtonTheme.style!.shape!.resolve({}),
+      isA<StadiumBorder>(),
+    );
+    expect(
+      l.outlinedButtonTheme.style!.shape!.resolve({}),
+      isA<StadiumBorder>(),
+    );
   });
 }

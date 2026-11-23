@@ -54,6 +54,10 @@ class AppTheme {
         ? NoSplash.splashFactory
         : null;
     final roles = SurfaceRoles.fromPalette(p);
+    final strongSide = BorderSide(color: roles.hairlineStrong);
+    final inputRadius = BorderRadius.circular(
+      liquid ? radiusInput : roles.radiusControl,
+    );
     final OutlinedBorder frostedShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(roles.radiusControl),
     );
@@ -111,7 +115,7 @@ class AppTheme {
       extensions: [
         p,
         GlassStyle(liquid: liquid),
-        SurfaceRoles.fromPalette(p),
+        roles,
       ],
 
       // Font family - matches web app
@@ -159,6 +163,7 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: p.surface,
         elevation: 0,
+        surfaceTintColor: liquid ? null : Colors.transparent,
         shape: liquid
             ? RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(radiusCard),
@@ -342,18 +347,14 @@ class AppTheme {
       // Outlined Button
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: withTvFocus(
-          rest: liquid
-              ? BorderSide.none
-              : BorderSide(color: roles.hairlineStrong),
+          rest: liquid ? BorderSide.none : strongSide,
           styled(
             OutlinedButton.styleFrom(
               foregroundColor: p.textPrimary,
               backgroundColor: liquid
                   ? secondaryButtonFill
                   : const Color(0x12FFFFFF),
-              side: liquid
-                  ? BorderSide.none
-                  : BorderSide(color: roles.hairlineStrong),
+              side: liquid ? BorderSide.none : strongSide,
               textStyle: const TextStyle(
                 fontFamily: displayFamily,
                 fontSize: 15,
@@ -400,19 +401,19 @@ class AppTheme {
         filled: true,
         fillColor: liquid ? p.surfaceVariant : p.surfaceLow,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
+          borderRadius: inputRadius,
           borderSide: BorderSide(color: liquid ? p.border : roles.hairline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
+          borderRadius: inputRadius,
           borderSide: BorderSide(color: liquid ? p.border : roles.hairline),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
+          borderRadius: inputRadius,
           borderSide: BorderSide(color: p.primary, width: liquid ? 2 : 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusInput),
+          borderRadius: inputRadius,
           borderSide: const BorderSide(color: AppColors.error),
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -485,7 +486,6 @@ class AppTheme {
           border: liquid ? null : Border.all(color: roles.hairline),
         ),
         textStyle: TextStyle(color: p.textPrimary, fontSize: 12),
-        waitDuration: liquid ? null : const Duration(milliseconds: 125),
       ),
 
       // Snackbar: toasts replace it in Frosted; themed to match in case a
@@ -530,7 +530,7 @@ class AppTheme {
         textColor: p.textPrimary,
         iconColor: p.textSecondary,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        shape: liquid ? null : hairlineShape(roles.radiusMenu),
+        shape: liquid ? null : frostedShape,
       ),
 
       // Switch
