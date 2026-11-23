@@ -39,16 +39,54 @@ void main() {
     expect(labelY, lessThan(cardY));
   });
 
-  testWidgets('SettingsSection tracks out its label for the eyebrow style', (
-    tester,
-  ) async {
+  testWidgets('header is sentence styled', (tester) async {
     await _pump(
       tester,
       const SettingsSection(label: 'Playback', children: [SizedBox()]),
     );
 
-    final label = tester.widget<Text>(find.text('Playback'));
-    expect(label.style?.letterSpacing, greaterThan(0));
+    final style = tester.widget<Text>(find.text('Playback')).style;
+    expect(style?.fontSize, 13);
+    expect(style?.fontWeight, FontWeight.w600);
+    expect(style?.letterSpacing ?? 0, 0);
+  });
+
+  testWidgets('footer renders under the card', (tester) async {
+    await _pump(
+      tester,
+      const SettingsSection(
+        label: 'Skipping',
+        footer: 'When off, a skip button appears instead.',
+        children: [SizedBox(height: 40)],
+      ),
+    );
+
+    final footer = find.text('When off, a skip button appears instead.');
+    expect(footer, findsOneWidget);
+    expect(
+      tester.getTopLeft(footer).dy,
+      greaterThan(tester.getBottomLeft(find.byType(SettingsCard)).dy),
+    );
+  });
+
+  testWidgets('no footer, no extra text', (tester) async {
+    await _pump(
+      tester,
+      const SettingsSection(label: 'Skipping', children: [Text('Row')]),
+    );
+
+    expect(find.byType(Text), findsNWidgets(2));
+  });
+
+  testWidgets('card dividers are inset 16', (tester) async {
+    await _pump(
+      tester,
+      const SettingsCard(
+        children: [SizedBox(height: 40), SizedBox(height: 40)],
+      ),
+    );
+
+    expect(tester.widget<Divider>(find.byType(Divider)).indent, 16);
   });
 
   testWidgets(
@@ -81,10 +119,13 @@ void main() {
     },
   );
 
-  testWidgets('SettingsCard uses the shared card radius', (tester) async {
+  testWidgets('SettingsCard uses the settings card radius', (tester) async {
     await _pump(tester, const SettingsCard(children: [SizedBox(height: 40)]));
 
     final clip = tester.widget<ClipRRect>(find.byType(ClipRRect).first);
-    expect(clip.borderRadius, BorderRadius.circular(AppTheme.radiusCard));
+    expect(
+      clip.borderRadius,
+      BorderRadius.circular(AppTheme.radiusSettingsCard),
+    );
   });
 }
