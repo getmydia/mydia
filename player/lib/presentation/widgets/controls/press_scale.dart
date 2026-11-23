@@ -9,7 +9,9 @@ import '../../../core/ui/reduced_motion.dart';
 ///
 /// Keys are observed through [HardwareKeyboard] while focus is inside the
 /// subtree, because the wrapped control's own shortcuts consume the key
-/// before an ancestor [Focus] would see it. It observes input only. It adds no focus stop, no semantics, and never
+/// before an ancestor [Focus] would see it.
+///
+/// It observes input only: it adds no focus stop, no semantics, and never
 /// consumes a key, so the wrapped control's own activation fires unchanged.
 class PressScale extends StatefulWidget {
   const PressScale({super.key, required this.child, this.enabled = true});
