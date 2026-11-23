@@ -3980,14 +3980,49 @@
 </code></pre></div>
 <h2 id="user-management">User Management</h2>
 <h3 id="first-user-promotion">First User Promotion</h3>
-<p>The first user to log in via OIDC is automatically promoted to admin role. Subsequent users are assigned guest role.</p>
+<p>If no admin exists yet, the first user to sign in with SSO becomes an admin.
+Everyone after that gets a role as described below.</p>
 <h3 id="role-assignment">Role Assignment</h3>
-<p>Currently, role assignment is manual after first login:</p>
-<ol>
-<li>Admin logs in</li>
-<li>Navigates to Admin &gt; System &gt; Users</li>
-<li>Updates user role as needed</li>
-</ol>
+<p>Mydia picks a role when an SSO sign-in creates an account. It reads the
+<code>roles</code> and <code>groups</code> claims from your identity provider's userinfo response and
+takes the first match:</p>
+<table>
+<thead>
+<tr>
+<th>Claim</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>roles</code> contains <code>admin</code>, or <code>groups</code> contains <code>administrators</code></td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>roles</code> contains <code>user</code>, or <code>groups</code> contains <code>users</code></td>
+<td>User</td>
+</tr>
+<tr>
+<td><code>roles</code> contains <code>readonly</code>, or <code>groups</code> contains <code>readers</code></td>
+<td>Read Only</td>
+</tr>
+<tr>
+<td>none of the above</td>
+<td><code>OIDC_DEFAULT_ROLE</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>OIDC_DEFAULT_ROLE</code> is <code>guest</code> unless you set it. It accepts <code>guest</code>,
+<code>readonly</code> or <code>user</code>, and can also be changed under <strong>Admin &gt; System &gt;
+Settings</strong>, under Authentication. It does not accept <code>admin</code>, because that would make every
+account at your identity provider a Mydia admin. Grant admin through a claim
+instead.</p>
+<p>Many providers only send <code>groups</code> when you request the scope, for example
+<code>OIDC_SCOPES="openid profile email groups"</code>.</p>
+<p>The role is set once, when the account is created. Later sign-ins leave it
+alone, so a change in your identity provider, or in <code>OIDC_DEFAULT_ROLE</code>, does
+not affect existing accounts. To change an existing user's role, use the edit
+icon on their row in <strong>Admin &gt; System &gt; Users</strong>.</p>
 <h3 id="combining-with-local-auth">Combining with Local Auth</h3>
 <p>You can use both local and OIDC authentication:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">LOCAL_AUTH_ENABLED</span><span class="o">=</span><span class="nb">true</span>

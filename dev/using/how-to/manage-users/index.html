@@ -3627,7 +3627,9 @@ with one deliberate exception noted below.</p>
 </tr>
 </tbody>
 </table>
-<p>New users default to <strong>Guest</strong>.</p>
+<p>New users default to <strong>Guest</strong>. An account created by an SSO sign-in can get
+another role from your identity provider's claims, or from <code>OIDC_DEFAULT_ROLE</code>:
+see <a href="../sso-oidc/#role-assignment">SSO / OIDC</a>.</p>
 <div class="admonition note">
 <p class="admonition-title">Only guests can submit requests</p>
 <p>The request flow is not additive. <code>can_submit_request?</code> returns true for

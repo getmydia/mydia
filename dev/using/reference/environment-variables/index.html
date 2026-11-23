@@ -4367,6 +4367,11 @@ name as <code>s3://&lt;name&gt;/&lt;prefix&gt;</code>.</p>
 <td><code>false</code></td>
 </tr>
 <tr>
+<td><code>OIDC_DEFAULT_ROLE</code></td>
+<td>Role for an account created by its first SSO sign-in when the identity provider's roles or groups claims grant none: <code>guest</code>, <code>readonly</code> or <code>user</code>. <code>admin</code> is refused. See <a href="../../how-to/sso-oidc/#role-assignment">SSO / OIDC</a></td>
+<td><code>guest</code></td>
+</tr>
+<tr>
 <td><code>LIBRARY_API_KEY</code></td>
 <td>Admin key for the <a href="../library-api/">Library API</a>, sent as the <code>x-api-key</code> header. Optional; unset means only database API keys work. Minimum 32 characters. Generate with <code>openssl rand -hex 32</code>. Remove it and restart to revoke.</td>
 <td>(unset)</td>
