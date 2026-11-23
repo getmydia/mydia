@@ -20,6 +20,7 @@ class AppSwitch extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.activeThumbColor,
+    this.adaptive = false,
   });
 
   final bool value;
@@ -31,6 +32,10 @@ class AppSwitch extends StatelessWidget {
 
   /// Liquid only; forwarded to [Switch.activeThumbColor].
   final Color? activeThumbColor;
+
+  /// Liquid only; renders [Switch.adaptive] so iOS and macOS get the
+  /// Cupertino switch. Frosted draws its own track either way.
+  final bool adaptive;
 
   static const trackKey = ValueKey('app-switch-track');
   static const thumbKey = ValueKey('app-switch-thumb');
@@ -45,13 +50,21 @@ class AppSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (GlassStyle.of(context)) {
-      return Switch(
-        value: value,
-        onChanged: onChanged,
-        focusNode: focusNode,
-        autofocus: autofocus,
-        activeThumbColor: activeThumbColor,
-      );
+      return adaptive
+          ? Switch.adaptive(
+              value: value,
+              onChanged: onChanged,
+              focusNode: focusNode,
+              autofocus: autofocus,
+              activeThumbColor: activeThumbColor,
+            )
+          : Switch(
+              value: value,
+              onChanged: onChanged,
+              focusNode: focusNode,
+              autofocus: autofocus,
+              activeThumbColor: activeThumbColor,
+            );
     }
     return _FrostedSwitch(
       value: value,

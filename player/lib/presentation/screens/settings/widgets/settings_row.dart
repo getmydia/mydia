@@ -173,6 +173,7 @@ class SettingsRow extends StatelessWidget {
                           child: AppSwitch(
                             value: toggleValue,
                             onChanged: onChanged,
+                            adaptive: true,
                           ),
                         )
                       : AppSwitch(value: toggleValue, onChanged: onChanged),

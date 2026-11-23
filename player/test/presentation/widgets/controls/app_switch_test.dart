@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,6 +29,29 @@ Widget _host(
 Color _trackColor(WidgetTester tester) {
   final c = tester.widget<AnimatedContainer>(find.byKey(AppSwitch.trackKey));
   return (c.decoration! as BoxDecoration).color!;
+}
+
+/// Rasterised bytes of [child] hosted under a Liquid theme on iOS.
+Future<List<int>> _pixels(WidgetTester tester, Widget child) async {
+  final key = GlobalKey();
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: key,
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Theme(
+          data: AppTheme.build(_palette, liquid: true),
+          child: Material(child: Center(child: child)),
+        ),
+      ),
+    ),
+  );
+  return (await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    return (await image.toByteData())!.buffer.asUint8List();
+  }))!;
 }
 
 void main() {
@@ -198,4 +223,26 @@ void main() {
       );
     });
   }
+
+  testWidgets(
+    'Liquid adaptive draws Switch.adaptive on iOS, default does not',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final adaptive = await _pixels(
+        tester,
+        AppSwitch(value: true, onChanged: (_) {}, adaptive: true),
+      );
+      final plain = await _pixels(
+        tester,
+        AppSwitch(value: true, onChanged: (_) {}),
+      );
+      final reference = await _pixels(
+        tester,
+        Switch.adaptive(value: true, onChanged: (_) {}),
+      );
+      expect(adaptive, reference);
+      expect(adaptive, isNot(plain));
+    },
+  );
 }

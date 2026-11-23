@@ -1,5 +1,8 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:player/core/theme/app_theme.dart';
+import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/controls/app_switch.dart';
 import 'package:player/presentation/widgets/focus_highlight.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -140,6 +143,46 @@ void main() {
           greaterThanOrEqualTo(52),
         );
       }
+    });
+  });
+
+  group('SettingsRow switch adaptivity', () {
+    Future<void> pumpOn(WidgetTester tester, {required bool liquid}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(Palettes.oledBlack, liquid: liquid),
+          home: Scaffold(
+            body: ListView(
+              children: [
+                SettingsRow.toggle(
+                  title: 'Tog',
+                  value: true,
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('Liquid asks for the adaptive (Cupertino on iOS) switch', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await pumpOn(tester, liquid: true);
+      expect(tester.widget<AppSwitch>(find.byType(AppSwitch)).adaptive, isTrue);
+      expect(find.byType(Switch), findsOneWidget);
+    });
+
+    testWidgets('Frosted on iOS keeps the custom switch', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await pumpOn(tester, liquid: false);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.byKey(AppSwitch.trackKey), findsOneWidget);
     });
   });
 
