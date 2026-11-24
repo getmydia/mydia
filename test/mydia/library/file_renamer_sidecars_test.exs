@@ -70,20 +70,20 @@ defmodule Mydia.Library.FileRenamerSidecarsTest do
     assert Repo.get!(Subtitle, sub.id).file_path == ctx.proposed_root <> ".en.srt"
   end
 
+  # Root lists a directory it has no read permission on, so the case cannot
+  # arise for it. Decided when the file compiles, so ExUnit reports a skip.
+  @running_as_root match?({"0\n", 0}, System.cmd("id", ["-u"]))
+
+  if @running_as_root do
+    @tag skip: "root can list a directory without read permission"
+  end
+
   test "an unlistable folder fails before the video moves", ctx do
     File.chmod!(ctx.root, 0o300)
     on_exit(fn -> File.chmod(ctx.root, 0o755) end)
 
-    case File.ls(ctx.root) do
-      {:ok, _} ->
-        # Root (or a permissive mount) can list it anyway.
-        File.chmod!(ctx.root, 0o755)
-        IO.puts("skipped: directory permissions are not enforced for this user")
-
-      {:error, _} ->
-        assert {:error, {:sidecars_unlisted, _}} = FileRenamer.rename_file(ctx.mf, ctx.proposed)
-        File.chmod!(ctx.root, 0o755)
-        assert File.exists?(Path.join(ctx.root, "lk.s01e01.mkv"))
-    end
+    assert {:error, {:sidecars_unlisted, _}} = FileRenamer.rename_file(ctx.mf, ctx.proposed)
+    File.chmod!(ctx.root, 0o755)
+    assert File.exists?(Path.join(ctx.root, "lk.s01e01.mkv"))
   end
 end
