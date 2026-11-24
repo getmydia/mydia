@@ -68,12 +68,22 @@ defmodule Mydia.Library.LibraryMoveSidecarsTest do
     refute other in found
   end
 
+  test "for/1 does not list a -thumbnail.nfo", %{lib: lib, movie: movie} do
+    video = file(lib, movie, "X.mkv")
+    touch(lib, "X-thumbnail.nfo")
+
+    assert {:ok, []} = Sidecars.for(video)
+  end
+
   test "sidecar_name?/2" do
     assert Sidecars.sidecar_name?("A.en.srt", "A.mkv")
     assert Sidecars.sidecar_name?("A-thumb.jpg", "A.mkv")
     refute Sidecars.sidecar_name?("A-poster.jpg", "A.mkv")
     refute Sidecars.sidecar_name?("poster.jpg", "A.mkv")
     refute Sidecars.sidecar_name?("A.mkv", "A.mkv")
+    refute Sidecars.sidecar_name?("A-thumbnail.nfo", "A.mkv")
+    refute Sidecars.sidecar_name?("A-thumb.srt", "A.mkv")
+    refute Sidecars.sidecar_name?("A-thumb2.jpg", "A.mkv")
   end
 
   test "sidecar_form?/1" do

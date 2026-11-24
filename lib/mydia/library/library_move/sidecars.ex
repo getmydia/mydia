@@ -69,9 +69,12 @@ defmodule Mydia.Library.LibraryMove.Sidecars do
   @spec sidecar_name?(String.t(), String.t()) :: boolean()
   def sidecar_name?(entry, video_name) do
     root = Path.rootname(video_name)
+    ext = String.downcase(Path.extname(entry))
 
-    entry != video_name and sidecar_form?(entry) and
-      (String.starts_with?(entry, root <> ".") or String.starts_with?(entry, root <> "-thumb"))
+    entry != video_name and
+      ((String.starts_with?(entry, root <> ".") and ext in @extensions) or
+         (ext in @thumb_extensions and
+            String.downcase(Path.rootname(entry)) == String.downcase(root <> "-thumb")))
   end
 
   @doc """
