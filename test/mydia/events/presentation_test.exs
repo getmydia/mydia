@@ -1015,4 +1015,45 @@ defmodule Mydia.Events.PresentationTest do
       assert detail =~ "identity check picked nothing"
     end
   end
+
+  describe "media request events" do
+    test "for_event titles" do
+      titles =
+        for type <- ~w(created approved rejected) do
+          Presentation.for_event(event(type: "media_request.#{type}")).title
+        end
+
+      assert titles == ["Requested", "Request approved", "Request rejected"]
+    end
+
+    test "detail for created" do
+      full =
+        event(
+          type: "media_request.created",
+          metadata: %{"requester" => "Quill Onyx", "title" => "The Glass Orchard", "year" => 2031}
+        )
+
+      bare = event(type: "media_request.created", metadata: %{"title" => "The Glass Orchard"})
+
+      assert Presentation.detail(full) == "Quill Onyx: The Glass Orchard (2031)"
+      assert Presentation.detail(bare) == "The Glass Orchard"
+    end
+
+    test "detail for rejected appends the reason when present" do
+      metadata = %{"title" => "The Glass Orchard", "year" => 2031}
+
+      assert Presentation.detail(event(type: "media_request.rejected", metadata: metadata)) ==
+               "The Glass Orchard (2031)"
+
+      with_reason = Map.put(metadata, "rejection_reason", "Already on the shelf")
+
+      assert Presentation.detail(event(type: "media_request.rejected", metadata: with_reason)) ==
+               "The Glass Orchard (2031) (reason: Already on the shelf)"
+    end
+
+    test "title_for_type/1" do
+      assert Presentation.title_for_type("media_request.created") == "Requested"
+      assert Presentation.title_for_type("legacy.thing_happened") == "Legacy thing happened"
+    end
+  end
 end

@@ -36,6 +36,12 @@ defmodule MydiaWeb.ActivityLive.Index do
       idle_class: "btn-ghost"
     },
     %{
+      value: "requests",
+      icon: "hero-inbox-arrow-down",
+      active_class: "btn-primary",
+      idle_class: "btn-ghost"
+    },
+    %{
       value: "search",
       icon: "hero-magnifying-glass",
       active_class: "btn-primary",
@@ -178,6 +184,7 @@ defmodule MydiaWeb.ActivityLive.Index do
   defp chip_label("all"), do: gettext("All")
   defp chip_label("media"), do: gettext("Media")
   defp chip_label("downloads"), do: gettext("Downloads")
+  defp chip_label("requests"), do: gettext("Requests")
   defp chip_label("search"), do: pgettext("search", "Search")
   defp chip_label("system"), do: gettext("System")
   defp chip_label("playback"), do: gettext("Playback")
@@ -186,6 +193,7 @@ defmodule MydiaWeb.ActivityLive.Index do
 
   defp category_label("media"), do: pgettext("event category", "media")
   defp category_label("downloads"), do: pgettext("event category", "downloads")
+  defp category_label("requests"), do: pgettext("event category", "requests")
   defp category_label("search"), do: pgettext("event category", "search")
   defp category_label("system"), do: pgettext("event category", "system")
   defp category_label("playback"), do: pgettext("event category", "playback")

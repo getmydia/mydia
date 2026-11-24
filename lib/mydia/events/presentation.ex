@@ -202,6 +202,26 @@ defmodule Mydia.Events.Presentation do
       title: "Download cleared"
     },
 
+    # media_request.*
+    %{
+      type: "media_request.created",
+      icon: "hero-inbox-arrow-down",
+      color: "text-info",
+      title: "Requested"
+    },
+    %{
+      type: "media_request.approved",
+      icon: "hero-check-circle",
+      color: "text-success",
+      title: "Request approved"
+    },
+    %{
+      type: "media_request.rejected",
+      icon: "hero-x-circle",
+      color: "text-warning",
+      title: "Request rejected"
+    },
+
     # job.*
     %{
       type: "job.executed",
@@ -326,6 +346,18 @@ defmodule Mydia.Events.Presentation do
   @doc "Types that are recorded and viewable elsewhere, but excluded from the global feed."
   @spec feed_hidden_types() :: [String.t()]
   def feed_hidden_types, do: @feed_hidden_types
+
+  @doc """
+  The short title for an event type: its registered entry's title, or the
+  humanized type key for an unregistered one.
+  """
+  @spec title_for_type(String.t()) :: String.t()
+  def title_for_type(type) do
+    case Map.get(@by_type, type) do
+      nil -> humanize_type(type)
+      entry -> entry.title
+    end
+  end
 
   @doc """
   Resolves an event to its presentation, with `:color` and `:detail` filled in.
@@ -490,6 +522,22 @@ defmodule Mydia.Events.Presentation do
     end
   end
 
+  def detail(%Event{type: "media_request.created", metadata: metadata}),
+    do: request_subject(metadata)
+
+  def detail(%Event{type: "media_request.approved", metadata: metadata}),
+    do: request_subject(metadata)
+
+  def detail(%Event{type: "media_request.rejected", metadata: metadata}) do
+    case metadata["rejection_reason"] do
+      reason when is_binary(reason) and reason != "" ->
+        "#{request_subject(metadata)} (reason: #{reason})"
+
+      _ ->
+        request_subject(metadata)
+    end
+  end
+
   @plain_download_types ~w(
     download.initiated download.completed download.cancelled
     download.paused download.resumed download.unstalled
@@ -647,6 +695,20 @@ defmodule Mydia.Events.Presentation do
     |> String.replace(".", " ")
     |> String.replace("_", " ")
     |> String.capitalize()
+  end
+
+  # "Requester: Title (Year)", dropping the parts the metadata lacks.
+  defp request_subject(metadata) do
+    subject =
+      case metadata["year"] do
+        nil -> title_of(metadata)
+        year -> "#{title_of(metadata)} (#{year})"
+      end
+
+    case metadata["requester"] do
+      nil -> subject
+      requester -> "#{requester}: #{subject}"
+    end
   end
 
   defp title_of(metadata), do: metadata["title"] || "Unknown"
