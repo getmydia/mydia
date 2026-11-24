@@ -679,21 +679,24 @@ renames left behind. A file is orphaned only when all of these hold:
 
 - it has a sidecar form and is not item or season metadata (`tvshow.nfo`,
   `poster.*`, `season01-poster.jpg`, ...);
-- its directory holds a file with a scanner video extension, and no regular
-  non-sidecar-form file there claims it. Claiming means the sidecar's name
-  starts with that file's root, case-insensitively, so `.iso`, `.strm` and
-  `VIDEO_TS.IFO` protect their sidecars too;
+- its directory holds a file with a scanner video extension (a symlink to one
+  counts), and no non-directory, non-sidecar-form entry there claims it.
+  Claiming means the sidecar's name starts with that entry's root,
+  case-insensitively, so `.iso`, `.strm`, `VIDEO_TS.IFO` and a symlinked
+  version protect their sidecars too;
+- it is a regular file itself (a symlinked sidecar is never moved);
 - it is not a tracked `Subtitle` row.
 
 Directories with no video, and folders such as `Subs/`, are never touched.
 Checking the disk rather than `media_files` means a video the scanner has not
-seen yet still protects its sidecars. `run/2` re-checks every path, so a video
-added after the preview protects its sidecars again. There is no directory
+seen yet still protects its sidecars. `run/2` re-checks every path (one listing per
+directory), so a video added after the preview protects its sidecars again. There is no directory
 pruning: under this rule an orphan's directory always still holds a video.
 
 **Where cleaned files go, and how to restore.** Each run moves files to
-`<trash root>/sidecar-cleanup-<UTC timestamp>/<path relative to the library>`
-(`TrashStore.root_for_library/1`, the same filesystem, so a rename). There is no
+`<trash root>/sidecar-cleanup-<library id>-<UTC timestamp>/<path relative to
+the library>` (`TrashStore.root_for_library/1`, the same filesystem, so a
+rename; the library id keeps libraries that share a trash root apart). There is no
 restore flow: move the files back by hand, the preview and the completion
 message say where they went. The container has no `media_files` row, and
 `TrashStore.audit/0` classifies non-UUID containers as orphaned without querying

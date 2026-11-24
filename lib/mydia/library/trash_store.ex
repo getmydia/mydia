@@ -629,7 +629,8 @@ defmodule Mydia.Library.TrashStore do
   @spec audit() :: %{retained: [map()], orphaned: [map()]}
   def audit do
     containers = Enum.flat_map(roots(), &containers_in/1)
-    # Non-UUID containers (`sidecar-cleanup-<ts>`) are never looked up: Postgres raises on them.
+
+    # Non-UUID containers (`sidecar-cleanup-<lib id>-<ts>`) are never looked up: Postgres raises on them.
     ids = for %{id: id} <- containers, match?({:ok, _}, Ecto.UUID.cast(id)), do: id
 
     rows =

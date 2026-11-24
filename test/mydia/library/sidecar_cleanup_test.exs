@@ -139,7 +139,7 @@ defmodule Mydia.Library.SidecarCleanupTest do
     assert Enum.all?(paths, &File.exists?/1)
   end
 
-  test "run moves orphans under sidecar-cleanup-<ts> with relative paths",
+  test "run moves orphans under sidecar-cleanup-<library id>-<ts> with relative paths",
        %{lp: lp, root: root, trash: trash} do
     touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.mkv"))
     nfo = touch(root, season_rel("old.name.S01E01.nfo"), "nfo-body")
@@ -150,7 +150,7 @@ defmodule Mydia.Library.SidecarCleanupTest do
 
     refute File.exists?(nfo)
     assert Path.dirname(container) == trash
-    assert Path.basename(container) =~ ~r/^sidecar-cleanup-\d{8}T\d{6}Z$/
+    assert Path.basename(container) =~ ~r/^sidecar-cleanup-#{lp.id}-\d{8}T\d{6}Z$/
 
     assert File.read!(Path.join([container, @show, @season, "old.name.S01E01.nfo"])) ==
              "nfo-body"
@@ -198,6 +198,80 @@ defmodule Mydia.Library.SidecarCleanupTest do
 
     assert listed(lp) == []
     refute SidecarCleanup.orphan?(nfo, lp)
+  end
+
+  describe "symlinked videos" do
+    setup %{tmp_dir: tmp_dir} do
+      elsewhere = Path.join(tmp_dir, "elsewhere")
+      File.mkdir_p!(elsewhere)
+      target = Path.join(elsewhere, "Paper Comet (2019) [2160p].mkv")
+      File.write!(target, "video")
+      %{target: target}
+    end
+
+    test "a symlinked version claims its sidecars", %{lp: lp, root: root, target: target} do
+      touch(root, "Paper Comet (2019)/Paper Comet (2019) [1080p].mkv")
+      link = Path.join(root, "Paper Comet (2019)/Paper Comet (2019) [2160p].mkv")
+      File.ln_s!(target, link)
+      nfo = touch(root, "Paper Comet (2019)/Paper Comet (2019) [2160p].nfo")
+      srt = touch(root, "Paper Comet (2019)/Paper Comet (2019) [2160p].en.srt")
+      thumb = touch(root, "Paper Comet (2019)/Paper Comet (2019) [2160p]-thumb.jpg")
+
+      assert listed(lp) == []
+      refute Enum.any?([nfo, srt, thumb], &SidecarCleanup.orphan?(&1, lp))
+      assert {:ok, %{moved: 0, kept: 3}} = SidecarCleanup.run(lp, [nfo, srt, thumb])
+    end
+
+    test "a symlinked video alone makes its directory eligible", %{
+      lp: lp,
+      root: root,
+      target: target
+    } do
+      File.mkdir_p!(Path.join(root, "Paper Comet (2019)"))
+      File.ln_s!(target, Path.join(root, "Paper Comet (2019)/Paper Comet (2019).mkv"))
+      touch(root, "Paper Comet (2019)/Paper Comet (2019).nfo")
+      touch(root, "Paper Comet (2019)/old.release.name.nfo")
+
+      assert listed(lp) == ["old.release.name.nfo"]
+    end
+
+    test "a symlinked sidecar is never moved", %{lp: lp, root: root, tmp_dir: tmp_dir} do
+      touch(root, "Paper Comet (2019)/Paper Comet (2019).mkv")
+      real = Path.join(tmp_dir, "old.release.name.nfo")
+      File.write!(real, "nfo")
+      link = Path.join(root, "Paper Comet (2019)/old.release.name.nfo")
+      File.ln_s!(real, link)
+
+      assert listed(lp) == []
+      refute SidecarCleanup.orphan?(link, lp)
+    end
+  end
+
+  test "run evaluates several directories and mixes kept with moved paths",
+       %{lp: lp, root: root} do
+    touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.mkv"))
+    a = touch(root, season_rel("a.name.S01E01.nfo"))
+    claimed = touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.nfo"))
+    touch(root, "Paper Comet (2019)/Paper Comet.mkv")
+    b = touch(root, "Paper Comet (2019)/old.release.name.nfo")
+    loose = touch(root, "Loose/old.name.nfo")
+    missing = Path.join(root, "Gone/old.name.nfo")
+
+    assert {:ok, %{moved: 2, kept: 3, container: container}} =
+             SidecarCleanup.run(lp, [a, claimed, b, loose, missing, a])
+
+    assert File.exists?(Path.join([container, @show, @season, "a.name.S01E01.nfo"]))
+    assert File.exists?(Path.join([container, "Paper Comet (2019)", "old.release.name.nfo"]))
+    assert File.exists?(claimed)
+    assert File.exists?(loose)
+  end
+
+  test "the container is named after the library", %{lp: lp, root: root} do
+    touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.mkv"))
+    nfo = touch(root, season_rel("old.name.S01E01.nfo"))
+
+    assert {:ok, %{container: container}} = SidecarCleanup.run(lp, [nfo])
+    assert Path.basename(container) =~ ~r/^sidecar-cleanup-#{lp.id}-\d{8}T\d{6}Z$/
   end
 
   test "TrashStore.audit reports the container as orphaned", %{lp: lp, root: root} do

@@ -6,7 +6,8 @@ defmodule Mydia.Library.SidecarCleanup do
   A rename carries a video's sidecars with it, but files orphaned by renames
   made before that behaviour existed (an `.nfo` or `-thumb.jpg` named after a
   video that is gone) stay on disk forever. This module lists them and, on
-  request, moves them to `<trash root>/sidecar-cleanup-<UTC timestamp>/`
+  request, moves them to
+  `<trash root>/sidecar-cleanup-<library id>-<UTC timestamp>/`
   keeping their path relative to the library root, so the operator can put
   them back by hand.
 
@@ -16,12 +17,14 @@ defmodule Mydia.Library.SidecarCleanup do
 
     * is not item or season metadata (`tvshow.nfo`, `poster.*`, ...),
     * has a sidecar shape (`Sidecars.sidecar_form?/1`),
-    * sits in a directory holding a video file, and no regular non-sidecar file
-      there (video, `.iso`, `.strm`, `VIDEO_TS.IFO`, ...) claims it by name, and
+    * sits in a directory holding a video file (a symlink to one counts), and
+      no non-directory, non-sidecar entry there (video, symlinked video,
+      `.iso`, `.strm`, `VIDEO_TS.IFO`, ...) claims it by name, and
     * is not a tracked `Subtitle` row.
 
-  `run/2` re-checks `orphan?/2` for every path it is given, so a video added
-  between the preview and the run protects its sidecars. Local libraries only.
+  `run/2` re-checks the same rule for every path it is given, one pass per
+  directory, so a video added between the preview and the run protects its
+  sidecars. Local libraries only.
   """
 
   import Ecto.Query, warn: false
@@ -100,14 +103,22 @@ defmodule Mydia.Library.SidecarCleanup do
   def run(%LibraryPath{} = library_path, paths) when is_list(paths) do
     with :ok <- check_available(library_path) do
       root = root_of(library_path)
-      container = Path.join(TrashStore.root_for_library(library_path), container_name())
+      trash = trash_root(library_path)
 
+      container =
+        Path.join(TrashStore.root_for_library(library_path), container_name(library_path))
+
+      # One listing and one stat pass per directory, not per path.
       results =
         paths
         |> Enum.filter(&is_binary/1)
         |> Enum.map(&Path.expand/1)
         |> Enum.uniq()
-        |> Enum.map(&move_if_orphan(&1, library_path, root, container))
+        |> Enum.group_by(&Path.dirname/1)
+        |> Enum.flat_map(fn {dir, dir_paths} ->
+          orphans = MapSet.new(dir_orphans(dir, dir_paths, root, trash))
+          Enum.map(dir_paths, &move_if_orphan(&1, orphans, root, container))
+        end)
 
       moved = for {:moved, path} <- results, do: path
 
@@ -120,8 +131,8 @@ defmodule Mydia.Library.SidecarCleanup do
     end
   end
 
-  defp move_if_orphan(path, library_path, root, container) do
-    if orphan?(path, library_path) and move(path, root, container) == :ok do
+  defp move_if_orphan(path, orphans, root, container) do
+    if MapSet.member?(orphans, path) and move(path, root, container) == :ok do
       {:moved, path}
     else
       {:kept, path}
@@ -141,20 +152,7 @@ defmodule Mydia.Library.SidecarCleanup do
     else
       path = Path.expand(path)
       dir = Path.dirname(path)
-
-      case File.ls(dir) do
-        {:ok, entries} ->
-          path in orphans_in(
-            dir,
-            entries,
-            [Path.basename(path)],
-            root_of(library_path),
-            trash_root(library_path)
-          )
-
-        {:error, _} ->
-          false
-      end
+      path in dir_orphans(dir, [path], root_of(library_path), trash_root(library_path))
     end
   end
 
@@ -205,21 +203,36 @@ defmodule Mydia.Library.SidecarCleanup do
     end
   end
 
+  # The orphans among `paths` (absolute, all in `dir`). An unlistable
+  # directory has none.
+  defp dir_orphans(dir, paths, root, trash) do
+    case File.ls(dir) do
+      {:ok, entries} -> orphans_in(dir, entries, Enum.map(paths, &Path.basename/1), root, trash)
+      {:error, _} -> []
+    end
+  end
+
   # The orphans among `candidates` (basenames) of one directory listing.
   #
-  # A directory is only eligible when it holds a regular file with a video
-  # extension, so `Movie (2019)/Subs/English.srt` is never touched. Within an
-  # eligible directory any regular non-sidecar file (`.iso`, `.strm`,
-  # `VIDEO_TS.IFO`, ...) claims the sidecars named after it.
+  # A directory is only eligible when it holds a file with a video extension
+  # (a symlink to one counts), so `Movie (2019)/Subs/English.srt` is never
+  # touched. Within an eligible directory any non-directory, non-sidecar entry
+  # (`.iso`, `.strm`, `VIDEO_TS.IFO`, a symlinked version, even a broken link)
+  # claims the sidecars named after it. Only a regular file (by lstat) can be
+  # an orphan, so a symlinked sidecar is never moved.
   defp orphans_in(dir, entries, candidates, root, trash) do
-    files = Enum.filter(entries, &regular?(Path.join(dir, &1)))
+    types = Map.new(entries, &{&1, types_of(Path.join(dir, &1))})
 
-    if Enum.any?(files, &video?/1) do
-      claimants = for name <- files, not Sidecars.sidecar_form?(name), do: Path.rootname(name)
+    if Enum.any?(entries, &(video?(&1) and elem(types[&1], 1) == :regular)) do
+      claimants =
+        for name <- entries,
+            elem(types[name], 1) != :directory,
+            not Sidecars.sidecar_form?(name),
+            do: Path.rootname(name)
 
       paths =
         for name <- candidates,
-            name in files,
+            match?({:regular, _}, types[name]),
             not denied?(name),
             Sidecars.sidecar_form?(name),
             not Enum.any?(claimants, &claims?(&1, name)),
@@ -234,7 +247,11 @@ defmodule Mydia.Library.SidecarCleanup do
     end
   end
 
-  defp regular?(path), do: match?({:ok, %File.Stat{type: :regular}}, File.lstat(path))
+  # {lstat type, stat type}; stat follows links, :missing when it fails.
+  defp types_of(path), do: {type_of(File.lstat(path)), type_of(File.stat(path))}
+
+  defp type_of({:ok, %File.Stat{type: type}}), do: type
+  defp type_of({:error, _}), do: :missing
 
   # Whether a file with root `claimant_root` claims `sidecar`: dot form
   # (`<root>.<anything>`) or `<root>-thumb.<ext>`, case-insensitively.
@@ -283,8 +300,9 @@ defmodule Mydia.Library.SidecarCleanup do
     end
   end
 
-  defp container_name do
-    "sidecar-cleanup-" <> (DateTime.utc_now() |> Calendar.strftime("%Y%m%dT%H%M%SZ"))
+  # The library id keeps two libraries sharing a trash root apart.
+  defp container_name(%LibraryPath{id: id}) do
+    "sidecar-cleanup-#{id}-" <> (DateTime.utc_now() |> Calendar.strftime("%Y%m%dT%H%M%SZ"))
   end
 
   defp move(path, root, container) do

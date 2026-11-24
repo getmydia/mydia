@@ -114,8 +114,9 @@ A re-run is idempotent: canonical files preview as unchanged.
   explicit deny list (`tvshow.nfo`, `movie.nfo`, `season.nfo`,
   `season\d+-*`, `poster.*`, `fanart.*`, `folder.*`, `banner.*`,
   `clearlogo.*`, `landscape.*`) as a second line of defence.
-- It sits in a directory that holds a file with a scanner video extension,
-  and no regular non-sidecar-form file in that directory claims it. A file
+- It sits in a directory that holds a file with a scanner video extension
+  (a symlink to one counts), and no non-directory, non-sidecar-form entry in
+  that directory (a symlinked version included) claims it. A file
   claims a sidecar when the sidecar's name starts with the file's root,
   compared case-insensitively. So an `.iso`, `.strm` or `VIDEO_TS.IFO` protects
   its sidecars too, while `Subs/` folders and directories without a video are
@@ -133,8 +134,9 @@ A re-run is idempotent: canonical files preview as unchanged.
 - `run(library_path, paths)` takes exactly the paths the preview showed,
   re-checks each against the definition at run time (a video added since the
   preview protects its sidecars again), and moves each survivor into
-  `<trash root>/sidecar-cleanup-<UTC timestamp>/<path relative to the
-  library>`. The trash root is the one `Mydia.Library.TrashStore` uses for
+  `<trash root>/sidecar-cleanup-<library id>-<UTC timestamp>/<path relative
+  to the library>`. The library id keeps two libraries sharing a trash root
+  apart. The re-check lists and stats each directory once. The trash root is the one `Mydia.Library.TrashStore` uses for
   this library (`root_for/1`'s rule), so the move is a same-filesystem
   `rename(2)`, and the scanner never sees the container.
 - There is no directory pruning. Under the eligibility rule every orphan sits
@@ -207,12 +209,14 @@ All fixtures use invented titles.
 ## Changes during implementation
 
 - Cleanup's orphan rule: a directory is eligible only if it holds a file with
-  a scanner video extension; in it, any regular non-sidecar-form file claims
-  sidecars by root, case-insensitively. `Subs/` folders and video-less
+  a scanner video extension (a symlink to one counts); in it, any
+  non-directory, non-sidecar-form entry, symlinks included, claims sidecars by
+  root, case-insensitively. Only a regular file is ever moved, so a symlinked
+  sidecar stays. `Subs/` folders and video-less
   directories are never touched, and `.iso`/`.strm` protect their sidecars.
 - There is no directory pruning, because it is unreachable under that rule.
 - `TrashStore.audit/0` classifies non-UUID containers (like
-  `sidecar-cleanup-<ts>`) as orphaned without querying them.
+  `sidecar-cleanup-<library id>-<ts>`) as orphaned without querying them.
 - `FileNamer` no longer reads a canonical name's bracketed tail as a release
   group, so a name such as `-GROUP[tracker]` is kept whole. It takes a group
   only after a scene-style hyphen (after `]` or `)`, in a name without
