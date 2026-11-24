@@ -32,6 +32,18 @@ defmodule Mydia.Library.FileRenamerS3Test do
     assert {:ok, "bytes"} = Storage.read(new)
   end
 
+  test "S3 rename carries the .en.srt object", %{lp: lp, loc: loc, mf: file} do
+    S3Helpers.put_object!(loc, "Invented Film (2031)/old.en.srt", "subs")
+
+    new_path = Path.join(lp.path, "Invented Film (2031)/Invented Film (2031).mkv")
+    assert {:ok, renamed} = FileRenamer.rename_file(file, new_path)
+
+    {:ok, old_sub} = Storage.source(loc, "Invented Film (2031)/old.en.srt")
+    {:ok, new_sub} = Storage.source(loc, Path.rootname(renamed.relative_path) <> ".en.srt")
+    refute Storage.exists?(old_sub)
+    assert {:ok, "subs"} = Storage.read(new_sub)
+  end
+
   test "refuses an occupied target and leaves both objects", %{lp: lp, loc: loc, mf: file} do
     S3Helpers.put_object!(loc, "Invented Film (2031)/taken.mkv", "other")
 
