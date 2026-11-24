@@ -332,18 +332,32 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     end
 
     test "stops the engine on the third in a row", ctx do
+      test_pid = self()
+
       start_vpn(
         ctx,
         counting_leak_check(fn
-          1 -> :ok
-          _ -> @unreachable
+          1 ->
+            :ok
+
+          4 ->
+            # Hold check 4 until the test has looked: the gate is one process,
+            # so everything the polls of checks 2 and 3 sent is in the mailbox
+            # and nothing from check 4 can arrive yet.
+            send(test_pid, {:check_4_waiting, self()})
+
+            receive do
+              :go -> @unreachable
+            end
+
+          _ ->
+            @unreachable
         end)
       )
 
-      # The gate is one process, so by the time check 4 starts, everything the
-      # polls of checks 2 and 3 sent is already in the mailbox.
-      assert_receive {:leak_check, 4}, 1_000
+      assert_receive {:check_4_waiting, gate}, 1_000
       refute_received {:engine_stop, {:leak_check_unreachable, _}}
+      send(gate, :go)
 
       assert_receive {:engine_stop, {:leak_check_unreachable, "socket closed"}}, 1_000
       assert %Status{vpn: {:down, {:leak_check_unreachable, _}}} = Status.get(ctx.status)

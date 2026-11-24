@@ -26,12 +26,16 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
     req_options = Keyword.get(opts, :mydia_req_options, [])
     mydia_ip = Keyword.get(opts, :mydia_ip_fun, &mydia_ip(&1, req_options))
 
+    # The torrent answer is judged in full before Mydia's request is made, so a
+    # wrong or malformed torrent address is a failed check even when Mydia's
+    # request then gets no answer. Otherwise that would read as unreachable,
+    # which `Vpn` tolerates.
     with {:ok, via_torrent} <- torrent_ip.(url),
-         {:ok, via_mydia} <- mydia_ip.(url),
          {:ok, torrent_addr} <- parse_address(via_torrent),
-         {:ok, mydia_addr} <- parse_address(via_mydia),
-         :ok <- differs(torrent_addr, mydia_addr) do
-      matches_vpn(torrent_addr, Keyword.get(opts, :expected_ip))
+         :ok <- matches_vpn(torrent_addr, Keyword.get(opts, :expected_ip)),
+         {:ok, via_mydia} <- mydia_ip.(url),
+         {:ok, mydia_addr} <- parse_address(via_mydia) do
+      differs(torrent_addr, mydia_addr)
     else
       {:error, :leak_detected} = leak -> leak
       {:unreachable, message} -> {:error, {:leak_check_unreachable, message}}
@@ -46,11 +50,8 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
 
   defp matches_vpn(torrent_addr, expected_ip) do
     case parse_address(expected_ip) do
-      {:ok, ^torrent_addr} ->
-        :ok
-
-      _ ->
-        {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
+      {:ok, ^torrent_addr} -> :ok
+      _ -> {:error, "torrent traffic is not using the VPN address"}
     end
   end
 
@@ -76,9 +77,22 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
     # Bounds the whole curl run: three attempts of at most 10s each, plus the
     # retry delays, plus slack for process start-up.
     case Mydia.BoundedCommand.run("torrent-curl", torrent_curl_args(url), 35_000, env: env) do
-      {:ok, body} -> decode(body)
+      {:ok, output} -> decode_curl_output(output)
       {:error, reason} -> {:unreachable, inspect(reason)}
     end
+  end
+
+  @doc false
+  # BoundedCommand merges stderr into the output, so a run that succeeded on a
+  # retry carries curl's diagnostics for the failed attempts (`curl: (28) ...`,
+  # `Warning: ... Will retry ...`) ahead of the body. Each diagnostic ends in a
+  # newline, so the body is the last line. A failed run keeps the whole output
+  # for its error message.
+  def decode_curl_output(output) do
+    output
+    |> String.split("\n", trim: true)
+    |> List.last("")
+    |> decode()
   end
 
   @doc false
@@ -112,7 +126,10 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
       {:ok, %Req.Response{status: 200, body: %{"ip" => ip}}} -> {:ok, ip}
       {:ok, %Req.Response{status: 200}} -> {:error, "unexpected relay response"}
       {:ok, %Req.Response{status: status}} -> {:unreachable, "relay answered #{status}"}
-      {:error, exception} -> {:unreachable, Exception.message(exception)}
+      {:error, %Req.TransportError{} = e} -> {:unreachable, Exception.message(e)}
+      {:error, %Req.HTTPError{} = e} -> {:unreachable, Exception.message(e)}
+      # The relay answered but the body did not decode (a 200 that is not JSON).
+      {:error, exception} -> {:error, Exception.message(exception)}
     end
   end
 

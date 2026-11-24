@@ -81,6 +81,29 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
              {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
   end
 
+  # An unreachable result is tolerated by Vpn, so a bad torrent answer must
+  # never be masked by Mydia's request failing afterwards.
+  test "a wrong torrent address fails the check even when Mydia's side is unreachable" do
+    assert run_expecting({:ok, "203.0.113.5"}, {:unreachable, "socket closed"}, "203.0.113.9") ==
+             {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
+  end
+
+  test "a malformed torrent address fails the check even when Mydia's side is unreachable" do
+    assert run_expecting({:ok, "garbage"}, {:unreachable, "socket closed"}, "203.0.113.9") ==
+             @invalid
+  end
+
+  test "curl diagnostics from retried attempts are not part of the decoded body" do
+    output =
+      "curl: (28) Connection timed out after 5001 milliseconds\n" <>
+        "Warning: Problem : timeout. Will retry in 1 second. 2 retries left.\n" <>
+        ~s({"ip":"203.0.113.9"})
+
+    assert LeakCheck.decode_curl_output(output) == {:ok, "203.0.113.9"}
+    assert LeakCheck.decode_curl_output(~s({"ip":"203.0.113.9"}\n)) == {:ok, "203.0.113.9"}
+    assert LeakCheck.decode_curl_output("") == {:error, "unexpected relay response"}
+  end
+
   test "an unparseable VPN address fails closed" do
     assert run_expecting({:ok, "203.0.113.9"}, {:ok, "198.51.100.7"}, "garbage") ==
              {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
@@ -143,6 +166,18 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
         end)
 
       assert mydia_side(plug) == :ok
+    end
+
+    test "a 200 whose body does not decode is a failed check, not retried" do
+      {plug, counter} =
+        counting_plug(fn _, conn ->
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(200, "{")
+        end)
+
+      assert {:error, {:leak_check_failed, _}} = mydia_side(plug)
+      assert :counters.get(counter, 1) == 1
     end
 
     test "a relay that never answers is unreachable after three attempts" do
