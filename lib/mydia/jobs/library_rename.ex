@@ -5,7 +5,9 @@ defmodule Mydia.Jobs.LibraryRename do
 
   Broadcasts on the `"library_scanner"` topic: `:library_rename_started`,
   `:library_rename_progress` (at most once per media item) and
-  `:library_rename_completed`.
+  `:library_rename_completed`. Completion is broadcast on failure too, with an
+  `:error` reason (`:library_unavailable` for a deleted or unmounted library
+  path), so a waiting UI never hangs.
   """
 
   use Oban.Worker,
@@ -39,7 +41,6 @@ defmodule Mydia.Jobs.LibraryRename do
   @impl Oban.Worker
   def perform(%Oban.Job{args: raw_args}) do
     %Args{library_path_id: library_path_id} = Args.parse(raw_args)
-    library_path = Settings.get_library_path!(library_path_id)
 
     Logger.info("Starting library rename job", library_path_id: library_path_id)
     broadcast(:library_rename_started, %{library_path_id: library_path_id})
@@ -52,12 +53,12 @@ defmodule Mydia.Jobs.LibraryRename do
       })
     end
 
-    case BulkRename.run(library_path, on_progress: on_progress) do
-      {:ok, counts} ->
-        Logger.info("Library rename completed", Map.to_list(counts))
-        broadcast(:library_rename_completed, Map.put(counts, :library_path_id, library_path_id))
-        :ok
-
+    with {:ok, library_path} <- fetch_library_path(library_path_id),
+         {:ok, counts} <- BulkRename.run(library_path, on_progress: on_progress) do
+      Logger.info("Library rename completed", Map.to_list(counts))
+      broadcast(:library_rename_completed, Map.put(counts, :library_path_id, library_path_id))
+      :ok
+    else
       {:error, reason} ->
         Logger.warning("Library rename failed",
           library_path_id: library_path_id,
@@ -86,6 +87,13 @@ defmodule Mydia.Jobs.LibraryRename do
     %{library_path_id: library_path_id}
     |> __MODULE__.new()
     |> Oban.insert()
+  end
+
+  # A deleted library path is unavailable, not a crash, so the UI hears back.
+  defp fetch_library_path(id) do
+    {:ok, Settings.get_library_path!(id)}
+  rescue
+    Ecto.NoResultsError -> {:error, :library_unavailable}
   end
 
   defp broadcast(event, payload), do: Phoenix.PubSub.broadcast(@pubsub, @topic, {event, payload})

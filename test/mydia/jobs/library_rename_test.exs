@@ -34,6 +34,24 @@ defmodule Mydia.Jobs.LibraryRenameTest do
     refute File.exists?(Path.join(ctx.root, "paper.comet.junk.mkv"))
   end
 
+  test "a deleted library path still broadcasts completion with an error" do
+    Phoenix.PubSub.subscribe(Mydia.PubSub, "library_scanner")
+    missing = Ecto.UUID.generate()
+
+    assert {:error, :library_unavailable} =
+             perform_job(LibraryRename, %{"library_path_id" => missing})
+
+    assert_receive {:library_rename_completed,
+                    %{
+                      library_path_id: ^missing,
+                      renamed: 0,
+                      unchanged: 0,
+                      conflicts: 0,
+                      errors: 0,
+                      error: :library_unavailable
+                    }}
+  end
+
   # Oban does not run in test (`engine: false`), so `enqueue/1` cannot insert.
   # Assert the job it would insert instead.
   test "enqueue builds a media-queue job keyed on the library path", ctx do
