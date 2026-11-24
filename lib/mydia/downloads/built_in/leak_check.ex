@@ -22,7 +22,9 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
   # relay answer.
   def run(opts) do
     url = String.trim_trailing(Keyword.fetch!(opts, :relay_url), "/") <> "/ip"
-    torrent_ip = Keyword.get(opts, :torrent_ip_fun, &torrent_ip/1)
+    # `:torrent_curl` lets tests run a plain curl in place of the setgid copy.
+    curl = Keyword.get(opts, :torrent_curl, "torrent-curl")
+    torrent_ip = Keyword.get(opts, :torrent_ip_fun, &torrent_ip(&1, curl))
     req_options = Keyword.get(opts, :mydia_req_options, [])
     mydia_ip = Keyword.get(opts, :mydia_ip_fun, &mydia_ip(&1, req_options))
 
@@ -71,50 +73,46 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
   # IPv6 by default, and gluetun's split-tunnel marks cover only IPv4, so over
   # IPv6 the two addresses would come from different families and never match
   # the VPN's.
-  defp torrent_ip(url) do
+  #
+  # The body goes to a file, not stdout. BoundedCommand merges stderr into
+  # stdout, so a run that succeeded on a retry would carry the failed attempts'
+  # diagnostics, and curl cannot take back a partial body it already wrote to a
+  # pipe. Before retrying into a file, curl truncates it back to where the
+  # attempt started, so the file holds only the successful attempt's body,
+  # while stdout keeps the diagnostics for a run that failed.
+  defp torrent_ip(url, curl) do
     env = Config.child_env_unset(System.get_env())
+
+    body_path =
+      Path.join(System.tmp_dir!(), "mydia-leak-check-#{System.unique_integer([:positive])}")
 
     # Bounds the whole curl run: three attempts of at most 10s each, plus the
     # retry delays, plus slack for process start-up.
-    case Mydia.BoundedCommand.run("torrent-curl", torrent_curl_args(url), 35_000, env: env) do
-      {:ok, output} -> decode_curl_output(output)
-      {:error, reason} -> {:unreachable, inspect(reason)}
+    try do
+      case Mydia.BoundedCommand.run(curl, torrent_curl_args(url, body_path), 35_000, env: env) do
+        {:ok, _diagnostics} -> read_body(body_path)
+        {:error, reason} -> {:unreachable, inspect(reason)}
+      end
+    after
+      File.rm(body_path)
     end
   end
 
-  @doc false
-  # BoundedCommand merges stderr into the output, so a run that succeeded on a
-  # retry carries curl's diagnostics for the failed attempts (`curl: (28) ...`,
-  # `Warning: ... Will retry ...`) ahead of the body, and curl cannot take back
-  # a partial body (`{"ip":`) an attempt wrote to the pipe before it failed.
-  # The successful attempt's body comes last, so each line that opens a JSON
-  # object is tried as the start of the body, last first, and the first suffix
-  # that decodes wins. This keeps a body that spans several lines whole. A
-  # failed run keeps the whole output for its error message.
-  def decode_curl_output(output) do
-    lines = String.split(output, "\n")
-
-    lines
-    |> Enum.with_index()
-    |> Enum.filter(fn {line, _i} -> String.starts_with?(String.trim_leading(line), "{") end)
-    |> Enum.reverse()
-    |> Enum.find_value({:error, "unexpected relay response"}, fn {_line, i} ->
-      case lines |> Enum.drop(i) |> Enum.join("\n") |> decode() do
-        {:ok, _ip} = ok -> ok
-        {:error, _} -> nil
-      end
-    end)
+  defp read_body(path) do
+    case File.read(path) do
+      {:ok, body} -> decode(body)
+      {:error, posix} -> {:unreachable, "curl wrote no body (#{posix})"}
+    end
   end
 
-  @doc false
   # Connects through the tunnel occasionally stall while lost SYNs are
   # retransmitted, so each attempt gets a short connect timeout and curl
   # retries any failure. `--retry-max-time` stops it starting a new attempt
   # after 20s.
-  def torrent_curl_args(url) do
+  defp torrent_curl_args(url, body_path) do
     ["-4", "-fsS", "--connect-timeout", "5", "--max-time", "10"] ++
       ["--retry", "#{@retries}", "--retry-delay", "1", "--retry-max-time", "20"] ++
-      ["--retry-all-errors", url]
+      ["--retry-all-errors", "-o", body_path, url]
   end
 
   # A pooled keep-alive connection can be closed by the relay's CDN just as it

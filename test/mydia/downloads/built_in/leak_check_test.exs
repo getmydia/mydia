@@ -93,29 +93,64 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
              @invalid
   end
 
-  test "curl diagnostics from retried attempts are not part of the decoded body" do
-    output =
-      "curl: (28) Connection timed out after 5001 milliseconds\n" <>
-        "Warning: Problem : timeout. Will retry in 1 second. 2 retries left.\n" <>
-        ~s({"ip":"203.0.113.9"})
+  # These run the real curl the container ships (as `torrent-curl`) against a
+  # raw TCP server, so curl's retry and output handling are what is tested.
+  describe "the torrent-side request" do
+    @describetag skip: is_nil(System.find_executable("curl")) && "curl not on PATH"
 
-    assert LeakCheck.decode_curl_output(output) == {:ok, "203.0.113.9"}
-    assert LeakCheck.decode_curl_output(~s({"ip":"203.0.113.9"}\n)) == {:ok, "203.0.113.9"}
+    # Serves one canned response per connection, in order, closing each.
+    defp relay(responses) do
+      {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+      {:ok, port} = :inet.port(listen)
 
-    multiline =
-      ~s(curl: \(56\) Recv failure: Connection reset by peer\n{\n  "ip": "203.0.113.9"\n}\n)
+      start_supervised!(
+        {Task,
+         fn ->
+           Enum.each(responses, fn response ->
+             {:ok, socket} = :gen_tcp.accept(listen)
+             {:ok, _request} = :gen_tcp.recv(socket, 0, 5_000)
+             :ok = :gen_tcp.send(socket, response)
+             :gen_tcp.close(socket)
+           end)
+         end}
+      )
 
-    assert LeakCheck.decode_curl_output(multiline) == {:ok, "203.0.113.9"}
+      "http://127.0.0.1:#{port}"
+    end
 
-    # A failed attempt left part of its body in the pipe before curl retried.
-    fragment =
-      ~s({"ip":curl: \(56\) Recv failure: Connection reset by peer\n) <>
-        "Warning: Problem : connection reset. Will retry in 1 second. 1 retry left.\n" <>
-        ~s({\n  "ip": "203.0.113.9"\n})
+    defp http_200(body, length \\ nil) do
+      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" <>
+        "Content-Length: #{length || byte_size(body)}\r\nConnection: close\r\n\r\n" <> body
+    end
 
-    assert LeakCheck.decode_curl_output(fragment) == {:ok, "203.0.113.9"}
-    assert LeakCheck.decode_curl_output(~s({"ip":)) == {:error, "unexpected relay response"}
-    assert LeakCheck.decode_curl_output("") == {:error, "unexpected relay response"}
+    defp torrent_side(relay_url) do
+      LeakCheck.run(
+        relay_url: relay_url,
+        torrent_curl: "curl",
+        mydia_ip_fun: fn _url -> {:ok, "198.51.100.7"} end
+      )
+    end
+
+    # curl cannot take back a partial body written to a pipe, and its
+    # diagnostics share BoundedCommand's output; writing to a file it truncates
+    # before retrying leaves only the successful attempt's body.
+    test "a body cut short is retried and only the complete body is decoded" do
+      url =
+        relay([
+          http_200(~s({"ip":), 40),
+          http_200(~s({\n  "ip": "203.0.113.9"\n}\n))
+        ])
+
+      assert torrent_side(url) == :ok
+    end
+
+    test "a relay that keeps failing is unreachable, with curl's diagnostics" do
+      url =
+        relay(List.duplicate("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n", 3))
+
+      assert {:error, {:leak_check_unreachable, message}} = torrent_side(url)
+      assert message =~ "503"
+    end
   end
 
   test "an unparseable VPN address fails closed" do
@@ -200,13 +235,5 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
       assert {:error, {:leak_check_unreachable, "socket closed"}} = mydia_side(plug)
       assert :counters.get(counter, 1) == 3
     end
-  end
-
-  test "the torrent-side curl retries transient failures within the bounded time" do
-    args = LeakCheck.torrent_curl_args("https://relay.invalid/ip")
-
-    assert ["-4", "-fsS" | _] = args
-    assert "--retry-all-errors" in args
-    assert List.last(args) == "https://relay.invalid/ip"
   end
 end
