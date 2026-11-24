@@ -2878,6 +2878,39 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#media_requestcreated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        media_request.created
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#media_requestapproved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        media_request.approved
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#media_requestrejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        media_request.rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#media_fileimported" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3553,6 +3586,39 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#media_requestcreated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        media_request.created
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#media_requestapproved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        media_request.approved
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#media_requestrejected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        media_request.rejected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#media_fileimported" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3707,7 +3773,7 @@ any other name is rejected when the manifest is parsed.</p>
 <tr>
 <td><code>category</code></td>
 <td><code>option&lt;string&gt;</code></td>
-<td><code>media</code>, <code>downloads</code> or <code>playback</code>.</td>
+<td><code>media</code>, <code>downloads</code>, <code>playback</code> or <code>requests</code>.</td>
 </tr>
 <tr>
 <td><code>severity</code></td>
@@ -3727,7 +3793,7 @@ any other name is rejected when the manifest is parsed.</p>
 <tr>
 <td><code>resource-type</code></td>
 <td><code>option&lt;string&gt;</code></td>
-<td>What the event concerns: <code>media_item</code>, <code>episode</code> or <code>download</code>.</td>
+<td>What the event concerns: <code>media_item</code>, <code>episode</code>, <code>download</code> or <code>media_request</code>.</td>
 </tr>
 <tr>
 <td><code>resource-id</code></td>
@@ -3750,7 +3816,9 @@ empty.</p>
 <h2 id="delivery-rules">Delivery rules</h2>
 <ul>
 <li>The host delivers an event to every enabled instance of each plugin that
-  subscribed to it.</li>
+  subscribed to it. A plugin that declares an
+  <a href="../manifest/#choosing-events-per-instance"><code>events</code> setting</a> delivers it only
+  to the instances whose selection includes the event.</li>
 <li>Events are delivered after they are recorded, off the request that caused
   them. A slow or failing plugin never delays other plugins or the action.</li>
 <li>The dispatcher never delivers an event back to the plugin that caused it. An
@@ -3810,6 +3878,24 @@ empty.</p>
 <td>A download fails.</td>
 <td><code>title</code>, <code>download_client</code>, <code>download_id</code>, <code>error_message</code>, optional media context and failure classification</td>
 <td>0.12.0</td>
+</tr>
+<tr>
+<td><a href="#media_requestcreated"><code>media_request.created</code></a></td>
+<td>A user requests a movie or show.</td>
+<td><code>title</code>, <code>year</code>, <code>media_type</code>, <code>tmdb_id</code>, <code>requester</code>, optional <code>requester_notes</code></td>
+<td>0.20.0</td>
+</tr>
+<tr>
+<td><a href="#media_requestapproved"><code>media_request.approved</code></a></td>
+<td>A request is approved, by an admin or automatically.</td>
+<td><code>title</code>, <code>year</code>, <code>media_type</code>, <code>tmdb_id</code>, <code>requester</code>, <code>auto</code>, optional <code>approved_by</code>, <code>requester_notes</code></td>
+<td>0.20.0</td>
+</tr>
+<tr>
+<td><a href="#media_requestrejected"><code>media_request.rejected</code></a></td>
+<td>An admin rejects a request.</td>
+<td><code>title</code>, <code>year</code>, <code>media_type</code>, <code>tmdb_id</code>, <code>requester</code>, optional <code>approved_by</code>, <code>requester_notes</code>, <code>rejection_reason</code></td>
+<td>0.20.0</td>
 </tr>
 <tr>
 <td><a href="#playbackstarted"><code>playback.started</code></a></td>
@@ -3942,6 +4028,124 @@ empty.</p>
 </table>
 <!-- source: lib/mydia/events.ex:489-503 -->
 
+<h3 id="media_requestcreated">media_request.created</h3>
+<p>Recorded with category <code>requests</code>, resource type <code>media_request</code>, actor <code>user</code>
+(the requester). Guests never see request events.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code></td>
+<td>string</td>
+<td>The requested title.</td>
+</tr>
+<tr>
+<td><code>year</code></td>
+<td>integer</td>
+<td>Release year. Absent when unknown.</td>
+</tr>
+<tr>
+<td><code>media_type</code></td>
+<td>string</td>
+<td><code>movie</code> or <code>tv_show</code>.</td>
+</tr>
+<tr>
+<td><code>tmdb_id</code></td>
+<td>integer</td>
+<td>TMDB id. Absent when unknown.</td>
+</tr>
+<tr>
+<td><code>requester</code></td>
+<td>string</td>
+<td>The requester's display name, or their username when they have none.</td>
+</tr>
+<tr>
+<td><code>requester_notes</code></td>
+<td>string</td>
+<td>The note the requester left. Absent when they left none.</td>
+</tr>
+</tbody>
+</table>
+<p>Fields with no value are left out of <code>metadata</code> rather than sent as <code>null</code>.</p>
+<h3 id="media_requestapproved">media_request.approved</h3>
+<p>Recorded with category <code>requests</code>, resource type <code>media_request</code>. The actor is
+the approving admin (<code>user</code>), or <code>system</code> for an automatic approval.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code>, <code>year</code>, <code>media_type</code>, <code>tmdb_id</code>, <code>requester</code></td>
+<td></td>
+<td>As in <a href="#media_requestcreated"><code>media_request.created</code></a>.</td>
+</tr>
+<tr>
+<td><code>auto</code></td>
+<td>boolean</td>
+<td><code>true</code> when auto-approval approved the request.</td>
+</tr>
+<tr>
+<td><code>approved_by</code></td>
+<td>string</td>
+<td>The approving admin's display name. Absent for auto-approval.</td>
+</tr>
+<tr>
+<td><code>requester_notes</code></td>
+<td>string</td>
+<td>The note the requester left. Absent when they left none.</td>
+</tr>
+</tbody>
+</table>
+<p>When an approval links a request to a title already in the library, any other
+pending requests for that title are approved with it, and each one emits its own
+event. Those other requests are recorded with <code>auto: true</code> and notify as
+"Auto-approved".</p>
+<h3 id="media_requestrejected">media_request.rejected</h3>
+<p>Recorded with category <code>requests</code>, resource type <code>media_request</code>, actor <code>user</code>
+(the rejecting admin).</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code>, <code>year</code>, <code>media_type</code>, <code>tmdb_id</code>, <code>requester</code></td>
+<td></td>
+<td>As in <a href="#media_requestcreated"><code>media_request.created</code></a>.</td>
+</tr>
+<tr>
+<td><code>approved_by</code></td>
+<td>string</td>
+<td>The rejecting admin's display name. The name is the same field used for approvals.</td>
+</tr>
+<tr>
+<td><code>requester_notes</code></td>
+<td>string</td>
+<td>The note the requester left. Absent when they left none.</td>
+</tr>
+<tr>
+<td><code>rejection_reason</code></td>
+<td>string</td>
+<td>The reason the admin gave. Absent when none was given.</td>
+</tr>
+</tbody>
+</table>
+<p>Withdrawing a request emits no event.</p>
 <h3 id="media_fileimported">media_file.imported</h3>
 <p>Recorded with category <code>media</code>, resource type <code>media_item</code>, resource id the
 item the file belongs to.</p>

@@ -2473,6 +2473,28 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#choose-which-events-the-notifier-sends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choose which events the notifier sends
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#get-an-ntfy-message-when-someone-requests-media" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get an ntfy message when someone requests media
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3352,6 +3374,28 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#choose-which-events-the-notifier-sends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choose which events the notifier sends
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#get-an-ntfy-message-when-someone-requests-media" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Get an ntfy message when someone requests media
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3483,6 +3527,50 @@ selected target and webhook URL arrive at runtime.</p>
 <a href="../test-and-iterate/#test-without-a-host">Test without a host</a>. Read its
 <code>src/lib.rs</code> for the complete, tested version, including templated bodies and
 query params.</p>
+<h2 id="choose-which-events-the-notifier-sends">Choose which events the notifier sends</h2>
+<p>The bundled Webhook Notifier is a single notifier with one settings form and one
+event selection. Use it to decide which events reach your chosen destination,
+for example to keep request notifications going to a private ntfy topic while
+leaving the busier media events off. Open the notifier's settings in the admin plugins page and use
+the <strong>Notify on</strong> chips. Each chip is one event: media added, download
+completed, and the three request events (requested, request approved, request
+rejected).</p>
+<p>Installs that had the notifier before the request events existed keep sending
+only media added and download completed until you tick more chips. A fresh
+install starts with every event selected. Unticking every chip saves an empty
+selection, and the notifier then sends nothing.</p>
+<p>To offer the same choice in your own plugin, declare an
+<a href="../../reference/manifest/#choosing-events-per-instance"><code>events</code> setting</a>. The
+host does the filtering, so your handler never sees events the operator turned
+off.</p>
+<h2 id="get-an-ntfy-message-when-someone-requests-media">Get an ntfy message when someone requests media</h2>
+<p><strong>Goal:</strong> a push notification on your phone each time a user requests a title.</p>
+<ol>
+<li>Open the Webhook Notifier settings and set <strong>Target service</strong> to <code>ntfy</code>.</li>
+<li>Set <strong>Webhook / server URL</strong> to your topic, for example
+   <code>https://ntfy.example.com/media-requests</code>. Add an access token if your server
+   needs one.</li>
+<li>Under <strong>Notify on</strong>, tick <strong>Requested</strong>. Tick <strong>Request approved</strong> and
+   <strong>Request rejected</strong> too if you want to hear about decisions.</li>
+<li>Save.</li>
+</ol>
+<p>When a user requests a title, ntfy shows the media title and year as the
+notification title, with a message that names who asked:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Title:   Moonlit Harbor (2024)
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>Message: Dana requested Moonlit Harbor (2024)
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>         Would love this one for movie night.
+</code></pre></div>
+<p>The last paragraph is the note the requester left, and it appears only when they
+left one. Approvals read <code>Approved Moonlit Harbor (2024) for Dana</code>, or
+<code>Auto-approved ...</code> when automatic approval handled it. Rejections read
+<code>Rejected Moonlit Harbor (2024) for Dana</code> followed by the rejection reason when
+the admin gave one. Discord instances show the same text.</p>
+<p>With the <strong>Custom</strong> target, the request fields are available to your templates
+as <code>{{requester}}</code>, <code>{{requester_notes}}</code>, <code>{{approved_by}}</code>,
+<code>{{rejection_reason}}</code> and <code>{{media_type}}</code>, alongside <code>{{title}}</code> and
+<code>{{event}}</code>. The full field list is in the
+<a href="../../reference/events/#media_requestcreated">events reference</a>.</p>
 
 
 
