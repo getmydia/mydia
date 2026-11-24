@@ -1,5 +1,9 @@
 name: Dependabot auto-merge
 
+# Also merges Weblate's translation pull requests (author `app/hosted-weblate`,
+# branch `weblate-mydia-default` in this repository, never a fork) through the
+# same gate. The name stays because the gate's fixtures and docs cite it.
+#
 # workflow_run rather than check_suite, and neither of them pull_request_target.
 #
 # GitHub's native auto-merge (`gh pr merge --auto`, which this file used to
@@ -56,7 +60,7 @@ on:
     # The run's head branch. Without this every listed workflow on every
     # branch woke the gate only for it to find no Dependabot pull request,
     # which was nearly half of all Actions runs in the repository.
-    branches: ['dependabot/**']
+    branches: ['dependabot/**', 'weblate-mydia-default']
 
 permissions:
   contents: write
@@ -92,11 +96,12 @@ jobs:
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
           permission-actions: write
 
-      # Matching open dependabot pull requests on the triggering run's head SHA
-      # is unconditional and needs no payload archaeology.
+      # Matching open dependabot or Weblate pull requests on the triggering
+      # run's head SHA is unconditional and needs no payload archaeology.
       #
-      # Note the author spelling: `gh pr list --author` wants `app/dependabot`,
-      # while the webhook payload spells the same account `dependabot[bot]`.
+      # Note the author spelling: `gh pr list --author` wants `app/dependabot`
+      # and `app/hosted-weblate`, while the webhook payload spells the same
+      # accounts `dependabot[bot]` and `hosted-weblate[bot]`.
       - name: Decide
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -105,12 +110,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          prs="$(gh pr list --author 'app/dependabot' --state open \
-                   --json number,headRefOid \
-                   --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")"
+          prs=""
+          for author in app/dependabot app/hosted-weblate; do
+            found="$(gh pr list --author "$author" --state open \
+                       --json number,headRefOid \
+                       --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")"
+            if [ -n "$found" ]; then
+              prs="${prs:+$prs$'\n'}$found"
+            fi
+          done
 
           if [ -z "$prs" ]; then
-            echo "No open dependabot pull request at $HEAD_SHA. Nothing to do."
+            echo "No open dependabot or Weblate pull request at $HEAD_SHA. Nothing to do."
             exit 0
           fi
 
@@ -230,6 +241,13 @@ jobs:
                   retry_sentence="Failed GitHub Actions jobs are re-run once automatically before this comment is posted, so these failed twice or cannot be re-run. Treat them as a real incompatibility unless you have reason to suspect a flake."
                 else
                   retry_sentence="Re-run them if you believe they are flaky, or fix the incompatibility."
+                fi
+                # A Weblate branch must not be fixed by a commit on it (see
+                # player/docs/l10n.md): the fix belongs on Weblate or master.
+                head_status=0
+                head_ref="$(gh pr view "$pr" --json headRefName --jq .headRefName)" || head_status=$?
+                if [ "$head_status" -eq 0 ] && [ "$head_ref" = "weblate-mydia-default" ]; then
+                  retry_sentence="$retry_sentence For a Weblate pull request, fix it on Weblate or with a separate pull request to master, never with a commit on this branch; see player/docs/l10n.md."
                 fi
                 comment_status=0
                 upsert_comment "$pr" "$marker

@@ -162,6 +162,9 @@ validates.
 
 ## Dependabot merges through a gate, not GitHub's auto-merge
 
+Weblate's translation PRs (author `app/hosted-weblate`, branch
+`weblate-mydia-default`) go through the same gate and merge the same way.
+
 `dependabot-auto-merge.yml` no longer calls `gh pr merge --auto`. That waited on
 **required** checks only, with no flag to widen it, so PR #613 merged 2026-08-29
 with seven red advisory checks and broke the master Docker image. Supplementing it
@@ -230,7 +233,7 @@ until someone re-runs a listed workflow. Keep the list complete, and when a
 green dependabot PR is not merging, check whether a workflow it runs is absent
 from it.
 
-The trigger also filters on `branches: ['dependabot/**']`, the triggering run's
+The trigger also filters on `branches: ['dependabot/**', 'weblate-mydia-default']`, the triggering run's
 head branch. Unfiltered, every listed workflow on every branch woke the gate,
 nearly half of all Actions runs, only for it to find no Dependabot pull request.
 The fixup's push and the gate's own re-runs are on Dependabot branches, so they
