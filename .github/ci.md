@@ -168,9 +168,12 @@ one extra condition: every changed file must be an ARB under
 `player/lib/l10n/` or a `.po` under `priv/gettext/`. Translations come from a
 public platform and merge unreviewed, which is accepted because they are display
 text whose keys and placeholders CI checks. A Weblate PR that also carries code
-(a maintainer's locale wiring, say) waits for a human. Every merge passes
-`--match-head-commit` with the SHA that woke the gate, so a push landing while
-the gate polls is refused rather than merged unchecked.
+(a maintainer's locale wiring, say) waits for a human. The file check fails
+closed: head, `changedFiles` and paths come from one query, the head must be
+the SHA that woke the gate, and the list must be complete (`files` caps at
+100). Every merge passes `--match-head-commit` with that same SHA, so the
+commit whose files were checked is the commit that merges, and a push landing
+while the gate polls is refused rather than merged unchecked.
 
 `dependabot-auto-merge.yml` no longer calls `gh pr merge --auto`. That waited on
 **required** checks only, with no flag to widen it, so PR #613 merged 2026-08-29

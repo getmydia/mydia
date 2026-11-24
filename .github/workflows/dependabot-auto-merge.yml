@@ -110,13 +110,19 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Classified by author here, once, so a later failed lookup can
+          # never turn a Weblate pull request into an unchecked one.
           prs=""
+          weblate_prs=""
           for author in app/dependabot app/hosted-weblate; do
             found="$(gh pr list --author "$author" --state open \
                        --json number,headRefOid \
                        --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")"
             if [ -n "$found" ]; then
               prs="${prs:+$prs$'\n'}$found"
+              if [ "$author" = app/hosted-weblate ]; then
+                weblate_prs="${weblate_prs:+$weblate_prs$'\n'}$found"
+              fi
             fi
           done
 
@@ -128,21 +134,29 @@ jobs:
           marker='<!-- dependabot-gate -->'
 
           is_weblate() {
-            local ref status=0
-            ref="$(gh pr view "$1" --json headRefName --jq .headRefName)" || status=$?
-            [ "$status" -eq 0 ] && [ "$ref" = "weblate-mydia-default" ]
+            printf '%s\n' "$weblate_prs" | grep -qx "$1"
           }
 
           # Weblate content comes from a public translation platform and
           # merges with no human review: accepted on purpose, because it is
           # display text whose keys and placeholders CI checks. What it may
           # never do unreviewed is touch anything but the catalogs.
+          #
+          # Fails closed. Head, file count and paths come from one query, so
+          # they describe one commit, and that commit must be HEAD_SHA, the
+          # one the merge below is pinned to. `files` is capped at 100, so
+          # the list must be as long as `changedFiles` or it is incomplete.
           weblate_paths_only() {
-            local files status=0
-            files="$(gh pr view "$1" --json files --jq '.files[].path')" || status=$?
+            local snapshot status=0
+            snapshot="$(gh pr view "$1" --json headRefOid,changedFiles,files)" || status=$?
             [ "$status" -eq 0 ] || return 1
-            [ -n "$files" ] || return 1
-            ! printf '%s\n' "$files" | grep -Ev '^(player/lib/l10n/app_[A-Za-z_]+\.arb|priv/gettext/[A-Za-z_]+/LC_MESSAGES/[a-z_]+\.po)$' > /dev/null
+            printf '%s' "$snapshot" | HEAD_SHA="$HEAD_SHA" jq -e '
+              .headRefOid == env.HEAD_SHA
+              and .changedFiles > 0
+              and (.files | length) == .changedFiles
+              and all(.files[].path;
+                      test("^(player/lib/l10n/app_[A-Za-z_]+\\.arb|priv/gettext/[A-Za-z_]+/LC_MESSAGES/[a-z_]+\\.po)$"))
+            ' > /dev/null
           }
 
           # mergeStateStatus is computed lazily and returns UNKNOWN until GitHub
