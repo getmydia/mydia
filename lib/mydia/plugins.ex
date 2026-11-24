@@ -39,6 +39,7 @@ defmodule Mydia.Plugins do
   alias Mydia.Plugins.Capabilities
   alias Mydia.Plugins.DeclaredSettings
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.EventSelection
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
@@ -132,12 +133,14 @@ defmodule Mydia.Plugins do
   durable job) with that instance's settings injected under `config`. Instances
   run one after another inside the dispatcher's per-plugin task; one instance
   failing does not skip the others. Returns `{:ok, results}` with one entry per
-  instance, or the first `{:error, _}` so the dispatcher logs it.
+  instance that selected the event, or the first `{:error, _}` so the dispatcher
+  logs it. Instances whose event selection leaves the event out are skipped.
   """
   @spec invoke_plugin(Plugin.t(), map()) :: {:ok, [term()]} | {:error, term()}
   def invoke_plugin(%Plugin{} = plugin, event) do
     results =
-      for %Instance{} = instance <- Instances.list_enabled(plugin.slug) do
+      for %Instance{} = instance <- Instances.list_enabled(plugin.slug),
+          EventSelection.wants?(plugin, instance.settings || %{}, Map.get(event, :type)) do
         invoke_plugin(plugin, instance, event)
       end
 
@@ -384,7 +387,30 @@ defmodule Mydia.Plugins do
 
   defp test_instance(%Plugin{} = plugin), do: Instances.default_instance(plugin.slug)
 
-  defp synthetic_event(event_type) do
+  @doc false
+  def synthetic_event("media_request." <> _ = event_type) do
+    %{
+      type: event_type,
+      category: "requests",
+      severity: :info,
+      actor_type: :system,
+      actor_id: "plugin_test",
+      resource_type: "media_request",
+      resource_id: Ecto.UUID.generate(),
+      metadata: %{
+        "title" => "Test Movie",
+        "year" => 2026,
+        "media_type" => "movie",
+        "requester" => "Test User",
+        "requester_notes" => "Sent from the Test button",
+        "approved_by" => "Admin",
+        "rejection_reason" => "Test rejection",
+        "test" => true
+      }
+    }
+  end
+
+  def synthetic_event(event_type) do
     %{
       type: event_type,
       category: "media",
@@ -557,8 +583,8 @@ defmodule Mydia.Plugins do
   # and enabled, with no admin step. Bytes stay out of the DB (`wasm_module: nil`);
   # they resolve from the filesystem at activation.
   defp seed_bundled(manifest, raw) do
-    settings = bundled_settings(raw)
     manifest_map = manifest_to_map(manifest)
+    settings = EventSelection.seed(manifest_map, bundled_settings(raw))
 
     attrs = %{
       slug: manifest.slug,
@@ -1086,18 +1112,29 @@ defmodule Mydia.Plugins do
   end
 
   defp persist_install(entry, wasm, hash, grants) do
-    Settings.upsert_plugin_config(%{
-      slug: entry.slug,
-      name: entry.name,
-      version: entry.version,
-      source_url: entry.package_url,
-      plugin_source_id: entry.source_id,
-      integrity_hash: hash,
-      manifest: manifest_to_map(entry.manifest),
-      wasm_module: wasm,
-      granted_capabilities: grants,
-      enabled: grants != %{}
-    })
+    manifest_map = manifest_to_map(entry.manifest)
+
+    # Only a new row is seeded: an existing row keeps the operator's settings.
+    seed =
+      case Settings.get_plugin_config_by_slug(entry.slug) do
+        nil -> %{settings: EventSelection.seed(manifest_map, %{})}
+        _existing -> %{}
+      end
+
+    Settings.upsert_plugin_config(
+      Map.merge(seed, %{
+        slug: entry.slug,
+        name: entry.name,
+        version: entry.version,
+        source_url: entry.package_url,
+        plugin_source_id: entry.source_id,
+        integrity_hash: hash,
+        manifest: manifest_map,
+        wasm_module: wasm,
+        granted_capabilities: grants,
+        enabled: grants != %{}
+      })
+    )
   end
 
   # After install: activate when capabilities were granted, otherwise leave it

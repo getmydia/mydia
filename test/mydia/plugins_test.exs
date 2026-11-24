@@ -615,6 +615,52 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "persist_install seeding and request test events" do
+    defp events_manifest do
+      manifest!(%{
+        "capabilities" => %{
+          "events:subscribe" => ["media_item.added", "media_request.created"],
+          "net:http" => ["discord.com"]
+        },
+        "settings_schema" => [
+          %{"key" => "events", "type" => "events", "label" => "Events"}
+        ]
+      })
+    end
+
+    test "a new install stores the full subscribed list under the events key", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      {:ok, _} = Plugins.install(entry(bypass, events_manifest(), wasm), gate_opts())
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").settings["events"] ==
+               ["media_item.added", "media_request.created"]
+    end
+
+    test "reinstalling leaves an existing selection alone", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      {:ok, _} = Plugins.install(entry(bypass, events_manifest(), wasm), gate_opts())
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      {:ok, _} = Settings.update_plugin_config(config, %{settings: %{"events" => ["a"]}})
+
+      {:ok, _} = Plugins.install(entry(bypass, events_manifest(), wasm), gate_opts())
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").settings["events"] == ["a"]
+    end
+
+    test "synthetic request events carry request-shaped data" do
+      payload =
+        "media_request.created" |> Plugins.synthetic_event() |> Plugins.build_payload()
+
+      assert payload["event"] == "media_request.created"
+      assert payload["resource_type"] == "media_request"
+      assert payload["category"] == "requests"
+      assert payload["metadata"]["requester"] == "Test User"
+    end
+  end
+
   describe "update_settings/2 and instances" do
     test "saved settings reach a single-instance plugin's injected config", %{bypass: bypass} do
       wasm = guest_wasm()
