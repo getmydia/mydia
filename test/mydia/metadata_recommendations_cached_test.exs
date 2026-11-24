@@ -24,7 +24,7 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
 
     on_exit(fn ->
       for media_type <- [:movie, :tv_show], language <- ["en-US", "fr-FR"] do
-        Cache.delete("recommendations:metadata_relay:#{tmdb_id}:#{media_type}:#{language}")
+        Cache.delete("recommendations:v2:metadata_relay:#{tmdb_id}:#{media_type}:#{language}")
       end
     end)
 
@@ -66,7 +66,7 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
       json(conn, 200, recommendations_body(tmdb_id, "Cached Title"))
     end)
 
-    assert {:ok, [first]} =
+    assert {:ok, %{recommendations: [first]}} =
              Metadata.fetch_recommendations_by_ref_cached(
                config,
                {:tmdb, String.to_integer(tmdb_id)},
@@ -76,12 +76,38 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
     assert first.title == "Cached Title"
 
     # Bypass.expect_once would fail on a second request.
-    assert {:ok, [^first]} =
+    assert {:ok, %{recommendations: [^first]}} =
              Metadata.fetch_recommendations_by_ref_cached(
                config,
                {:tmdb, String.to_integer(tmdb_id)},
                media_type: :movie
              )
+  end
+
+  test "caches the recommendations and similar pools together", %{
+    bypass: bypass,
+    config: config,
+    tmdb_id: tmdb_id
+  } do
+    body =
+      tmdb_id
+      |> recommendations_body("Recommended Title")
+      |> Map.put("similar", %{
+        "page" => 1,
+        "results" => [%{"id" => 202, "title" => "Similar Title", "release_date" => "2019-01-01"}]
+      })
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+      json(conn, 200, body)
+    end)
+
+    ref = {:tmdb, String.to_integer(tmdb_id)}
+
+    assert {:ok, %{recommendations: [recommended], similar: [similar]}} =
+             Metadata.fetch_recommendations_by_ref_cached(config, ref, media_type: :movie)
+
+    assert recommended.title == "Recommended Title"
+    assert similar.title == "Similar Title"
   end
 
   test "keys the cache by language", %{bypass: bypass, config: config, tmdb_id: tmdb_id} do
@@ -91,14 +117,14 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
       json(conn, 200, recommendations_body(tmdb_id, title))
     end)
 
-    assert {:ok, [english]} =
+    assert {:ok, %{recommendations: [english]}} =
              Metadata.fetch_recommendations_by_ref_cached(
                config,
                {:tmdb, String.to_integer(tmdb_id)},
                media_type: :movie
              )
 
-    assert {:ok, [french]} =
+    assert {:ok, %{recommendations: [french]}} =
              Metadata.fetch_recommendations_by_ref_cached(
                config,
                {:tmdb, String.to_integer(tmdb_id)},
@@ -128,14 +154,14 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
       })
     end)
 
-    assert {:ok, [movie]} =
+    assert {:ok, %{recommendations: [movie]}} =
              Metadata.fetch_recommendations_by_ref_cached(
                config,
                {:tmdb, String.to_integer(tmdb_id)},
                media_type: :movie
              )
 
-    assert {:ok, [show]} =
+    assert {:ok, %{recommendations: [show]}} =
              Metadata.fetch_recommendations_by_ref_cached(
                config,
                {:tmdb, String.to_integer(tmdb_id)},

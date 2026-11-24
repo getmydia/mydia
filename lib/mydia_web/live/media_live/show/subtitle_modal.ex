@@ -29,6 +29,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
   attr :media_file, :map, required: true
   attr :tracks, :list, required: true
 
+  attr :can_edit, :boolean,
+    default: false,
+    doc: "False renders the track list read-only. The server checks again."
+
   def subtitle_manage_modal(assigns) do
     ~H"""
     <div class="modal modal-bottom sm:modal-middle modal-open" id="subtitle-manage-modal">
@@ -66,12 +70,17 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleModal do
                 :for={track <- @tracks}
                 track={track}
                 media_file_id={@media_file.id}
+                can_edit={@can_edit}
               />
             </div>
           <% end %>
         </div>
 
-        <div class="bg-base-200/50 border-t border-base-300 px-4 py-3 sm:px-6 flex flex-col gap-2 sm:flex-row">
+        <div
+          :if={@can_edit}
+          id="subtitle-manage-actions"
+          class="bg-base-200/50 border-t border-base-300 px-4 py-3 sm:px-6 flex flex-col gap-2 sm:flex-row"
+        >
           <button
             id="subtitle-manage-search"
             type="button"

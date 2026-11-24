@@ -80,6 +80,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     SeasonData,
     ImagesResponse,
     Collection,
+    RecommendationPools,
     Video,
     WatchProvider
   }
@@ -1320,17 +1321,12 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   @doc """
-  Fetches TMDB's recommendations for a movie or TV show.
+  Fetches TMDB's recommendations and similar titles for a movie or TV show.
 
-  TMDB exposes recommendations as a sub-object of the details endpoint rather than
-  as a standalone route the relay proxies, so this rides `append_to_response` on
-  the endpoint the relay already serves. That is what lets the feature ship
-  without a relay release.
-
-  The sub-object uses the same `%{"results" => [...]}` envelope as search and
-  trending, so `parse_search_results/2` consumes it unchanged. A response with no
-  `recommendations` key falls through that function's catch-all to `[]`, which is
-  why a missing sub-object is a normal empty result rather than an error.
+  Both ride `append_to_response` on the details endpoint the relay already
+  serves, so no relay release is needed; `similar` tops up a rail a restricted
+  scope thinned (#1507). Each uses search's `results` envelope, so
+  `parse_search_results/2` reads it and a missing sub-object is an empty pool.
 
   ## Options
     * `:media_type` - `:movie` or `:tv_show` (default: `:movie`)
@@ -1340,22 +1336,26 @@ defmodule Mydia.Metadata.Provider.Relay do
 
       iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Relay.fetch_recommendations(config, "965150", media_type: :movie)
-      {:ok, [%Mydia.Metadata.Structs.SearchResult{title: "Midnight Ferry"}]}
+      {:ok, %Mydia.Metadata.Structs.RecommendationPools{recommendations: [%Mydia.Metadata.Structs.SearchResult{title: "Midnight Ferry"}]}}
   """
   @spec fetch_recommendations(map(), String.t(), keyword()) ::
-          {:ok, [SearchResult.t()]} | {:error, Error.t()}
+          {:ok, RecommendationPools.t()} | {:error, Error.t()}
   def fetch_recommendations(config, provider_id, opts \\ []) do
     media_type = Keyword.get(opts, :media_type, :movie)
     language = resolve_language(config, opts)
 
     endpoint = build_details_endpoint(media_type, provider_id)
-    params = [language: language, append_to_response: "recommendations"]
+    params = [language: language, append_to_response: "recommendations,similar"]
 
     req = HTTP.new_request(config)
 
     case HTTP.get(req, endpoint, params: params) do
       {:ok, %{status: 200, body: body}} ->
-        {:ok, parse_search_results(body["recommendations"], media_type)}
+        {:ok,
+         %RecommendationPools{
+           recommendations: parse_search_results(body["recommendations"], media_type),
+           similar: parse_search_results(body["similar"], media_type)
+         }}
 
       {:ok, %{status: 404}} ->
         {:error, Error.not_found("Media not found: #{provider_id}")}

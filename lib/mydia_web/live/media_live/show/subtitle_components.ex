@@ -106,6 +106,10 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
   attr :track, :map, required: true
   attr :media_file_id, :string, required: true
 
+  attr :can_edit, :boolean,
+    default: false,
+    doc: "Renders the offset, re-sync and delete controls. The server checks again."
+
   def subtitle_track_row(assigns) do
     ~H"""
     <div class="flex flex-col gap-2 py-2 border-b border-base-300 last:border-0 sm:flex-row sm:items-center sm:justify-between">
@@ -118,7 +122,15 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleComponents do
         </span>
       </div>
 
-      <div class="flex flex-wrap items-center gap-1 sm:shrink-0">
+      <span
+        :if={!@can_edit and @track.offset_ms != 0}
+        id={"subtitle-offset-#{@media_file_id}-#{@track.track_id}"}
+        class="text-xs opacity-70 sm:shrink-0"
+      >
+        {gettext("Offset %{offset} ms", offset: @track.offset_ms)}
+      </span>
+
+      <div :if={@can_edit} class="flex flex-wrap items-center gap-1 sm:shrink-0">
         <form
           id={"subtitle-offset-form-#{@media_file_id}-#{@track.track_id}"}
           phx-change="set_subtitle_offset"

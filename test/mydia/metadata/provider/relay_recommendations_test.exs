@@ -1,7 +1,8 @@
 defmodule Mydia.Metadata.Provider.RelayRecommendationsTest do
   @moduledoc """
-  Offline coverage for TMDB recommendations, which ride along on the details
-  endpoint via `append_to_response` rather than a dedicated relay route.
+  Offline coverage for TMDB recommendations and similar titles, which ride along
+  on the details endpoint via `append_to_response` rather than a dedicated relay
+  route.
 
   Deliberately NOT tagged `:external` — `test/test_helper.exs` excludes that tag,
   and this parsing has to run in CI. The relay is stubbed with Bypass.
@@ -90,11 +91,11 @@ defmodule Mydia.Metadata.Provider.RelayRecommendationsTest do
         })
       end)
 
-      assert {:ok, [first, second]} =
+      assert {:ok, %{recommendations: [first, second], similar: []}} =
                Relay.fetch_recommendations(config, tmdb_id, media_type: :movie)
 
       assert_receive {:query_params, params}
-      assert params["append_to_response"] == "recommendations"
+      assert params["append_to_response"] == "recommendations,similar"
       assert params["language"] == "en-US"
 
       assert first.provider_id == "101"
@@ -121,7 +122,8 @@ defmodule Mydia.Metadata.Provider.RelayRecommendationsTest do
         })
       end)
 
-      assert {:ok, []} = Relay.fetch_recommendations(config, tmdb_id, media_type: :movie)
+      assert {:ok, %{recommendations: [], similar: []}} =
+               Relay.fetch_recommendations(config, tmdb_id, media_type: :movie)
     end
 
     test "returns an empty list when the response has no recommendations key", %{
@@ -133,7 +135,34 @@ defmodule Mydia.Metadata.Provider.RelayRecommendationsTest do
         json(conn, 200, %{"id" => String.to_integer(tmdb_id), "title" => "No Append"})
       end)
 
-      assert {:ok, []} = Relay.fetch_recommendations(config, tmdb_id, media_type: :movie)
+      assert {:ok, %{recommendations: [], similar: []}} =
+               Relay.fetch_recommendations(config, tmdb_id, media_type: :movie)
+    end
+
+    test "parses the similar sub-object into its own pool", %{
+      bypass: bypass,
+      config: config,
+      tmdb_id: tmdb_id
+    } do
+      Bypass.expect_once(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+        json(conn, 200, %{
+          "id" => String.to_integer(tmdb_id),
+          "title" => "Lantern Hollow",
+          "recommendations" => %{"page" => 1, "results" => [movie_rec(301, "Copper Tide")]},
+          "similar" => %{
+            "page" => 1,
+            "results" => [movie_rec(302, "Velvet Orchard"), movie_rec(303, "Saltmarsh")]
+          }
+        })
+      end)
+
+      assert {:ok, %{recommendations: [rec], similar: [first, second]}} =
+               Relay.fetch_recommendations(config, tmdb_id, media_type: :movie)
+
+      assert rec.provider_id == "301"
+      assert first.provider_id == "302"
+      assert first.media_type == :movie
+      assert second.title == "Saltmarsh"
     end
 
     test "returns a not_found error on 404", %{
@@ -162,7 +191,7 @@ defmodule Mydia.Metadata.Provider.RelayRecommendationsTest do
         json(conn, 200, %{"id" => String.to_integer(tmdb_id), "title" => "Aftersun"})
       end)
 
-      assert {:ok, []} =
+      assert {:ok, %{recommendations: [], similar: []}} =
                Relay.fetch_recommendations(config, tmdb_id,
                  media_type: :movie,
                  language: "fr-FR"
@@ -192,7 +221,7 @@ defmodule Mydia.Metadata.Provider.RelayRecommendationsTest do
         })
       end)
 
-      assert {:ok, [first]} =
+      assert {:ok, %{recommendations: [first], similar: []}} =
                Relay.fetch_recommendations(config, tmdb_id, media_type: :tv_show)
 
       assert first.provider_id == "201"
