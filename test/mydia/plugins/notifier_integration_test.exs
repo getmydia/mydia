@@ -57,7 +57,15 @@ defmodule Mydia.Plugins.NotifierIntegrationTest do
     assert :ok = Plugins.register_plugins()
     assert {:ok, descriptor} = Registry.lookup(@slug)
     assert descriptor.delivery == :durable
-    assert descriptor.events == ["media_item.added", "download.completed"]
+
+    assert descriptor.events == [
+             "media_item.added",
+             "download.completed",
+             "media_request.created",
+             "media_request.approved",
+             "media_request.rejected"
+           ]
+
     assert Host.running?(@slug)
   end
 
@@ -108,7 +116,13 @@ defmodule Mydia.Plugins.NotifierIntegrationTest do
     assert config.integrity_hash == nil
     # The grant is replaced with the shipped manifest's exact effective set.
     assert config.granted_capabilities == %{
-             "events:subscribe" => ["media_item.added", "download.completed"],
+             "events:subscribe" => [
+               "media_item.added",
+               "download.completed",
+               "media_request.created",
+               "media_request.approved",
+               "media_request.rejected"
+             ],
              "net:http" => ["discord.com"],
              "data:read" => ["media_item"]
            }

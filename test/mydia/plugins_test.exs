@@ -1006,6 +1006,70 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "webhook notifier 1.2.0 upgrade" do
+    @all_events [
+      "media_item.added",
+      "download.completed",
+      "media_request.created",
+      "media_request.approved",
+      "media_request.rejected"
+    ]
+
+    test "a 1.1.0 install widens its grant, stays approved and keeps the legacy event default" do
+      old_caps = %{
+        "events:subscribe" => ["media_item.added", "download.completed"],
+        "net:http" => ["discord.com", "ntfy.example.test"],
+        "data:read" => ["media_item"]
+      }
+
+      settings = %{
+        "delivery" => "durable",
+        "target" => "ntfy",
+        "webhook_url" => "https://ntfy.example.test/topic"
+      }
+
+      {:ok, _config} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.1.0",
+          source_url: "bundled",
+          enabled: true,
+          granted_capabilities: old_caps,
+          settings: settings,
+          manifest: %{
+            "slug" => "webhook-notifier",
+            "name" => "Webhook Notifier",
+            "version" => "1.1.0",
+            "capabilities" => %{
+              "events:subscribe" => ["media_item.added", "download.completed"],
+              "net:http" => ["discord.com"],
+              "data:read" => ["media_item"]
+            }
+          }
+        })
+
+      assert :ok = Plugins.ensure_bundled()
+
+      refreshed = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert refreshed.version == "1.2.0"
+
+      assert Enum.sort(refreshed.granted_capabilities["events:subscribe"]) ==
+               Enum.sort(@all_events)
+
+      refute Plugins.needs_reapproval?("webhook-notifier")
+      # No "events" key: an existing install keeps the legacy default.
+      refute Map.has_key?(refreshed.settings, "events")
+    end
+
+    test "a fresh install seeds every subscribed event as selected" do
+      assert :ok = Plugins.ensure_bundled()
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert Enum.sort(config.settings["events"]) == Enum.sort(@all_events)
+    end
+  end
+
   describe "maybe_ensure_bundled/0 gate" do
     test "no-ops when boot-time side effects are disabled (the test default)" do
       # start_health_monitors: false in config/test.exs — the same gate that keeps
