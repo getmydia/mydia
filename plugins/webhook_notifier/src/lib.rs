@@ -336,6 +336,21 @@ fn with_requester(verb: &str, title: &str, requester: Option<&str>) -> String {
     }
 }
 
+// Discord rejects payloads over these sizes, and a retry cannot fix that.
+const DISCORD_CONTENT_MAX: usize = 2000;
+const DISCORD_DESCRIPTION_MAX: usize = 4096;
+
+// Cut `text` to at most `max` chars (Unicode scalar values), ending with an
+// ellipsis when anything was removed. Never splits a char.
+fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(max.saturating_sub(1)).collect();
+    out.push('\u{2026}');
+    out
+}
+
 // Discord webhook: a JSON embed POSTed to the configured webhook URL.
 fn discord_request(
     webhook_url: &str,
@@ -351,7 +366,10 @@ fn discord_request(
 
     let mut embed = vec![
         ("title", string(title)),
-        ("description", string(description)),
+        (
+            "description",
+            string(&truncate_chars(description, DISCORD_DESCRIPTION_MAX)),
+        ),
     ];
     if !poster.is_empty() {
         embed.push((
@@ -361,7 +379,15 @@ fn discord_request(
     }
 
     let discord = object(vec![
-        ("content", string(content)),
+        (
+            "content",
+            string(&truncate_chars(content, DISCORD_CONTENT_MAX)),
+        ),
+        // Requester names and notes are user text: never let them ping anyone.
+        (
+            "allowed_mentions",
+            object(vec![("parse", JsonValue::Array(vec![]))]),
+        ),
         ("embeds", JsonValue::Array(vec![object(embed)])),
     ]);
 
@@ -1048,6 +1074,51 @@ mod tests {
         assert!(body.contains("Quill Onyx requested"));
         // content is the one-line summary, not "verb: title" duplication.
         assert!(!body.contains("requested The Glass Orchard (2031): "));
+    }
+
+    fn discord_body(req: &JsonValue) -> JsonValue {
+        let body = get(req, "body").and_then(as_str).unwrap();
+        body.parse::<JsonValue>().unwrap()
+    }
+
+    #[test]
+    fn discord_payload_disables_mentions() {
+        let e = request_event("media_request.created", vec![]);
+        let req = build_request(&e, None, "discord", "https://discord.com/api/webhooks/1/x");
+        let payload = discord_body(&req);
+        let parse = get(get(&payload, "allowed_mentions").unwrap(), "parse").unwrap();
+        assert_eq!(parse, &JsonValue::Array(vec![]));
+    }
+
+    #[test]
+    fn truncate_chars_leaves_short_text_and_bounds_long() {
+        assert_eq!(truncate_chars("short", 10), "short");
+        let long = "x".repeat(5000);
+        let cut = truncate_chars(&long, 4096);
+        assert_eq!(cut.chars().count(), 4096);
+        assert!(cut.ends_with('\u{2026}'));
+        let multi = "\u{1F3AC}".repeat(5000);
+        let cut = truncate_chars(&multi, 2000);
+        assert_eq!(cut.chars().count(), 2000);
+    }
+
+    #[test]
+    fn discord_description_is_bounded_and_keeps_summary() {
+        let notes = "n".repeat(5000);
+        let e = request_event(
+            "media_request.created",
+            vec![("requester_notes", string(&notes))],
+        );
+        let req = build_request(&e, None, "discord", "https://discord.com/api/webhooks/1/x");
+        let payload = discord_body(&req);
+        let JsonValue::Array(embeds) = get(&payload, "embeds").unwrap() else {
+            panic!("embeds")
+        };
+        let desc = get(&embeds[0], "description").and_then(as_str).unwrap();
+        assert!(desc.chars().count() <= 4096);
+        assert!(desc.starts_with("Quill Onyx requested"));
+        let content = get(&payload, "content").and_then(as_str).unwrap();
+        assert!(content.chars().count() <= 2000);
     }
 
     #[test]

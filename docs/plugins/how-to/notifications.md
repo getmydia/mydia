@@ -129,11 +129,12 @@ The notifier keeps its handler logic in plain functions, unit-tested with
 `src/lib.rs` for the complete, tested version, including templated bodies and
 query params.
 
-## Choose which events an instance sends
+## Choose which events the notifier sends
 
-The bundled Webhook Notifier lets you pick events per instance, so one instance
-can post to a private ntfy topic while another posts a quieter feed to a shared
-Discord channel. Open the notifier's settings in the admin plugins page and use
+The bundled Webhook Notifier is a single notifier with one settings form and one
+event selection. Use it to decide which events reach your chosen destination,
+for example to keep request notifications going to a private ntfy topic while
+leaving the busier media events off. Open the notifier's settings in the admin plugins page and use
 the **Notify on** chips. Each chip is one event: media added, download
 completed, and the three request events (requested, request approved, request
 rejected).
@@ -141,7 +142,7 @@ rejected).
 Installs that had the notifier before the request events existed keep sending
 only media added and download completed until you tick more chips. A fresh
 install starts with every event selected. Unticking every chip saves an empty
-selection, and the instance then sends nothing.
+selection, and the notifier then sends nothing.
 
 To offer the same choice in your own plugin, declare an
 [`events` setting](../reference/manifest.md#choosing-events-per-instance). The
