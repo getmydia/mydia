@@ -1,5 +1,9 @@
 name: Dependabot auto-merge
 
+# Also merges Weblate's translation pull requests (author `app/hosted-weblate`,
+# branch `weblate-mydia-default` in this repository, never a fork) through the
+# same gate. The name stays because the gate's fixtures and docs cite it.
+#
 # workflow_run rather than check_suite, and neither of them pull_request_target.
 #
 # GitHub's native auto-merge (`gh pr merge --auto`, which this file used to
@@ -56,7 +60,7 @@ on:
     # The run's head branch. Without this every listed workflow on every
     # branch woke the gate only for it to find no Dependabot pull request,
     # which was nearly half of all Actions runs in the repository.
-    branches: ['dependabot/**']
+    branches: ['dependabot/**', 'weblate-mydia-default']
 
 permissions:
   contents: write
@@ -92,11 +96,12 @@ jobs:
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
           permission-actions: write
 
-      # Matching open dependabot pull requests on the triggering run's head SHA
-      # is unconditional and needs no payload archaeology.
+      # Matching open dependabot or Weblate pull requests on the triggering
+      # run's head SHA is unconditional and needs no payload archaeology.
       #
-      # Note the author spelling: `gh pr list --author` wants `app/dependabot`,
-      # while the webhook payload spells the same account `dependabot[bot]`.
+      # Note the author spelling: `gh pr list --author` wants `app/dependabot`
+      # and `app/hosted-weblate`, while the webhook payload spells the same
+      # accounts `dependabot[bot]` and `hosted-weblate[bot]`.
       - name: Decide
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -105,16 +110,60 @@ jobs:
         run: |
           set -euo pipefail
 
-          prs="$(gh pr list --author 'app/dependabot' --state open \
-                   --json number,headRefOid \
-                   --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")"
+          # Classified by author here, once, so a later failed lookup can
+          # never turn a Weblate pull request into an unchecked one.
+          prs=""
+          weblate_prs=""
+          for author in app/dependabot app/hosted-weblate; do
+            # One author's failed lookup must not drop the other's PRs.
+            list_status=0
+            found="$(gh pr list --author "$author" --state open \
+                       --json number,headRefOid \
+                       --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")" || list_status=$?
+            if [ "$list_status" -ne 0 ]; then
+              echo "Could not list $author pull requests (exit $list_status); skipping them." >&2
+              continue
+            fi
+            if [ -n "$found" ]; then
+              prs="${prs:+$prs$'\n'}$found"
+              if [ "$author" = app/hosted-weblate ]; then
+                weblate_prs="${weblate_prs:+$weblate_prs$'\n'}$found"
+              fi
+            fi
+          done
 
           if [ -z "$prs" ]; then
-            echo "No open dependabot pull request at $HEAD_SHA. Nothing to do."
+            echo "No open dependabot or Weblate pull request at $HEAD_SHA. Nothing to do."
             exit 0
           fi
 
           marker='<!-- dependabot-gate -->'
+
+          is_weblate() {
+            printf '%s\n' "$weblate_prs" | grep -qx "$1"
+          }
+
+          # Weblate content comes from a public translation platform and
+          # merges with no human review: accepted on purpose, because it is
+          # display text whose keys and placeholders CI checks. What it may
+          # never do unreviewed is touch anything but the catalogs.
+          #
+          # Fails closed. Head, file count and paths come from one query, so
+          # they describe one commit, and that commit must be HEAD_SHA, the
+          # one the merge below is pinned to. `files` is capped at 100, so
+          # the list must be as long as `changedFiles` or it is incomplete.
+          weblate_paths_only() {
+            local snapshot status=0
+            snapshot="$(gh pr view "$1" --json headRefOid,changedFiles,files)" || status=$?
+            [ "$status" -eq 0 ] || return 1
+            printf '%s' "$snapshot" | HEAD_SHA="$HEAD_SHA" jq -e '
+              .headRefOid == env.HEAD_SHA
+              and .changedFiles > 0
+              and (.files | length) == .changedFiles
+              and all(.files[].path;
+                      test("^(player/lib/l10n/app_[A-Za-z_]+\\.arb|priv/gettext/[A-Za-z_]+/LC_MESSAGES/[a-z_]+\\.po)$"))
+            ' > /dev/null
+          }
 
           # mergeStateStatus is computed lazily and returns UNKNOWN until GitHub
           # catches up. Poll rather than treating UNKNOWN as an answer either way.
@@ -231,6 +280,11 @@ jobs:
                 else
                   retry_sentence="Re-run them if you believe they are flaky, or fix the incompatibility."
                 fi
+                # A Weblate branch must not be fixed by a commit on it (see
+                # player/docs/l10n.md): the fix belongs on Weblate.
+                if is_weblate "$pr"; then
+                  retry_sentence="$retry_sentence This is a Weblate pull request: never fix it with a commit on this branch. A translation of a key the template no longer has is removed by the \"Cleanup translation files\" add-on on Weblate; see player/docs/l10n.md."
+                fi
                 comment_status=0
                 upsert_comment "$pr" "$marker
           This pull request is not being merged automatically. Every check has finished and these did not pass:
@@ -245,14 +299,21 @@ jobs:
                 fi
                 ;;
               MERGE)
+                if is_weblate "$pr" && ! weblate_paths_only "$pr"; then
+                  echo "  Weblate PR #$pr changes files outside the translation catalogs. Not merging." >&2
+                  continue
+                fi
                 state="$(merge_state "$pr")"
                 case "$state" in
                   CLEAN|HAS_HOOKS)
                     # --merge is the only strategy this repository allows: both
                     # allow_squash_merge and allow_rebase_merge are false, and
                     # the other forms fail outright.
+                    # Pinned to the SHA that woke the gate: Weblate rebases
+                    # and force-pushes, and a push landing during the
+                    # mergeStateStatus poll must be refused, not merged.
                     merge_status=0
-                    gh pr merge --merge "$pr" || merge_status=$?
+                    gh pr merge --merge --match-head-commit "$HEAD_SHA" "$pr" || merge_status=$?
                     if [ "$merge_status" -ne 0 ]; then
                       echo "  gh pr merge failed (exit $merge_status). Leaving PR #$pr open." >&2
                     else
