@@ -73,6 +73,7 @@ Keys must be unique across the array.
 | `url` | URL input | endpoints; pair with `grants_host` |
 | `secret` | masked input | tokens and passwords |
 | `enum` | select | a fixed set of choices via `options` |
+| `events` | chips, one per event | letting the operator pick which subscribed events an instance receives. See [Choosing events per instance](#choosing-events-per-instance). |
 
 Any other `type` is rejected.
 
@@ -89,6 +90,33 @@ Any other `type` is rejected.
 | `grants_host` | boolean | `url` only | See [Host-granting fields](#host-granting-fields). Rejected on any other type. |
 | `allow_private` | boolean | `url` with `grants_host` | See [Private network hosts](#private-network-hosts). Rejected elsewhere. |
 | `visible_when` | object | all | See [Conditional visibility](#conditional-visibility). |
+
+### Choosing events per instance
+
+An `events` field lets the operator choose which of the plugin's subscribed
+events an instance receives. The host filters before anything is delivered, so an
+event nobody selected creates no work for the plugin.
+
+```json
+{ "key": "events", "type": "events", "label": "Notify on",
+  "default": ["media_item.added", "download.completed"] }
+```
+
+- The choices are the plugin's own `events:subscribe` list. The field takes no
+  `options`.
+- `default` is optional. When present it must be a list of events from
+  `events:subscribe`.
+- A manifest may declare at most one `events` field.
+- Only single-instance plugins may use it. Multi-instance plugins have no
+  plugin-level settings form, so the manifest is rejected.
+
+An instance receives the events its saved selection lists. An empty saved
+selection means it receives none. An instance that has never saved the field
+uses `default`, or every subscribed event when there is no `default`. A new
+install starts with every subscribed event selected, so `default` matters
+mainly to instances that already existed before the plugin added the field, and
+lets an upgrade keep their earlier behaviour. A plugin without an `events` field
+receives every event it subscribed to.
 
 ### Host-granting fields
 

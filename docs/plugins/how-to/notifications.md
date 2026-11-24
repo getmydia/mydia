@@ -128,3 +128,57 @@ The notifier keeps its handler logic in plain functions, unit-tested with
 [Test without a host](test-and-iterate.md#test-without-a-host). Read its
 `src/lib.rs` for the complete, tested version, including templated bodies and
 query params.
+
+## Choose which events the notifier sends
+
+The bundled Webhook Notifier is a single notifier with one settings form and one
+event selection. Use it to decide which events reach your chosen destination,
+for example to keep request notifications going to a private ntfy topic while
+leaving the busier media events off. Open the notifier's settings in the admin plugins page and use
+the **Notify on** chips. Each chip is one event: media added, download
+completed, and the three request events (requested, request approved, request
+rejected).
+
+Installs that had the notifier before the request events existed keep sending
+only media added and download completed until you tick more chips. A fresh
+install starts with every event selected. Unticking every chip saves an empty
+selection, and the notifier then sends nothing.
+
+To offer the same choice in your own plugin, declare an
+[`events` setting](../reference/manifest.md#choosing-events-per-instance). The
+host does the filtering, so your handler never sees events the operator turned
+off.
+
+## Get an ntfy message when someone requests media
+
+**Goal:** a push notification on your phone each time a user requests a title.
+
+1. Open the Webhook Notifier settings and set **Target service** to `ntfy`.
+2. Set **Webhook / server URL** to your topic, for example
+   `https://ntfy.example.com/media-requests`. Add an access token if your server
+   needs one.
+3. Under **Notify on**, tick **Requested**. Tick **Request approved** and
+   **Request rejected** too if you want to hear about decisions.
+4. Save.
+
+When a user requests a title, ntfy shows the media title and year as the
+notification title, with a message that names who asked:
+
+```text
+Title:   Moonlit Harbor (2024)
+Message: Dana requested Moonlit Harbor (2024)
+
+         Would love this one for movie night.
+```
+
+The last paragraph is the note the requester left, and it appears only when they
+left one. Approvals read `Approved Moonlit Harbor (2024) for Dana`, or
+`Auto-approved ...` when automatic approval handled it. Rejections read
+`Rejected Moonlit Harbor (2024) for Dana` followed by the rejection reason when
+the admin gave one. Discord instances show the same text.
+
+With the **Custom** target, the request fields are available to your templates
+as `{{requester}}`, `{{requester_notes}}`, `{{approved_by}}`,
+`{{rejection_reason}}` and `{{media_type}}`, alongside `{{title}}` and
+`{{event}}`. The full field list is in the
+[events reference](../reference/events.md#media_requestcreated).

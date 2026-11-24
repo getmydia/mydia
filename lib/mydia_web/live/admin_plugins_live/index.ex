@@ -17,7 +17,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   alias Mydia.Events
   alias Mydia.Plugins
+  alias Mydia.Events.Presentation
   alias Mydia.Plugins.DeclaredSettings
+  alias Mydia.Plugins.EventSelection
+  alias Mydia.Plugins.Manifest
+  alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.BrowseResult
@@ -212,7 +216,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
         {:noreply, socket}
 
       config ->
-        schema = settings_schema_of(config)
+        schema = settings_schema_with_options(config)
         # Env-declared keys are read-only here: DeclaredSettings owns them.
         settings = schema |> build_settings(params) |> Map.drop(DeclaredSettings.keys(config))
 
@@ -527,14 +531,17 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   # Builds the settings modal state. Secret values are not echoed back into the
   # form (write-only) — a blank secret on save preserves the stored one.
   defp settings_state(config) do
-    schema = settings_schema_of(config)
+    schema = settings_schema_with_options(config)
     current = config.settings || %{}
+    selected = selected_events(config, current)
 
     form_data =
       Enum.reduce(schema, %{}, fn field, acc ->
-        if field["type"] == "secret",
-          do: acc,
-          else: Map.put(acc, field["key"], Map.get(current, field["key"]))
+        cond do
+          field["type"] == "secret" -> acc
+          field["type"] == "events" -> Map.put(acc, field["key"], selected)
+          true -> Map.put(acc, field["key"], Map.get(current, field["key"]))
+        end
       end)
 
     %{
@@ -548,6 +555,39 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       ceilings_form: ceilings_form(config)
     }
   end
+
+  # The schema with each `events` field carrying its choosable events as
+  # `{label, value}` pairs, so the field renders without plugin context.
+  defp settings_schema_with_options(config) do
+    plugin = descriptor_of(config)
+
+    Enum.map(settings_schema_of(config), fn
+      %{"type" => "events"} = field when not is_nil(plugin) ->
+        Map.put(field, "options", Enum.map(plugin.events, &{Presentation.title_for_type(&1), &1}))
+
+      %{"type" => "events"} = field ->
+        Map.put(field, "options", [])
+
+      field ->
+        field
+    end)
+  end
+
+  defp selected_events(config, current) do
+    case descriptor_of(config) do
+      nil -> []
+      plugin -> EventSelection.selected(plugin, current)
+    end
+  end
+
+  defp descriptor_of(%{manifest: manifest}) when is_map(manifest) do
+    case Manifest.parse(manifest) do
+      {:ok, parsed} -> Plugin.from_manifest(parsed)
+      {:error, _} -> nil
+    end
+  end
+
+  defp descriptor_of(_), do: nil
 
   defp ceilings_form(config),
     do: to_form(Map.new(@ceiling_roles, &{&1, Grants.ceiling(config.slug, &1)}), as: :ceilings)
@@ -572,10 +612,18 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
       cond do
         is_nil(value) -> acc
+        field["type"] == "events" -> Map.put(acc, key, chosen_events(field, value))
         field["type"] == "secret" and value == "" -> acc
         true -> Map.put(acc, key, value)
       end
     end)
+  end
+
+  # Only events the plugin subscribed to survive; the hidden "" entry and forged
+  # names are dropped. Always a list, so an empty choice stores [] (not nil).
+  defp chosen_events(field, value) do
+    allowed = Enum.map(field["options"] || [], fn {_label, type} -> type end)
+    Enum.filter(allowed, &(&1 in List.wrap(value)))
   end
 
   defp load_updates(socket) do

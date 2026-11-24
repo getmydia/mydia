@@ -12,6 +12,7 @@ defmodule Mydia.EventsFixtures do
     "job" => "system",
     "media_file" => "media",
     "media_item" => "media",
+    "media_request" => "requests",
     "playback" => "playback",
     "plugin" => "plugin",
     "search" => "search"

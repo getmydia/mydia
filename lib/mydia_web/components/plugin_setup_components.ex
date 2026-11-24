@@ -16,6 +16,37 @@ defmodule MydiaWeb.PluginSetupComponents do
   attr :form, :any, required: true
   attr :disabled, :boolean, default: false
 
+  def settings_field(%{field: %{"type" => "events"}} = assigns) do
+    key = assigns.field["key"]
+
+    assigns =
+      assigns
+      |> assign(:key, key)
+      |> assign(:selected, List.wrap(Phoenix.HTML.Form.input_value(assigns.form, key)))
+
+    ~H"""
+    <div class="fieldset">
+      <span class="label">{@field["label"] || @key}</span>
+      <%!-- Keeps the key in the submitted params when every chip is unchecked. --%>
+      <input type="hidden" name={"#{@key}[]"} value="" disabled={@disabled} />
+      <div class="filter flex-wrap">
+        <input
+          :for={{label, value} <- @field["options"] || []}
+          type="checkbox"
+          class="btn btn-sm"
+          id={"setting-#{@key}-#{String.replace(value, ".", "-")}"}
+          name={"#{@key}[]"}
+          value={value}
+          aria-label={label}
+          checked={value in @selected}
+          disabled={@disabled}
+        />
+      </div>
+      <p :if={@field["hint"]} class="text-xs text-base-content/60">{@field["hint"]}</p>
+    </div>
+    """
+  end
+
   def settings_field(%{field: %{"type" => "enum"}} = assigns) do
     ~H"""
     <.input

@@ -615,6 +615,52 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "persist_install seeding and request test events" do
+    defp events_manifest do
+      manifest!(%{
+        "capabilities" => %{
+          "events:subscribe" => ["media_item.added", "media_request.created"],
+          "net:http" => ["discord.com"]
+        },
+        "settings_schema" => [
+          %{"key" => "events", "type" => "events", "label" => "Events"}
+        ]
+      })
+    end
+
+    test "a new install stores the full subscribed list under the events key", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      {:ok, _} = Plugins.install(entry(bypass, events_manifest(), wasm), gate_opts())
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").settings["events"] ==
+               ["media_item.added", "media_request.created"]
+    end
+
+    test "reinstalling leaves an existing selection alone", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      {:ok, _} = Plugins.install(entry(bypass, events_manifest(), wasm), gate_opts())
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      {:ok, _} = Settings.update_plugin_config(config, %{settings: %{"events" => ["a"]}})
+
+      {:ok, _} = Plugins.install(entry(bypass, events_manifest(), wasm), gate_opts())
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").settings["events"] == ["a"]
+    end
+
+    test "synthetic request events carry request-shaped data" do
+      payload =
+        "media_request.created" |> Mydia.Plugins.TestEvent.build() |> Plugins.build_payload()
+
+      assert payload["event"] == "media_request.created"
+      assert payload["resource_type"] == "media_request"
+      assert payload["category"] == "requests"
+      assert payload["metadata"]["requester"] == "Test User"
+    end
+  end
+
   describe "update_settings/2 and instances" do
     test "saved settings reach a single-instance plugin's injected config", %{bypass: bypass} do
       wasm = guest_wasm()
@@ -957,6 +1003,70 @@ defmodule Mydia.PluginsTest do
       assert refreshed.granted_capabilities == refreshed.manifest["capabilities"]
       refute Map.has_key?(refreshed.granted_capabilities, "obsolete")
       refute Plugins.needs_reapproval?(refreshed)
+    end
+  end
+
+  describe "webhook notifier 1.2.0 upgrade" do
+    @all_events [
+      "media_item.added",
+      "download.completed",
+      "media_request.created",
+      "media_request.approved",
+      "media_request.rejected"
+    ]
+
+    test "a 1.1.0 install widens its grant, stays approved and keeps the legacy event default" do
+      old_caps = %{
+        "events:subscribe" => ["media_item.added", "download.completed"],
+        "net:http" => ["discord.com", "ntfy.example.test"],
+        "data:read" => ["media_item"]
+      }
+
+      settings = %{
+        "delivery" => "durable",
+        "target" => "ntfy",
+        "webhook_url" => "https://ntfy.example.test/topic"
+      }
+
+      {:ok, _config} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.1.0",
+          source_url: "bundled",
+          enabled: true,
+          granted_capabilities: old_caps,
+          settings: settings,
+          manifest: %{
+            "slug" => "webhook-notifier",
+            "name" => "Webhook Notifier",
+            "version" => "1.1.0",
+            "capabilities" => %{
+              "events:subscribe" => ["media_item.added", "download.completed"],
+              "net:http" => ["discord.com"],
+              "data:read" => ["media_item"]
+            }
+          }
+        })
+
+      assert :ok = Plugins.ensure_bundled()
+
+      refreshed = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert refreshed.version == "1.2.0"
+
+      assert Enum.sort(refreshed.granted_capabilities["events:subscribe"]) ==
+               Enum.sort(@all_events)
+
+      refute Plugins.needs_reapproval?("webhook-notifier")
+      # No "events" key: an existing install keeps the legacy default.
+      refute Map.has_key?(refreshed.settings, "events")
+    end
+
+    test "a fresh install seeds every subscribed event as selected" do
+      assert :ok = Plugins.ensure_bundled()
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert Enum.sort(config.settings["events"]) == Enum.sort(@all_events)
     end
   end
 

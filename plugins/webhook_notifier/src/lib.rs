@@ -195,30 +195,7 @@ fn process(event: &JsonValue) -> JsonValue {
         .and_then(as_str)
         .unwrap_or("discord");
 
-    let title = get(event, "metadata")
-        .and_then(|m| get(m, "title"))
-        .and_then(as_str)
-        .unwrap_or("Mydia")
-        .to_string();
-    let verb = describe(get(event, "event").and_then(as_str).unwrap_or(""));
-
-    // Enrich with library data via the data:read host function when possible.
-    let enriched = read_media(event);
-    let overview = enriched
-        .as_ref()
-        .and_then(|v| get(v, "overview"))
-        .and_then(as_str)
-        .unwrap_or("")
-        .to_string();
-
-    let req = match target {
-        "ntfy" => ntfy_request(&webhook_url, config, &title, verb, &overview),
-        "custom" => {
-            let ctx = build_context(event, enriched.as_ref(), verb);
-            custom_request(&webhook_url, config, &ctx)
-        }
-        _ => discord_request(&webhook_url, &title, verb, &overview, enriched.as_ref()),
-    };
+    let req = build_request(event, config, target, &webhook_url);
 
     let resp = http_call(&req);
     object(vec![
@@ -233,12 +210,154 @@ fn process(event: &JsonValue) -> JsonValue {
     ])
 }
 
+// Builds the outbound request for `target`. Media requests carry their own
+// title and body (see `request_text`); every other event keeps the
+// title/verb/overview shape.
+fn build_request(
+    event: &JsonValue,
+    config: Option<&JsonValue>,
+    target: &str,
+    webhook_url: &str,
+) -> JsonValue {
+    let event_type = get(event, "event").and_then(as_str).unwrap_or("");
+    let verb = describe(event_type);
+    let metadata = get(event, "metadata");
+
+    let mut title = metadata
+        .and_then(|m| get(m, "title"))
+        .and_then(as_str)
+        .unwrap_or("Mydia")
+        .to_string();
+
+    // Enrich with library data via the data:read host function when possible.
+    // `read_media` returns None for anything but a `media_item`.
+    let enriched = read_media(event);
+    let mut overview = enriched
+        .as_ref()
+        .and_then(|v| get(v, "overview"))
+        .and_then(as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let mut verb_line = verb.to_string();
+    let mut content = format!("{verb}: {title}");
+    let mut description = None;
+    if let Some((request_title, body)) = request_text(event_type, metadata) {
+        // The body already says what happened, so it replaces verb and overview.
+        content = body.lines().next().unwrap_or("").to_string();
+        description = Some(body.clone());
+        title = request_title;
+        verb_line = body;
+        overview = String::new();
+    }
+
+    match target {
+        "ntfy" => ntfy_request(webhook_url, config, &title, &verb_line, &overview),
+        "custom" => {
+            let ctx = build_context(event, enriched.as_ref(), verb);
+            custom_request(webhook_url, config, &ctx)
+        }
+        _ => {
+            let description = description.unwrap_or_else(|| {
+                if overview.is_empty() {
+                    verb_line.clone()
+                } else {
+                    format!("{verb_line}\n\n{overview}")
+                }
+            });
+            discord_request(
+                webhook_url,
+                &content,
+                &title,
+                &description,
+                enriched.as_ref(),
+            )
+        }
+    }
+}
+
+// Title and body for `media_request.*` events, `None` for every other event.
+// The title is the media title with its year; the body says who did what.
+fn request_text(event_type: &str, metadata: Option<&JsonValue>) -> Option<(String, String)> {
+    if !matches!(
+        event_type,
+        "media_request.created" | "media_request.approved" | "media_request.rejected"
+    ) {
+        return None;
+    }
+
+    let text = |key: &str| {
+        metadata
+            .and_then(|m| get(m, key))
+            .and_then(as_str)
+            .filter(|s| !s.is_empty())
+    };
+
+    let name = text("title").unwrap_or("Mydia");
+    let title = match metadata.and_then(|m| get(m, "year")).and_then(as_num) {
+        Some(year) => format!("{name} ({})", format_number(year)),
+        None => name.to_string(),
+    };
+    let requester = text("requester");
+
+    let (first, extra) = match event_type {
+        "media_request.created" => (
+            match requester {
+                Some(who) => format!("{who} requested {title}"),
+                None => format!("Requested {title}"),
+            },
+            text("requester_notes"),
+        ),
+        "media_request.approved" => {
+            let auto = metadata
+                .and_then(|m| get(m, "auto"))
+                .and_then(as_bool)
+                .unwrap_or(false);
+            let verb = if auto { "Auto-approved" } else { "Approved" };
+            (with_requester(verb, &title, requester), None)
+        }
+        _ => (
+            with_requester("Rejected", &title, requester),
+            text("rejection_reason"),
+        ),
+    };
+
+    let body = match extra {
+        Some(extra) => format!("{first}\n\n{extra}"),
+        None => first,
+    };
+    Some((title, body))
+}
+
+fn with_requester(verb: &str, title: &str, requester: Option<&str>) -> String {
+    match requester {
+        Some(who) => format!("{verb} {title} for {who}"),
+        None => format!("{verb} {title}"),
+    }
+}
+
+// Discord rejects payloads over these sizes, and a retry cannot fix that.
+const DISCORD_CONTENT_MAX: usize = 2000;
+const DISCORD_DESCRIPTION_MAX: usize = 4096;
+const DISCORD_TITLE_MAX: usize = 256;
+
+// Cut `text` to at most `max` chars (Unicode scalar values), ending with an
+// ellipsis when anything was removed. Never splits a char.
+fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(max.saturating_sub(1)).collect();
+    out.push('\u{2026}');
+    out
+}
+
 // Discord webhook: a JSON embed POSTed to the configured webhook URL.
 fn discord_request(
     webhook_url: &str,
+    content: &str,
     title: &str,
-    verb: &str,
-    overview: &str,
+    description: &str,
     enriched: Option<&JsonValue>,
 ) -> JsonValue {
     let poster = enriched
@@ -246,15 +365,12 @@ fn discord_request(
         .and_then(as_str)
         .unwrap_or("");
 
-    let description = if overview.is_empty() {
-        verb.to_string()
-    } else {
-        format!("{verb}\n\n{overview}")
-    };
-
     let mut embed = vec![
-        ("title", string(title)),
-        ("description", string(&description)),
+        ("title", string(&truncate_chars(title, DISCORD_TITLE_MAX))),
+        (
+            "description",
+            string(&truncate_chars(description, DISCORD_DESCRIPTION_MAX)),
+        ),
     ];
     if !poster.is_empty() {
         embed.push((
@@ -264,7 +380,15 @@ fn discord_request(
     }
 
     let discord = object(vec![
-        ("content", string(&format!("{verb}: {title}"))),
+        (
+            "content",
+            string(&truncate_chars(content, DISCORD_CONTENT_MAX)),
+        ),
+        // Requester names and notes are user text: never let them ping anyone.
+        (
+            "allowed_mentions",
+            object(vec![("parse", JsonValue::Array(vec![]))]),
+        ),
         ("embeds", JsonValue::Array(vec![object(embed)])),
     ]);
 
@@ -656,6 +780,9 @@ fn describe(event_type: &str) -> &'static str {
         "media_file.imported" => "File imported",
         "download.completed" => "Download completed",
         "download.failed" => "Download failed",
+        "media_request.created" => "Requested",
+        "media_request.approved" => "Request approved",
+        "media_request.rejected" => "Request rejected",
         _ => "Event",
     }
 }
@@ -817,5 +944,207 @@ mod tests {
             Some("https://image.tmdb.org/t/p/w500/p.jpg")
         );
         assert_eq!(c.get("event").map(String::as_str), Some("media_item.added"));
+    }
+
+    fn request_event(event: &str, extra: Vec<(&str, JsonValue)>) -> JsonValue {
+        let mut meta = vec![
+            ("title", string("The Glass Orchard")),
+            ("year", JsonValue::Number(2031.0)),
+            ("requester", string("Quill Onyx")),
+        ];
+        meta.extend(extra);
+        object(vec![("event", string(event)), ("metadata", object(meta))])
+    }
+
+    fn text_of(event: &JsonValue) -> Option<(String, String)> {
+        request_text(
+            get(event, "event").and_then(as_str).unwrap(),
+            get(event, "metadata"),
+        )
+    }
+
+    #[test]
+    fn request_text_created_with_year_and_notes() {
+        let e = request_event(
+            "media_request.created",
+            vec![("requester_notes", string("Director's cut please"))],
+        );
+        assert_eq!(
+            text_of(&e),
+            Some((
+                "The Glass Orchard (2031)".to_string(),
+                "Quill Onyx requested The Glass Orchard (2031)\n\nDirector's cut please"
+                    .to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn request_text_created_without_year_or_notes() {
+        let e = object(vec![
+            ("event", string("media_request.created")),
+            (
+                "metadata",
+                object(vec![
+                    ("title", string("The Glass Orchard")),
+                    ("requester", string("Quill Onyx")),
+                ]),
+            ),
+        ]);
+        assert_eq!(
+            text_of(&e),
+            Some((
+                "The Glass Orchard".to_string(),
+                "Quill Onyx requested The Glass Orchard".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn request_text_approved_variants() {
+        let body = |e: JsonValue| text_of(&e).unwrap().1;
+        assert_eq!(
+            body(request_event("media_request.approved", vec![])),
+            "Approved The Glass Orchard (2031) for Quill Onyx"
+        );
+        assert_eq!(
+            body(request_event(
+                "media_request.approved",
+                vec![("auto", JsonValue::Boolean(true))]
+            )),
+            "Auto-approved The Glass Orchard (2031) for Quill Onyx"
+        );
+        let no_requester = object(vec![
+            ("event", string("media_request.approved")),
+            (
+                "metadata",
+                object(vec![
+                    ("title", string("The Glass Orchard")),
+                    ("year", JsonValue::Number(2031.0)),
+                ]),
+            ),
+        ]);
+        assert_eq!(body(no_requester), "Approved The Glass Orchard (2031)");
+    }
+
+    #[test]
+    fn request_text_rejected_includes_reason() {
+        let e = request_event(
+            "media_request.rejected",
+            vec![("rejection_reason", string("Not available in our region"))],
+        );
+        assert_eq!(
+            text_of(&e).unwrap().1,
+            "Rejected The Glass Orchard (2031) for Quill Onyx\n\nNot available in our region"
+        );
+    }
+
+    #[test]
+    fn request_text_ignores_other_events() {
+        assert_eq!(request_text("media_item.added", None), None);
+    }
+
+    #[test]
+    fn describe_labels_request_events() {
+        assert_eq!(describe("media_request.created"), "Requested");
+        assert_eq!(describe("media_request.approved"), "Request approved");
+        assert_eq!(describe("media_request.rejected"), "Request rejected");
+    }
+
+    #[test]
+    fn ntfy_request_uses_request_title_and_body() {
+        let e = request_event("media_request.created", vec![]);
+        let req = build_request(&e, None, "ntfy", "https://ntfy.example.test/topic");
+        let headers = get(&req, "headers").unwrap();
+        assert_eq!(
+            get(headers, "title").and_then(as_str),
+            Some("The Glass Orchard (2031)")
+        );
+        assert!(get(&req, "body")
+            .and_then(as_str)
+            .unwrap()
+            .starts_with("Quill Onyx requested"));
+    }
+
+    #[test]
+    fn discord_request_uses_request_text() {
+        let e = request_event("media_request.created", vec![]);
+        let req = build_request(&e, None, "discord", "https://discord.com/api/webhooks/1/x");
+        let body = get(&req, "body").and_then(as_str).unwrap();
+        assert!(body.contains("The Glass Orchard (2031)"));
+        assert!(body.contains("Quill Onyx requested"));
+        // content is the one-line summary, not "verb: title" duplication.
+        assert!(!body.contains("requested The Glass Orchard (2031): "));
+    }
+
+    fn discord_body(req: &JsonValue) -> JsonValue {
+        let body = get(req, "body").and_then(as_str).unwrap();
+        body.parse::<JsonValue>().unwrap()
+    }
+
+    #[test]
+    fn discord_payload_disables_mentions() {
+        let e = request_event("media_request.created", vec![]);
+        let req = build_request(&e, None, "discord", "https://discord.com/api/webhooks/1/x");
+        let payload = discord_body(&req);
+        let parse = get(get(&payload, "allowed_mentions").unwrap(), "parse").unwrap();
+        assert_eq!(parse, &JsonValue::Array(vec![]));
+    }
+
+    #[test]
+    fn truncate_chars_leaves_short_text_and_bounds_long() {
+        assert_eq!(truncate_chars("short", 10), "short");
+        let long = "x".repeat(5000);
+        let cut = truncate_chars(&long, 4096);
+        assert_eq!(cut.chars().count(), 4096);
+        assert!(cut.ends_with('\u{2026}'));
+        let multi = "\u{1F3AC}".repeat(5000);
+        let cut = truncate_chars(&multi, 2000);
+        assert_eq!(cut.chars().count(), 2000);
+    }
+
+    #[test]
+    fn discord_title_is_bounded() {
+        let long = "T".repeat(300);
+        let e = request_event("media_request.created", vec![("title", string(&long))]);
+        let req = build_request(&e, None, "discord", "https://discord.com/api/webhooks/1/x");
+        let payload = discord_body(&req);
+        let JsonValue::Array(embeds) = get(&payload, "embeds").unwrap() else {
+            panic!("embeds")
+        };
+        let title = get(&embeds[0], "title").and_then(as_str).unwrap();
+        assert!(title.chars().count() <= 256);
+        assert!(title.ends_with('\u{2026}'));
+        assert_eq!(
+            truncate_chars("Short Title", DISCORD_TITLE_MAX),
+            "Short Title"
+        );
+    }
+
+    #[test]
+    fn discord_description_is_bounded_and_keeps_summary() {
+        let notes = "n".repeat(5000);
+        let e = request_event(
+            "media_request.created",
+            vec![("requester_notes", string(&notes))],
+        );
+        let req = build_request(&e, None, "discord", "https://discord.com/api/webhooks/1/x");
+        let payload = discord_body(&req);
+        let JsonValue::Array(embeds) = get(&payload, "embeds").unwrap() else {
+            panic!("embeds")
+        };
+        let desc = get(&embeds[0], "description").and_then(as_str).unwrap();
+        assert!(desc.chars().count() <= 4096);
+        assert!(desc.starts_with("Quill Onyx requested"));
+        let content = get(&payload, "content").and_then(as_str).unwrap();
+        assert!(content.chars().count() <= 2000);
+    }
+
+    #[test]
+    fn custom_request_renders_requester() {
+        let e = request_event("media_request.created", vec![]);
+        let config = object(vec![("body_template", string("{{requester}}"))]);
+        let req = build_request(&e, Some(&config), "custom", "https://h/x");
+        assert_eq!(get(&req, "body").and_then(as_str), Some("Quill Onyx"));
     }
 }

@@ -56,7 +56,7 @@ defmodule Mydia.Plugins.InstanceRuntimeTest do
       slug: @slug,
       name: @slug,
       entrypoint: "handle",
-      events: ["media_item.added"],
+      events: ["media_item.added", "config"],
       enabled: true,
       multi_instance: true,
       setup: true
@@ -100,6 +100,40 @@ defmodule Mydia.Plugins.InstanceRuntimeTest do
       |> Enum.sort()
 
     assert ids == Enum.sort([a.id, c.id])
+  end
+
+  describe "invoke_plugin/2 event selection" do
+    # The fixture only echoes the injected config for the "config" event; any
+    # other event type still runs but returns no config, so those cases count
+    # results instead.
+    setup %{plugin: plugin, a: a} do
+      plugin = %{
+        plugin
+        | events: ["config", "other"],
+          event_selection: %{key: "events", default: ["config"]}
+      }
+
+      {:ok, a} = Instances.update(a, %{settings: %{"url" => "http://a", "events" => ["other"]}})
+      %{plugin: plugin, a: a}
+    end
+
+    test "an event reaches only the instances that selected it", %{plugin: plugin, b: b} do
+      # b has no saved selection, so it falls back to the manifest default.
+      assert {:ok, [{:ok, %{"config" => config}}]} =
+               Plugins.invoke_plugin(plugin, %{type: "config", metadata: %{}})
+
+      assert config["instance_id"] == b.id
+
+      assert {:ok, [_only_a]} = Plugins.invoke_plugin(plugin, %{type: "other", metadata: %{}})
+    end
+
+    test "an instance with an empty selection receives nothing", %{plugin: plugin, a: a, b: b} do
+      {:ok, _} = Instances.update(a, %{settings: %{"events" => []}})
+      {:ok, _} = Instances.update(b, %{settings: %{"events" => []}})
+
+      assert {:ok, []} = Plugins.invoke_plugin(plugin, %{type: "config", metadata: %{}})
+      assert {:ok, []} = Plugins.invoke_plugin(plugin, %{type: "other", metadata: %{}})
+    end
   end
 
   test "invoke_plugin_schedule/3 runs on-schedule with that instance's config", %{a: a} do

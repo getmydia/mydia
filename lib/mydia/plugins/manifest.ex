@@ -95,6 +95,8 @@ defmodule Mydia.Plugins.Manifest do
   """
 
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Manifest.EventField
+  alias Mydia.Plugins.Manifest.SettingsSchema
 
   @type t :: %__MODULE__{
           slug: String.t(),
@@ -164,6 +166,9 @@ defmodule Mydia.Plugins.Manifest do
     playback.paused
     playback.finished
     playback.unwatched
+    media_request.created
+    media_request.approved
+    media_request.rejected
   )
 
   # All taxonomy classes (reserved + implemented). The schema/approval UI know
@@ -219,10 +224,6 @@ defmodule Mydia.Plugins.Manifest do
   # namespaces that list the acting user's own rows; `watch_history` is that
   # user's progress rows newest first by `last_watched_at`.
   @data_namespaces ~w(media_item playback_progress library_item media_request download collection watch_history)
-
-  # Field types a `settings_schema` entry may declare. `text` renders as a
-  # multiline textarea (used for template fields); otherwise like `string`.
-  @setting_types ~w(string url secret enum text)
 
   @doc """
   Returns the v1 event catalog: the plugin subscription contract for
@@ -286,11 +287,17 @@ defmodule Mydia.Plugins.Manifest do
          {:ok, capabilities} <- validate_capabilities(capabilities),
          :ok <- validate_page(page, capabilities),
          {:ok, shelves} <- validate_shelves(Map.get(map, "shelves"), capabilities),
-         {:ok, settings_schema} <- validate_settings_schema(settings_schema),
+         {:ok, settings_schema} <- SettingsSchema.validate(settings_schema),
+         {:ok, multi_instance} <- validate_flag(map, "multi_instance"),
+         :ok <-
+           EventField.validate(
+             settings_schema,
+             Map.get(capabilities, "events:subscribe", []),
+             multi_instance
+           ),
          {:ok, connection} <- validate_connection(connection, capabilities),
          :ok <- validate_schedule(schedule, capabilities),
          :ok <- validate_min_host_version(Map.get(map, "min_host_version")),
-         {:ok, multi_instance} <- validate_flag(map, "multi_instance"),
          {:ok, setup} <- validate_flag(map, "setup"),
          {:ok, category} <- validate_category(Map.get(map, "category")) do
       {:ok,
@@ -877,141 +884,6 @@ defmodule Mydia.Plugins.Manifest do
 
   defp validate_min_host_version(_),
     do: {:error, Error.new(:invalid_manifest, "min_host_version must be a string")}
-
-  defp validate_settings_schema(nil), do: {:ok, []}
-
-  defp validate_settings_schema(schema) when not is_list(schema),
-    do: {:error, Error.new(:invalid_manifest, "settings_schema must be a list")}
-
-  defp validate_settings_schema(schema) do
-    with :ok <- validate_each_setting(schema),
-         :ok <- validate_unique_setting_keys(schema),
-         :ok <- validate_visible_when_keys(schema) do
-      {:ok, schema}
-    end
-  end
-
-  defp validate_each_setting(schema) do
-    Enum.reduce_while(schema, :ok, fn field, :ok ->
-      case validate_setting_field(field) do
-        :ok -> {:cont, :ok}
-        error -> {:halt, error}
-      end
-    end)
-  end
-
-  defp validate_setting_field(field) when not is_map(field),
-    do: {:error, Error.new(:invalid_manifest, "settings_schema field must be an object")}
-
-  defp validate_setting_field(field) do
-    key = Map.get(field, "key")
-    type = Map.get(field, "type")
-
-    cond do
-      blank?(key) ->
-        {:error, Error.new(:invalid_manifest, "settings_schema field key is blank")}
-
-      type not in @setting_types ->
-        {:error,
-         Error.new(:invalid_manifest, "settings_schema field #{key} has unknown type: #{type}")}
-
-      Map.get(field, "grants_host") == true and type != "url" ->
-        {:error,
-         Error.new(:invalid_manifest, "grants_host is only allowed on url fields: #{key}")}
-
-      Map.get(field, "allow_private") == true and
-          not (type == "url" and Map.get(field, "grants_host") == true) ->
-        {:error,
-         Error.new(
-           :invalid_manifest,
-           "allow_private is only allowed on url fields with grants_host: #{key}"
-         )}
-
-      type == "enum" and not valid_options?(Map.get(field, "options")) ->
-        {:error,
-         Error.new(
-           :invalid_manifest,
-           "enum setting #{key} must declare a non-empty options list"
-         )}
-
-      not valid_visible_when?(Map.get(field, "visible_when")) ->
-        {:error,
-         Error.new(
-           :invalid_manifest,
-           "visible_when on #{key} must be an object mapping a setting key to a string or list of strings"
-         )}
-
-      not valid_hint?(Map.get(field, "hint")) ->
-        {:error, Error.new(:invalid_manifest, "hint on #{key} must be a non-empty string")}
-
-      true ->
-        :ok
-    end
-  end
-
-  # `hint` (optional) is help text the settings UI shows under the field.
-  defp valid_hint?(nil), do: true
-  defp valid_hint?(hint) when is_binary(hint), do: not blank?(hint)
-  defp valid_hint?(_), do: false
-
-  # `visible_when` (optional) gates a field's visibility in the settings UI on
-  # the value of another setting: a map of `controlling_key => value`, where
-  # value is a string or a non-empty list of strings. Absent means always shown.
-  defp valid_visible_when?(nil), do: true
-
-  defp valid_visible_when?(map) when is_map(map) and map_size(map) > 0 do
-    Enum.all?(map, fn
-      {k, v} when is_binary(k) -> valid_visible_when_value?(v)
-      _ -> false
-    end)
-  end
-
-  defp valid_visible_when?(_), do: false
-
-  defp valid_visible_when_value?(v) when is_binary(v), do: true
-
-  defp valid_visible_when_value?(v) when is_list(v) and v != [],
-    do: Enum.all?(v, &is_binary/1)
-
-  defp valid_visible_when_value?(_), do: false
-
-  defp valid_options?(options) when is_list(options) and options != [],
-    do: Enum.all?(options, &(is_binary(&1) and not blank?(&1)))
-
-  defp valid_options?(_), do: false
-
-  defp validate_unique_setting_keys(schema) do
-    keys = Enum.map(schema, &Map.get(&1, "key"))
-
-    if length(Enum.uniq(keys)) == length(keys) do
-      :ok
-    else
-      {:error, Error.new(:invalid_manifest, "settings_schema keys must be unique")}
-    end
-  end
-
-  # Every key referenced by a `visible_when` must name a sibling field, so the
-  # UI can resolve the controlling value. (Shape is checked per-field above.)
-  defp validate_visible_when_keys(schema) do
-    keys = MapSet.new(schema, &Map.get(&1, "key"))
-
-    schema
-    |> Enum.flat_map(fn field ->
-      case Map.get(field, "visible_when") do
-        m when is_map(m) -> Map.keys(m)
-        _ -> []
-      end
-    end)
-    |> Enum.find(&(&1 not in keys))
-    |> case do
-      nil ->
-        :ok
-
-      missing ->
-        {:error,
-         Error.new(:invalid_manifest, "visible_when references unknown setting key: #{missing}")}
-    end
-  end
 
   defp blank?(nil), do: true
   defp blank?(s) when is_binary(s), do: String.trim(s) == ""
