@@ -228,9 +228,10 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       |> Keyword.put(:initial_peers, peers)
 
     with :ok <- check_space(client_config, selection, search_result, opts_with_type),
-         created? = creates?(adapter, client_config, torrent_input_result),
+         before_add = presence(adapter, client_config, torrent_input_result),
          {:ok, client_id} <-
            add_torrent_to_client_with_input(adapter, client_config, torrent_input, add_opts) do
+      created? = created?(before_add, client_id)
       # Best effort; the removal guard applies whatever the client says.
       terms = TrackerRules.for_result(search_result)
       SeedingLimits.push(adapter, config_to_map(client_config), client_id, terms)
@@ -264,22 +265,36 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     end
   end
 
-  # Whether adding `input` will create a torrent rather than return one the
-  # client already holds. An NZB always creates a job. A torrent whose hash
-  # cannot be read, or a client that cannot be asked, counts as held: undoing
-  # the add then never risks deleting someone else's data.
-  defp creates?(_adapter, _client_config, {:file, _body, :nzb}), do: true
+  # What the client held before the add, so `created?/2` can tell an add that
+  # created a torrent from one that returned a torrent already there (an add
+  # of a known hash succeeds with the existing id). An NZB always creates a
+  # job. `{:absent, hash}` only on an explicit not-found for the info hash;
+  # anything else, including a hash that cannot be read or a client that
+  # cannot be asked, is `:unknown`, and an unknown add is never undone.
+  defp presence(_adapter, _client_config, {:file, _body, :nzb}), do: :new_job
 
-  defp creates?(adapter, client_config, input) do
-    case TorrentFetch.prepared_info_hash(input) do
-      nil -> false
-      hash -> absent?(Client.get_status(adapter, config_to_map(client_config), hash))
+  defp presence(adapter, client_config, input) do
+    with hash when is_binary(hash) <- TorrentFetch.prepared_info_hash(input),
+         true <- absent?(Client.get_status(adapter, config_to_map(client_config), hash)) do
+      {:absent, hash}
+    else
+      _unknown -> :unknown
     end
   rescue
-    _error -> false
+    _error -> :unknown
   catch
-    :exit, _reason -> false
+    :exit, _reason -> :unknown
   end
+
+  # The lookup is by info hash, so it says nothing about a client that keys
+  # torrents by its own id (a debrid provider's job id): the add created the
+  # torrent only when the client answered with that same hash.
+  defp created?(:new_job, _client_id), do: true
+
+  defp created?({:absent, hash}, client_id) when is_binary(client_id),
+    do: String.downcase(client_id) == hash
+
+  defp created?(_presence, _client_id), do: false
 
   # Only an explicit not-found proves absence; a status that failed any other
   # way (refused, timed out, server error) leaves it unknown.

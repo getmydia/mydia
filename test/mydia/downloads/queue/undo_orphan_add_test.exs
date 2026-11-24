@@ -18,7 +18,9 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
   alias Mydia.Indexers.SearchResult
 
   @client "orphan-client"
-  @client_id "orphan-hash"
+  # The release's info hash, which hash-keyed clients (rqbit, qBittorrent,
+  # Transmission) return as the client id.
+  @client_id String.duplicate("a", 40)
 
   defmodule RecordingAdapter do
     @behaviour Mydia.Downloads.Client
@@ -31,7 +33,7 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
     def add_torrent(_config, _torrent, _opts) do
       notify(:added)
       :persistent_term.get({__MODULE__, :on_add}, fn -> :ok end).()
-      {:ok, "orphan-hash"}
+      {:ok, :persistent_term.get({__MODULE__, :add_id}, String.duplicate("a", 40))}
     end
 
     @impl true
@@ -91,6 +93,7 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
       :persistent_term.erase({RecordingAdapter, :on_remove})
       :persistent_term.erase({RecordingAdapter, :held})
       :persistent_term.erase({RecordingAdapter, :status_down})
+      :persistent_term.erase({RecordingAdapter, :add_id})
 
       if previous,
         do: Registry.register(:transmission, previous),
@@ -141,7 +144,7 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
     # success. Nothing tracks it here, but this grab did not create it, so the
     # rollback must not take it or its data.
     test "keeps a torrent the client already held untracked before the add" do
-      :persistent_term.put({RecordingAdapter, :held}, [String.duplicate("a", 40)])
+      :persistent_term.put({RecordingAdapter, :held}, [@client_id])
       gone = media_item_fixture(%{type: "movie", title: "The Glass Meadow"})
       :persistent_term.put({RecordingAdapter, :on_add}, fn -> Repo.delete!(gone) end)
 
@@ -168,9 +171,25 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
       refute_received {:removed, _, _}
     end
 
+    # A debrid provider answers with its own job id, which the hash lookup
+    # cannot see. An add answered with an id other than the hash may have
+    # returned an existing job, so it is never undone.
+    test "keeps a torrent whose client id is not the info hash" do
+      :persistent_term.put({RecordingAdapter, :add_id}, "provider-job-7")
+      gone = media_item_fixture(%{type: "movie", title: "The Glass Meadow"})
+      :persistent_term.put({RecordingAdapter, :on_add}, fn -> Repo.delete!(gone) end)
+
+      capture_log(fn ->
+        assert {:error, _reason} = Queue.initiate_download(result(), media_item_id: gone.id)
+      end)
+
+      assert_received :added
+      refute_received {:removed, _, _}
+    end
+
     test "keeps a torrent another download row tracked before the add" do
       # A tracked torrent is one the client holds.
-      :persistent_term.put({RecordingAdapter, :held}, [String.duplicate("a", 40)])
+      :persistent_term.put({RecordingAdapter, :held}, [@client_id])
       owner = media_item_fixture(%{type: "movie", title: "The Paper Lighthouse"})
 
       {:ok, _row} =
@@ -263,7 +282,7 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
     %SearchResult{
       title: "The.Orphan.Release.1080p.WEB-DL",
       indexer: "Orphan Indexer",
-      download_url: "magnet:?xt=urn:btih:#{String.duplicate("a", 40)}",
+      download_url: "magnet:?xt=urn:btih:#{@client_id}",
       size: 1_000,
       seeders: 10,
       leechers: 1,
