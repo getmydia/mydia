@@ -689,9 +689,12 @@ renames left behind. A file is orphaned only when all of these hold:
 
 Directories with no video, and folders such as `Subs/`, are never touched.
 Checking the disk rather than `media_files` means a video the scanner has not
-seen yet still protects its sidecars. `run/2` re-checks every path (one listing per
-directory), so a video added after the preview protects its sidecars again. There is no directory
-pruning: under this rule an orphan's directory always still holds a video.
+seen yet still protects its sidecars. `run/2` re-checks every path (one listing
+per directory), so a video added after the preview protects its sidecars again.
+There is no directory pruning: under this rule an orphan's directory always
+still holds a video. The job refuses with `:busy` while a `LibraryRename` of the
+same library, or a `LibraryMove` into or out of it, is executing, since a
+rename carries sidecars mid-flight.
 
 **Where cleaned files go, and how to restore.** Each run moves files to
 `<trash root>/sidecar-cleanup-<library id>-<UTC timestamp>/<path relative to

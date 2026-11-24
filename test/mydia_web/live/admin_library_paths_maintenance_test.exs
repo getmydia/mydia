@@ -153,4 +153,17 @@ defmodule MydiaWeb.AdminLibraryPathsMaintenanceTest do
 
     assert render(view) =~ "Cleanup failed: library unavailable"
   end
+
+  test "a busy cleanup flashes that it was skipped", %{view: view, lp: lp} do
+    send(view.pid, {:sidecar_cleanup_started, %{library_path_id: lp.id}})
+
+    send(
+      view.pid,
+      {:sidecar_cleanup_completed, %{library_path_id: lp.id, moved: 0, kept: 0, error: :busy}}
+    )
+
+    html = render(view)
+    assert html =~ "Cleanup skipped: a rename or move is running on this library"
+    refute html =~ "Cleanup failed"
+  end
 end

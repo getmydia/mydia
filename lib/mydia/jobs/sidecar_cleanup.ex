@@ -6,6 +6,11 @@ defmodule Mydia.Jobs.SidecarCleanup do
   Broadcasts `:sidecar_cleanup_started` and `:sidecar_cleanup_completed` on
   the `"library_scanner"` topic. Completion is broadcast on failure too, with
   an `:error` reason, so a waiting UI never hangs.
+
+  A run refuses with `:busy` while a `Mydia.Jobs.LibraryRename` of the same
+  library, or a `Mydia.Jobs.LibraryMove` into or out of it, is executing: a
+  rename carries sidecars mid-flight, and cleaning beside it could take a
+  sidecar whose video is between names.
   """
 
   use Oban.Worker,
@@ -17,9 +22,13 @@ defmodule Mydia.Jobs.SidecarCleanup do
       states: [:available, :scheduled, :executing, :retryable, :suspended]
     ]
 
+  import Ecto.Query, warn: false
+
   require Logger
 
+  alias Mydia.Jobs.{LibraryMove, LibraryRename}
   alias Mydia.Library.SidecarCleanup
+  alias Mydia.Repo
   alias Mydia.Settings
 
   defmodule Args do
@@ -44,6 +53,7 @@ defmodule Mydia.Jobs.SidecarCleanup do
     broadcast(:sidecar_cleanup_started, %{library_path_id: library_path_id})
 
     with {:ok, library_path} <- fetch_library_path(library_path_id),
+         :ok <- check_idle(library_path_id),
          {:ok, counts} <- SidecarCleanup.run(library_path, paths) do
       Logger.info("Sidecar cleanup completed", Map.to_list(counts))
       broadcast(:sidecar_cleanup_completed, Map.put(counts, :library_path_id, library_path_id))
@@ -79,6 +89,30 @@ defmodule Mydia.Jobs.SidecarCleanup do
     {:ok, Settings.get_library_path!(id)}
   rescue
     Ecto.NoResultsError -> {:error, :library_unavailable}
+  end
+
+  @busy_workers [inspect(LibraryRename), inspect(LibraryMove)]
+
+  # JSON operators differ between SQLite and Postgres, so args are matched
+  # here rather than in the query.
+  defp check_idle(library_path_id) do
+    busy? =
+      from(j in Oban.Job,
+        where: j.worker in @busy_workers and j.state == "executing",
+        select: {j.worker, j.args}
+      )
+      |> Repo.all()
+      |> Enum.any?(&touches?(&1, library_path_id))
+
+    if busy?, do: {:error, :busy}, else: :ok
+  end
+
+  defp touches?({worker, args}, id) do
+    if worker == inspect(LibraryRename) do
+      args["library_path_id"] == id
+    else
+      id in [args["target_library_path_id"], args["from_library_path_id"]]
+    end
   end
 
   defp broadcast(event, payload), do: Phoenix.PubSub.broadcast(@pubsub, @topic, {event, payload})

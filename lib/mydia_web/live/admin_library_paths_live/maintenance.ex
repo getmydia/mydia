@@ -128,6 +128,14 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Maintenance do
     socket = update(socket, :cleaning_library_ids, &MapSet.delete(&1, id))
 
     cond do
+      Map.get(result, :error) == :busy ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Cleanup skipped: a rename or move is running on this library")
+         )}
+
       Map.has_key?(result, :error) ->
         {:noreply,
          put_flash(

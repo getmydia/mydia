@@ -47,6 +47,56 @@ defmodule Mydia.Jobs.SidecarCleanupTest do
     assert_receive {:sidecar_cleanup_completed, %{moved: 0, kept: 0, error: :library_unavailable}}
   end
 
+  describe "while a rename or move runs on the library" do
+    setup %{lp: lp, root: root} do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "library_scanner")
+      nfo = Path.join(root, "old.name.nfo")
+      File.write!(nfo, "x")
+      File.write!(Path.join(root, "Some Film.mkv"), "x")
+      %{nfo: nfo, args: %{"library_path_id" => lp.id, "paths" => [nfo]}}
+    end
+
+    defp executing(worker, args, state \\ "executing") do
+      args
+      |> Oban.Job.new(worker: worker)
+      |> Ecto.Changeset.change(state: state)
+      |> Repo.insert!()
+    end
+
+    test "an executing rename of the library refuses as busy", ctx do
+      executing(Mydia.Jobs.LibraryRename, %{"library_path_id" => ctx.lp.id})
+
+      assert {:error, :busy} = perform_job(SidecarCleanup, ctx.args)
+      assert_receive {:sidecar_cleanup_completed, %{moved: 0, kept: 0, error: :busy}}
+      assert File.exists?(ctx.nfo)
+    end
+
+    test "an executing move into or out of the library refuses as busy", ctx do
+      other = Ecto.UUID.generate()
+
+      for args <- [
+            %{"target_library_path_id" => ctx.lp.id, "from_library_path_id" => other},
+            %{"target_library_path_id" => other, "from_library_path_id" => ctx.lp.id}
+          ] do
+        job = executing(Mydia.Jobs.LibraryMove, Map.put(args, "media_item_id", other))
+
+        assert {:error, :busy} = perform_job(SidecarCleanup, ctx.args)
+        assert_receive {:sidecar_cleanup_completed, %{error: :busy}}
+        Repo.delete!(job)
+      end
+
+      assert File.exists?(ctx.nfo)
+    end
+
+    test "a queued rename, or one on another library, does not block", ctx do
+      executing(Mydia.Jobs.LibraryRename, %{"library_path_id" => ctx.lp.id}, "available")
+      executing(Mydia.Jobs.LibraryRename, %{"library_path_id" => Ecto.UUID.generate()})
+
+      assert :ok = perform_job(SidecarCleanup, ctx.args)
+      assert_receive {:sidecar_cleanup_completed, %{moved: 1}}
+    end
+  end
+
   test "enqueue builds a media-queue job with the paths", %{lp: lp} do
     changeset = SidecarCleanup.new(%{library_path_id: lp.id, paths: ["/a.nfo"]})
 

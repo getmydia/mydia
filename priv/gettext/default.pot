@@ -22759,7 +22759,7 @@ msgstr ""
 msgid "Cleaning up sidecars is not supported for S3 libraries."
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:136
+#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:144
 #, elixir-autogen, elixir-format
 msgid "Cleanup failed: %{reason}"
 msgstr ""
@@ -22801,12 +22801,12 @@ msgid_plural "Move %{count} files to trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:144
+#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:152
 #, elixir-autogen, elixir-format
 msgid "Moved %{moved} files to %{container}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:151
+#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:159
 #, elixir-autogen, elixir-format
 msgid "No orphaned sidecars were moved"
 msgstr ""
@@ -22838,7 +22838,7 @@ msgstr ""
 msgid "Renaming %{done}/%{total}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:197
+#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:205
 #, elixir-autogen, elixir-format
 msgid "S3 libraries are not supported"
 msgstr ""
@@ -22873,7 +22873,12 @@ msgstr ""
 msgid "To rename"
 msgstr ""
 
-#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:196
+#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:204
 #, elixir-autogen, elixir-format
 msgid "library unavailable"
+msgstr ""
+
+#: lib/mydia_web/live/admin_library_paths_live/maintenance.ex:136
+#, elixir-autogen, elixir-format
+msgid "Cleanup skipped: a rename or move is running on this library"
 msgstr ""
