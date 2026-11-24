@@ -6,6 +6,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
   alias Mydia.Settings.RuntimeConfig
 
   alias Mydia.Logger, as: MydiaLogger
+  alias MydiaWeb.AdminLibraryPathsLive.Maintenance
   alias MydiaWeb.OperationErrors
 
   @impl true
@@ -19,6 +20,10 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
      |> assign(:page_title, gettext("Configuration - Library Paths"))
      |> assign(:reorganizing_library_ids, MapSet.new())
      |> assign(:reclassifying_library_ids, MapSet.new())
+     |> assign(:renaming_library_ids, MapSet.new())
+     |> assign(:cleaning_library_ids, MapSet.new())
+     |> assign(:rename_progress, %{})
+     |> assign(:maintenance_modal, nil)
      |> load_data()}
   end
 
@@ -101,6 +106,16 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
      |> update(:reclassifying_library_ids, &MapSet.delete(&1, id))
      |> put_flash(:info, message)}
   end
+
+  def handle_info({event, _} = message, socket)
+      when event in [
+             :library_rename_started,
+             :library_rename_progress,
+             :library_rename_completed,
+             :sidecar_cleanup_started,
+             :sidecar_cleanup_completed
+           ],
+      do: Maintenance.handle_info(message, socket)
 
   # Ignore other library scan messages
   @impl true
@@ -311,6 +326,30 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Index do
         {:noreply, put_flash(socket, :error, gettext("Failed to start reclassification"))}
     end
   end
+
+  @impl true
+  def handle_event("preview_bulk_rename", params, socket),
+    do: Maintenance.preview_bulk_rename(params, socket)
+
+  @impl true
+  def handle_event("preview_sidecar_cleanup", params, socket),
+    do: Maintenance.preview_sidecar_cleanup(params, socket)
+
+  @impl true
+  def handle_event("confirm_bulk_rename", params, socket),
+    do: Maintenance.confirm_bulk_rename(params, socket)
+
+  @impl true
+  def handle_event("confirm_sidecar_cleanup", params, socket),
+    do: Maintenance.confirm_sidecar_cleanup(params, socket)
+
+  @impl true
+  def handle_event("close_maintenance_modal", params, socket),
+    do: Maintenance.close_modal(params, socket)
+
+  @impl true
+  def handle_async(:maintenance_preview, result, socket),
+    do: Maintenance.handle_preview_async(result, socket)
 
   ## Private Helpers
 

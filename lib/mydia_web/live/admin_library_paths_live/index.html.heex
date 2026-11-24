@@ -8,7 +8,12 @@
       library_paths={@library_paths}
       reorganizing_library_ids={@reorganizing_library_ids}
       reclassifying_library_ids={@reclassifying_library_ids}
+      renaming_library_ids={@renaming_library_ids}
+      rename_progress={@rename_progress}
+      cleaning_library_ids={@cleaning_library_ids}
     />
+
+    <MydiaWeb.AdminLibraryPathsLive.MaintenanceModals.maintenance_modal modal={@maintenance_modal} />
 
     <%!-- Library Path Modal --%>
     <%= if assigns[:show_library_path_modal] do %>
