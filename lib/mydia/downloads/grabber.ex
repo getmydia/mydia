@@ -122,15 +122,14 @@ defmodule Mydia.Downloads.Grabber do
   end
 
   defp attach_to_client(download, search_result, opts) do
-    case Queue.select_and_add_to_client(search_result, opts) do
-      {:ok, client_config, client_id, _detected_type, selection} ->
-        was_tracked? = Queue.ClientSelection.tracked?(client_config.name, client_id)
+    case Queue.ClientSelection.add_to_client(search_result, opts) do
+      {:ok, client_config, client_id, _detected_type, selection, created?} ->
         result = finalize_success(download, client_config.name, client_id, selection, opts)
 
         # The row never got the torrent's id, so nothing would remove it; see
         # `Queue.ClientSelection.undo_add/3`.
         if result != :ok,
-          do: Queue.ClientSelection.undo_add(client_config, client_id, was_tracked?)
+          do: Queue.ClientSelection.undo_add(client_config, client_id, created?)
 
         result
 

@@ -49,16 +49,20 @@ defmodule Mydia.Downloads.TorrentFetch do
     end
   end
 
-  defp prepared_info_hash({:magnet, magnet}), do: Blacklists.info_hash_from_url(magnet)
+  @doc false
+  # The info hash of a prepared input, lowercase, or nil when it has none
+  # (an NZB) or it cannot be read. Shared with ClientSelection, which asks the
+  # client whether it already holds the torrent before adding it.
+  def prepared_info_hash({:magnet, magnet}), do: Blacklists.info_hash_from_url(magnet)
 
-  defp prepared_info_hash({:file, body, :torrent}) do
+  def prepared_info_hash({:file, body, :torrent}) do
     case TorrentHash.extract({:file, body}, case: :lower) do
       {:ok, hash} -> hash
       {:error, _reason} -> nil
     end
   end
 
-  defp prepared_info_hash(_torrent_input), do: nil
+  def prepared_info_hash(_torrent_input), do: nil
 
   @doc false
   def prepare_torrent_input(url, indexer_name) do

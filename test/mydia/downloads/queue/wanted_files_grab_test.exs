@@ -49,6 +49,9 @@ defmodule Mydia.Downloads.Queue.WantedFilesGrabTest do
       bypass = Bypass.open()
       setup_runtime_config([rqbit_client(bypass.port)])
 
+      # The grab first asks whether rqbit already holds the hash; it does not.
+      Bypass.stub(bypass, "GET", "/torrents/:id", &Plug.Conn.resp(&1, 404, ""))
+
       show = media_item_fixture(%{type: "tv_show", title: "The Lantern Keepers"})
 
       eps =

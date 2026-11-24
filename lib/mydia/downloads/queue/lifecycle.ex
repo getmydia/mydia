@@ -72,9 +72,8 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
 
     with :ok <- Duplicates.check_for_duplicate_download(search_result, opts),
          :ok <- ensure_targets_exist(opts),
-         {:ok, client_config, client_id, detected_type, selection} <-
-           ClientSelection.select_and_add_to_client(search_result, opts),
-         was_tracked? = ClientSelection.tracked?(client_config.name, client_id),
+         {:ok, client_config, client_id, detected_type, selection, created?} <-
+           ClientSelection.add_to_client(search_result, opts),
          {:ok, download} <-
            search_result
            |> ClientSelection.create_download_record_with_retry(
@@ -82,7 +81,7 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
              client_id,
              Keyword.put(opts, :wanted_files, selection)
            )
-           |> undo_add_on_error(client_config, client_id, was_tracked?) do
+           |> undo_add_on_error(client_config, client_id, created?) do
       # Use detected type as fallback if protocol wasn't set
       final_type = download_type || detected_type
 
@@ -128,11 +127,11 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
 
   # The torrent is already in the client when its row fails to save; see
   # `ClientSelection.undo_add/3`.
-  defp undo_add_on_error({:ok, _download} = ok, _client_config, _client_id, _was_tracked?),
+  defp undo_add_on_error({:ok, _download} = ok, _client_config, _client_id, _created?),
     do: ok
 
-  defp undo_add_on_error({:error, _reason} = error, client_config, client_id, was_tracked?) do
-    ClientSelection.undo_add(client_config, client_id, was_tracked?)
+  defp undo_add_on_error({:error, _reason} = error, client_config, client_id, created?) do
+    ClientSelection.undo_add(client_config, client_id, created?)
     error
   end
 
