@@ -274,8 +274,13 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   defp presence(_adapter, _client_config, {:file, _body, :nzb}), do: :new_job
 
   defp presence(adapter, client_config, input) do
+    config = config_to_map(client_config)
+
+    # Clients disagree on the hash's case (rTorrent keys by upper-case and
+    # finds nothing under lower-case), so absence needs both forms not found.
     with hash when is_binary(hash) <- TorrentFetch.prepared_info_hash(input),
-         true <- absent?(Client.get_status(adapter, config_to_map(client_config), hash)) do
+         true <- absent?(Client.get_status(adapter, config, hash)),
+         true <- absent?(Client.get_status(adapter, config, String.upcase(hash))) do
       {:absent, hash}
     else
       _unknown -> :unknown

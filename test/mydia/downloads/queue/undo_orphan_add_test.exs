@@ -187,6 +187,35 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
       refute_received {:removed, _, _}
     end
 
+    # rTorrent keys torrents by the upper-case hash and only finds them that
+    # way. A torrent it holds must not look absent to a lower-case lookup.
+    test "keeps a torrent the client holds under the upper-case hash" do
+      upper = String.upcase(@client_id)
+      :persistent_term.put({RecordingAdapter, :held}, [upper])
+      :persistent_term.put({RecordingAdapter, :add_id}, upper)
+      gone = media_item_fixture(%{type: "movie", title: "The Glass Meadow"})
+      :persistent_term.put({RecordingAdapter, :on_add}, fn -> Repo.delete!(gone) end)
+
+      capture_log(fn ->
+        assert {:error, _reason} = Queue.initiate_download(result(), media_item_id: gone.id)
+      end)
+
+      refute_received {:removed, _, _}
+    end
+
+    test "removes a created torrent the client names by the upper-case hash" do
+      upper = String.upcase(@client_id)
+      :persistent_term.put({RecordingAdapter, :add_id}, upper)
+      gone = media_item_fixture(%{type: "movie", title: "The Glass Meadow"})
+      :persistent_term.put({RecordingAdapter, :on_add}, fn -> Repo.delete!(gone) end)
+
+      capture_log(fn ->
+        assert {:error, _reason} = Queue.initiate_download(result(), media_item_id: gone.id)
+      end)
+
+      assert_received {:removed, ^upper, _opts}
+    end
+
     test "keeps a torrent another download row tracked before the add" do
       # A tracked torrent is one the client holds.
       :persistent_term.put({RecordingAdapter, :held}, [@client_id])
