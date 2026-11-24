@@ -339,6 +339,7 @@ fn with_requester(verb: &str, title: &str, requester: Option<&str>) -> String {
 // Discord rejects payloads over these sizes, and a retry cannot fix that.
 const DISCORD_CONTENT_MAX: usize = 2000;
 const DISCORD_DESCRIPTION_MAX: usize = 4096;
+const DISCORD_TITLE_MAX: usize = 256;
 
 // Cut `text` to at most `max` chars (Unicode scalar values), ending with an
 // ellipsis when anything was removed. Never splits a char.
@@ -365,7 +366,7 @@ fn discord_request(
         .unwrap_or("");
 
     let mut embed = vec![
-        ("title", string(title)),
+        ("title", string(&truncate_chars(title, DISCORD_TITLE_MAX))),
         (
             "description",
             string(&truncate_chars(description, DISCORD_DESCRIPTION_MAX)),
@@ -1100,6 +1101,24 @@ mod tests {
         let multi = "\u{1F3AC}".repeat(5000);
         let cut = truncate_chars(&multi, 2000);
         assert_eq!(cut.chars().count(), 2000);
+    }
+
+    #[test]
+    fn discord_title_is_bounded() {
+        let long = "T".repeat(300);
+        let e = request_event("media_request.created", vec![("title", string(&long))]);
+        let req = build_request(&e, None, "discord", "https://discord.com/api/webhooks/1/x");
+        let payload = discord_body(&req);
+        let JsonValue::Array(embeds) = get(&payload, "embeds").unwrap() else {
+            panic!("embeds")
+        };
+        let title = get(&embeds[0], "title").and_then(as_str).unwrap();
+        assert!(title.chars().count() <= 256);
+        assert!(title.ends_with('\u{2026}'));
+        assert_eq!(
+            truncate_chars("Short Title", DISCORD_TITLE_MAX),
+            "Short Title"
+        );
     }
 
     #[test]
