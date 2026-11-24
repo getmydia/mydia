@@ -550,6 +550,7 @@ defmodule Mydia.Events do
         |> Map.put("requester", person_name(request.requester))
         |> Map.put("approved_by", if(auto?, do: nil, else: person_name(approver)))
         |> Map.put("auto", auto?)
+        |> Map.put("requester_notes", request.requester_notes)
         |> reject_nils()
     })
   end
@@ -576,6 +577,7 @@ defmodule Mydia.Events do
         |> request_metadata()
         |> Map.put("requester", person_name(request.requester))
         |> Map.put("approved_by", person_name(rejecter))
+        |> Map.put("requester_notes", request.requester_notes)
         |> Map.put("rejection_reason", request.rejection_reason)
         |> reject_nils()
     })

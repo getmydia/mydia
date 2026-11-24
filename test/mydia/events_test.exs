@@ -1491,5 +1491,25 @@ defmodule Mydia.EventsTest do
       assert event.metadata["approved_by"] == "Warden Vale"
       assert event.metadata["rejection_reason"] == "Already on the shelf"
     end
+
+    test "approved and rejected events carry requester_notes, omitted when nil" do
+      user = user_fixture()
+      admin = user_fixture(%{username: "warden", display_name: "Warden Vale", role: "admin"})
+      noted = build_request(user, %{requester_notes: "Director's cut please"})
+
+      assert :ok = Events.media_request_approved(noted, approved_by: admin)
+      assert :ok = Events.media_request_rejected(noted, rejected_by: admin)
+      assert :ok = Events.media_request_approved(build_request(user), auto: true)
+      assert :ok = Events.media_request_rejected(build_request(user), rejected_by: admin)
+
+      for type <- ["media_request.approved", "media_request.rejected"] do
+        events = Events.list_events(type: type)
+
+        assert Enum.count(events, &(&1.metadata["requester_notes"] == "Director's cut please")) ==
+                 1
+
+        assert Enum.count(events, &(not Map.has_key?(&1.metadata, "requester_notes"))) == 1
+      end
+    end
   end
 end

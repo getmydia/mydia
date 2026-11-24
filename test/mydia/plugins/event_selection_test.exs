@@ -22,6 +22,13 @@ defmodule Mydia.Plugins.EventSelectionTest do
     assert EventSelection.selected(plugin(%{key: "events", default: nil}), %{}) == @all
   end
 
+  test "a nil value is treated like a missing key" do
+    assert EventSelection.selected(plugin(), %{"events" => nil}) == ["media_request.created"]
+
+    assert EventSelection.selected(plugin(%{key: "events", default: nil}), %{"events" => nil}) ==
+             @all
+  end
+
   test "an empty list selects nothing" do
     assert EventSelection.selected(plugin(), %{"events" => []}) == []
   end

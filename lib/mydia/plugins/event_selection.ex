@@ -17,8 +17,8 @@ defmodule Mydia.Plugins.EventSelection do
   def selected(%Plugin{events: events, event_selection: %{key: key, default: default}}, settings) do
     chosen =
       case Map.fetch(settings || %{}, key) do
-        {:ok, value} -> parse(value)
-        :error -> default
+        {:ok, value} when not is_nil(value) -> parse(value)
+        _ -> default
       end
 
     case chosen do

@@ -134,10 +134,12 @@ the approving admin (`user`), or `system` for an automatic approval.
 | `title`, `year`, `media_type`, `tmdb_id`, `requester` | | As in [`media_request.created`](#media_requestcreated). |
 | `auto` | boolean | `true` when auto-approval approved the request. |
 | `approved_by` | string | The approving admin's display name. Absent for auto-approval. |
+| `requester_notes` | string | The note the requester left. Absent when they left none. |
 
 When an approval links a request to a title already in the library, any other
 pending requests for that title are approved with it, and each one emits its own
-event.
+event. Those other requests are recorded with `auto: true` and notify as
+"Auto-approved".
 
 ### media_request.rejected
 
@@ -148,6 +150,7 @@ Recorded with category `requests`, resource type `media_request`, actor `user`
 |-------|------|-------|
 | `title`, `year`, `media_type`, `tmdb_id`, `requester` | | As in [`media_request.created`](#media_requestcreated). |
 | `approved_by` | string | The rejecting admin's display name. The name is the same field used for approvals. |
+| `requester_notes` | string | The note the requester left. Absent when they left none. |
 | `rejection_reason` | string | The reason the admin gave. Absent when none was given. |
 
 Withdrawing a request emits no event.
