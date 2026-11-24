@@ -54,7 +54,7 @@ defmodule Mydia.MetadataCacheHelpers do
 
     on_exit(fn ->
       Cache.delete(
-        "recommendations:#{relay.type}:#{tmdb_id}:#{media_type}:#{relay.options.language}"
+        "recommendations:v2:#{relay.type}:#{tmdb_id}:#{media_type}:#{relay.options.language}"
       )
     end)
 

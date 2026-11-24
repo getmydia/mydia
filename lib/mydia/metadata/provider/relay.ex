@@ -80,6 +80,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     SeasonData,
     ImagesResponse,
     Collection,
+    RecommendationPools,
     Video,
     WatchProvider
   }
@@ -1322,17 +1323,10 @@ defmodule Mydia.Metadata.Provider.Relay do
   @doc """
   Fetches TMDB's recommendations and similar titles for a movie or TV show.
 
-  TMDB exposes both as sub-objects of the details endpoint rather than as
-  standalone routes the relay proxies, so this rides `append_to_response` on the
-  endpoint the relay already serves. That is what lets the feature ship without
-  a relay release. One request carries both pools: `similar` exists to top up a
-  rail that a restricted viewer's filter has thinned (#1507), since each
-  sub-object holds only TMDB's first page of twenty.
-
-  Each sub-object uses the same `%{"results" => [...]}` envelope as search and
-  trending, so `parse_search_results/2` consumes it unchanged. A response with no
-  such key falls through that function's catch-all to `[]`, which is why a
-  missing sub-object is a normal empty pool rather than an error.
+  Both ride `append_to_response` on the details endpoint the relay already
+  serves, so no relay release is needed; `similar` tops up a rail a restricted
+  scope thinned (#1507). Each uses search's `results` envelope, so
+  `parse_search_results/2` reads it and a missing sub-object is an empty pool.
 
   ## Options
     * `:media_type` - `:movie` or `:tv_show` (default: `:movie`)
@@ -1342,11 +1336,10 @@ defmodule Mydia.Metadata.Provider.Relay do
 
       iex> config = %{type: :metadata_relay, base_url: "https://relay.mydia.dev"}
       iex> Relay.fetch_recommendations(config, "965150", media_type: :movie)
-      {:ok, %{recommendations: [%Mydia.Metadata.Structs.SearchResult{title: "Midnight Ferry"}], similar: []}}
+      {:ok, %Mydia.Metadata.Structs.RecommendationPools{recommendations: [%Mydia.Metadata.Structs.SearchResult{title: "Midnight Ferry"}]}}
   """
   @spec fetch_recommendations(map(), String.t(), keyword()) ::
-          {:ok, %{recommendations: [SearchResult.t()], similar: [SearchResult.t()]}}
-          | {:error, Error.t()}
+          {:ok, RecommendationPools.t()} | {:error, Error.t()}
   def fetch_recommendations(config, provider_id, opts \\ []) do
     media_type = Keyword.get(opts, :media_type, :movie)
     language = resolve_language(config, opts)
@@ -1359,7 +1352,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     case HTTP.get(req, endpoint, params: params) do
       {:ok, %{status: 200, body: body}} ->
         {:ok,
-         %{
+         %RecommendationPools{
            recommendations: parse_search_results(body["recommendations"], media_type),
            similar: parse_search_results(body["similar"], media_type)
          }}

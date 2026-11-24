@@ -308,7 +308,7 @@ defmodule Mydia.Metadata do
   end
 
   @doc """
-  Fetches TMDB recommendations for a title, cached in ETS for 24 hours.
+  Fetches TMDB's recommendations and similar titles, cached for 24 hours.
 
   Accepts only a `{:tmdb, id}` ref: TMDB recommendations are the only kind
   the relay serves, so a TVDB ref has no meaning here and is rejected at the
@@ -325,15 +325,11 @@ defmodule Mydia.Metadata do
   24 hours matches `fetch_collection_cached/3`. TMDB recommendations shift over
   weeks, and the relay caches upstream as well.
 
-  One relay response carries both of TMDB's pools and is cached whole, so the
-  `similar` pool costs no further request. `:pool` picks which one is returned:
-  `:recommendations` (the default) or `:similar`.
-
   ## Examples
 
       iex> config = Mydia.Metadata.default_relay_config()
       iex> Mydia.Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, 965_150}, media_type: :movie)
-      {:ok, [%Mydia.Metadata.Structs.SearchResult{}]}
+      {:ok, %Mydia.Metadata.Structs.RecommendationPools{}}
   """
   def fetch_recommendations_by_ref_cached(config, ref, opts \\ [])
 
@@ -344,18 +340,13 @@ defmodule Mydia.Metadata do
     media_type = Keyword.get(opts, :media_type, :movie)
     language = Keyword.get(opts, :language, config_language(config))
 
-    pool = Keyword.get(opts, :pool, :recommendations)
+    cache_key = "recommendations:v2:metadata_relay:#{id}:#{media_type}:#{language}"
 
-    cache_key = "recommendations:metadata_relay:#{id}:#{media_type}:#{language}"
-
-    case Cache.fetch(
-           cache_key,
-           fn -> Relay.fetch_recommendations(config, to_string(id), opts) end,
-           ttl: :timer.hours(24)
-         ) do
-      {:ok, %{^pool => results}} -> {:ok, results}
-      {:error, _} = error -> error
-    end
+    Cache.fetch(
+      cache_key,
+      fn -> Relay.fetch_recommendations(config, to_string(id), opts) end,
+      ttl: :timer.hours(24)
+    )
   end
 
   def fetch_recommendations_by_ref_cached(%{type: type}, {:tmdb, _id}, _opts)

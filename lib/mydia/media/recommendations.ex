@@ -23,7 +23,7 @@ defmodule Mydia.Media.Recommendations do
   alias Mydia.Media.RemoteFilter
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
-  alias Mydia.Metadata.Structs.SearchResult
+  alias Mydia.Metadata.Structs.{RecommendationPools, SearchResult}
 
   @media_types %{"movie" => :movie, "tv_show" => :tv_show}
 
@@ -117,10 +117,10 @@ defmodule Mydia.Media.Recommendations do
     case Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, tmdb_id},
            media_type: media_type
          ) do
-      {:ok, []} ->
+      {:ok, %RecommendationPools{recommendations: []}} ->
         :none
 
-      {:ok, results} when is_list(results) ->
+      {:ok, %RecommendationPools{recommendations: results, similar: similar}} ->
         allowed = RemoteFilter.filter(results, scope)
         ranked = rank(allowed)
 
@@ -130,7 +130,7 @@ defmodule Mydia.Media.Recommendations do
         # above the viewer's limit (#1507).
         rail =
           if length(allowed) < length(results) and length(ranked) < @rail_limit,
-            do: ranked ++ backfill(tmdb_id, media_type, scope, config, results),
+            do: ranked ++ backfill(similar, results, scope),
             else: ranked
 
         case Enum.take(rail, @rail_limit) do
@@ -150,25 +150,15 @@ defmodule Mydia.Media.Recommendations do
   # TMDB's similar titles (genre and keyword overlap) are a weaker signal than
   # its recommendations, so they only ever follow them. Anything already in the
   # recommendation pool is dropped, allowed or not: an allowed one is on the
-  # rail already, and a blocked one would only be refused again. A failed
-  # lookup leaves the rail as it was.
-  defp backfill(tmdb_id, media_type, scope, config, recommended) do
+  # rail already, and a blocked one would only be refused again.
+  defp backfill(similar, recommended, scope) do
     seen = MapSet.new(recommended, & &1.provider_id)
 
-    case Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, tmdb_id},
-           media_type: media_type,
-           pool: :similar
-         ) do
-      {:ok, similar} ->
-        similar
-        |> Enum.reject(&MapSet.member?(seen, &1.provider_id))
-        |> Enum.uniq_by(& &1.provider_id)
-        |> RemoteFilter.filter(scope)
-        |> rank()
-
-      {:error, _reason} ->
-        []
-    end
+    similar
+    |> Enum.reject(&MapSet.member?(seen, &1.provider_id))
+    |> Enum.uniq_by(& &1.provider_id)
+    |> RemoteFilter.filter(scope)
+    |> rank()
   end
 
   defp mean_rating(results) do

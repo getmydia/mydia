@@ -30,7 +30,7 @@ defmodule Mydia.Media.RecommendationsTest do
 
     on_exit(fn ->
       for media_type <- [:movie, :tv_show] do
-        Cache.delete("recommendations:metadata_relay:#{tmdb_id}:#{media_type}:en-US")
+        Cache.delete("recommendations:v2:metadata_relay:#{tmdb_id}:#{media_type}:en-US")
       end
     end)
 
