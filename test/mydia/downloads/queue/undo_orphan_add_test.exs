@@ -36,6 +36,7 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
 
     @impl true
     def remove_torrent(_config, client_id, opts) do
+      :persistent_term.get({__MODULE__, :on_remove}, fn -> :ok end).()
       notify({:removed, client_id, opts})
       :ok
     end
@@ -63,6 +64,7 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
     on_exit(fn ->
       :persistent_term.erase({RecordingAdapter, :pid})
       :persistent_term.erase({RecordingAdapter, :on_add})
+      :persistent_term.erase({RecordingAdapter, :on_remove})
 
       if previous,
         do: Registry.register(:transmission, previous),
@@ -160,6 +162,41 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
 
       assert_received {:removed, @client_id, opts}
       assert opts[:delete_files] == true
+    end
+  end
+
+  describe "ClientSelection.undo_add/3" do
+    setup do
+      {:ok, config} = Queue.ClientSelection.find_client_config(@client)
+      %{config: config}
+    end
+
+    # Another grab saved a row for the same torrent after this grab took its
+    # snapshot: the torrent is that row's now, so the rollback leaves it.
+    test "keeps a torrent a row claimed after the snapshot", %{config: config} do
+      other = media_item_fixture(%{type: "movie", title: "The Tin Observatory"})
+
+      {:ok, _row} =
+        History.create_download(%{
+          title: "The.Tin.Observatory.1080p",
+          media_item_id: other.id,
+          download_client: @client,
+          download_client_id: @client_id
+        })
+
+      assert :ok = Queue.ClientSelection.undo_add(config, @client_id, false)
+      refute_received {:removed, _, _}
+    end
+
+    test "returns :ok when the client's removal exits", %{config: config} do
+      :persistent_term.put({RecordingAdapter, :on_remove}, fn -> exit(:noproc) end)
+
+      log =
+        capture_log(fn ->
+          assert :ok = Queue.ClientSelection.undo_add(config, @client_id, false)
+        end)
+
+      assert log =~ "Could not remove an untracked torrent"
     end
   end
 

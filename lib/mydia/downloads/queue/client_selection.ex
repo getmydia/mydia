@@ -614,12 +614,22 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   # nothing else will ever remove that torrent: the delete only cancels the
   # torrents its rows name. So the add is undone here, data included, since
   # the torrent is seconds old and nobody wants it. `was_tracked?` (see
-  # `tracked?/2`) keeps a torrent some other row already owned before the add.
-  # Best effort: a client that refuses is logged and the grab's error stands.
+  # `tracked?/2`) keeps a torrent some other row already owned before the add,
+  # and ownership is read again here for a row that claimed it since. A grab
+  # saving the same torrent in the instant between that read and the client
+  # call can still lose it; closing that would take a lock around the client.
+  # Best effort: a client that refuses or exits is logged and the grab's error
+  # stands.
   @spec undo_add(map(), String.t(), boolean()) :: :ok
   def undo_add(_client_config, _client_id, true = _was_tracked?), do: :ok
 
   def undo_add(client_config, client_id, false = _was_tracked?) do
+    if tracked?(client_config.name, client_id),
+      do: :ok,
+      else: remove_untracked(client_config, client_id)
+  end
+
+  defp remove_untracked(client_config, client_id) do
     with {:ok, adapter} <- get_adapter_for_client(client_config),
          :ok <-
            Client.remove_download(adapter, config_to_map(client_config), client_id,
@@ -639,6 +649,17 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     end
 
     :ok
+  catch
+    # An adapter can exit (a debrid fetcher whose supervisor is down); the
+    # grab's own error must still stand.
+    :exit, reason ->
+      Logger.warning("Could not remove an untracked torrent after a failed grab",
+        client: client_config.name,
+        client_id: client_id,
+        reason: inspect({:exit, reason})
+      )
+
+      :ok
   end
 
   defp find_stale_download(client_name, client_id) do
