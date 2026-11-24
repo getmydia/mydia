@@ -337,9 +337,11 @@ at "Sign app bundle", naming a subcomponent such as
 fetches a secure timestamp from Apple's server for every nested bundle, and one
 unanswered request fails the whole sign. The four runs before it on master were
 green with no code change between them. The step now retries codesign up to four
-times with backoff (`.github/workflows/player-macos.yml`), so a red here after
-four `::warning::codesign attempt` lines means Apple's timestamp service is down
-for longer than a minute; re-run later.
+times with backoff (`.github/workflows/player-macos.yml`). A red here shows three
+`::warning::codesign attempt` lines and then `::error::codesign failed after 4
+attempts`. Those annotations say only that signing failed, not why: read the
+codesign output above each one. Re-run later only when it is the timestamp
+message again; any other signing error is a real failure with its own cause.
 
 **Setup Flutter fails in about 25s with `Process completed with exit code 35`**, on
 any `ci-player.yml` job (today the Windows and macOS builds; `Build / Web` was
