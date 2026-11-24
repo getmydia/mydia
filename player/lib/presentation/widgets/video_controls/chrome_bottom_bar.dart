@@ -342,12 +342,21 @@ class CompactChromeBottomBar extends StatelessWidget {
   /// Scrubber, taking the width between the timecodes.
   final Widget scrubber;
 
+  /// Volume control, kept mounted but never shown.
+  ///
+  /// A phone has no volume control on screen, but a split-screen resize can
+  /// cross into this bar and back. Pass the same keyed widget that
+  /// [ChromeBottomBar.volume] gets, so its `State` (the pre-mute volume)
+  /// moves here and back instead of being rebuilt.
+  final Widget? volume;
+
   const CompactChromeBottomBar({
     super.key,
     required this.metrics,
     required this.elapsed,
     required this.remaining,
     required this.scrubber,
+    this.volume,
   });
 
   /// Vertical padding above and below the row.
@@ -377,6 +386,8 @@ class CompactChromeBottomBar extends StatelessWidget {
           Expanded(child: scrubber),
           const SizedBox(width: timecodeGap),
           remaining,
+          if (volume case final volume?)
+            Visibility(visible: false, maintainState: true, child: volume),
         ],
       ),
     ),

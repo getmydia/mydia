@@ -266,6 +266,33 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    for (final width in <double>[240, 280, 300]) {
+      testWidgets('the pills scale down rather than overflow at ${width}px', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          _host(
+            ChromeTopBar(
+              title: 'Silo',
+              onBack: () {},
+              onScalingTap: () {},
+              castAction: const Icon(Icons.cast_rounded),
+              trailing: const SizedBox(width: 4 * 32, height: 32),
+              compact: true,
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.getRect(find.byKey(ChromeTopBar.actionsPillKey)).right,
+          lessThanOrEqualTo(width + 0.5),
+        );
+      });
+    }
+
     testWidgets('the actions pill is omitted with neither action', (
       tester,
     ) async {

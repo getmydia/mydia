@@ -864,6 +864,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
   /// none, so the touch tier can still tell whether the chrome is up.
   ChromeVisibilityController? _ownVisibility;
 
+  /// Keeps the volume cluster's `State` (its pre-mute volume) when a resize
+  /// swaps [ChromeBottomBar] for [CompactChromeBottomBar] and back.
+  final _volumeKey = GlobalKey();
+
   ChromeVisibilityController get _visibility =>
       widget.chromeVisibility ??
       (_ownVisibility ??= ChromeVisibilityController());
@@ -972,6 +976,10 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       thumbnails: widget.scrubThumbnails,
       onPlayPause: () => widget.player.playOrPause(),
     );
+    // Null on the remote tier, which has no volume control to show.
+    final volume = remote
+        ? null
+        : VolumeCluster(key: _volumeKey, player: widget.player);
     final elapsed = _Timecode(
       player: widget.player,
       timeline: widget.timeline,
@@ -1112,6 +1120,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                           elapsed: elapsed,
                                           remaining: remaining,
                                           scrubber: scrubber,
+                                          volume: volume,
                                         )
                                       : ChromeBottomBar(
                                           metrics: metrics,
@@ -1149,20 +1158,12 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                                   compact:
                                                       metrics.compactTransport,
                                                 ),
-                                          // Null on the remote tier, which has no
-                                          // volume control to show. Otherwise
-                                          // unconditional per ChromeBottomBar's
-                                          // `volume` dartdoc: it gates visibility
-                                          // itself with Visibility(maintainState:
-                                          // true), so VolumeCluster's `_lastVolume`
-                                          // survives a breakpoint crossing. The tier
-                                          // never changes at runtime, so the null
-                                          // branch loses no state.
-                                          volume: remote
-                                              ? null
-                                              : VolumeCluster(
-                                                  player: widget.player,
-                                                ),
+                                          // Unconditional per ChromeBottomBar's
+                                          // `volume` dartdoc, and keyed, so the
+                                          // cluster's `_lastVolume` survives
+                                          // both a breakpoint crossing and a
+                                          // swap to the compact bar.
+                                          volume: volume,
                                           secondary: secondary,
                                           timecodes: _Timecodes(
                                             elapsed: elapsed,

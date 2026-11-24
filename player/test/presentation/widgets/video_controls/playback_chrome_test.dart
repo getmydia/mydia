@@ -1298,6 +1298,27 @@ void main() {
         );
       });
 
+      testWidgets('the volume cluster keeps its state across a compact '
+          'crossing', (tester) async {
+        await pump(tester, touch: true);
+        final before = tester.state(
+          find.byType(VolumeCluster, skipOffstage: false),
+        );
+
+        // A split-screen resize takes the shortest side under 600 px.
+        tester.view.physicalSize = phone;
+        await tester.pump();
+        expect(find.byType(CompactChromeBottomBar), findsOneWidget);
+        expect(find.byType(VolumeCluster), findsNothing);
+
+        tester.view.physicalSize = const Size(1280, 720);
+        await tester.pump();
+        expect(
+          tester.state(find.byType(VolumeCluster, skipOffstage: false)),
+          same(before),
+        );
+      });
+
       testWidgets('compact touch insets the top bar by 8 px', (tester) async {
         await pump(tester, touch: true, size: phone);
         expect(tester.getTopLeft(find.byType(ChromeTopBar)).dy, 8);
