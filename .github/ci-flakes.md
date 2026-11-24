@@ -330,6 +330,19 @@ same SHA then compiled both plugins fine. Check the diff for `native/`, `*.rs`,
 `Cargo*`, `priv/plugins/` or `*.nix` first; if it touches none of them, it cannot
 have affected the wasip2 component build.
 
+**macOS signing: "A timestamp was expected but was not found".** Seen 2026-11-24
+on `Player / On-Demand Build` run 45326548235, in `Player / macOS / Build macOS`
+at "Sign app bundle", naming a subcomponent such as
+`Contents/Frameworks/mydia_player_p2p.framework`. `codesign --options runtime`
+fetches a secure timestamp from Apple's server for every nested bundle, and one
+unanswered request fails the whole sign. The four runs before it on master were
+green with no code change between them. The step now retries codesign up to four
+times with backoff (`.github/workflows/player-macos.yml`). A red here shows three
+`::warning::codesign attempt` lines and then `::error::codesign failed after 4
+attempts`. Those annotations say only that signing failed, not why: read the
+codesign output above each one. Re-run later only when it is the timestamp
+message again; any other signing error is a real failure with its own cause.
+
 **Setup Flutter fails in about 25s with `Process completed with exit code 35`**, on
 any `ci-player.yml` job (today the Windows and macOS builds; `Build / Web` was
 one until it moved to the `player-web` Nix check). Seen 2026-08-30 on PR #621.
