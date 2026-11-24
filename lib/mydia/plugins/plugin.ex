@@ -38,7 +38,8 @@ defmodule Mydia.Plugins.Plugin do
           setup: boolean(),
           connection: map() | nil,
           page: map() | nil,
-          shelves: [map()]
+          shelves: [map()],
+          event_selection: %{key: String.t(), default: [String.t()] | nil} | nil
         }
 
   defstruct slug: nil,
@@ -58,7 +59,8 @@ defmodule Mydia.Plugins.Plugin do
             setup: false,
             connection: nil,
             page: nil,
-            shelves: []
+            shelves: [],
+            event_selection: nil
 
   alias Mydia.Plugins.Manifest
 
@@ -89,7 +91,8 @@ defmodule Mydia.Plugins.Plugin do
       setup: manifest.setup,
       connection: manifest.connection,
       page: manifest.page,
-      shelves: manifest.shelves
+      shelves: manifest.shelves,
+      event_selection: Manifest.event_selection_field(manifest.settings_schema)
     }
   end
 

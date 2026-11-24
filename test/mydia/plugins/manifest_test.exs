@@ -635,4 +635,68 @@ defmodule Mydia.Plugins.ManifestTest do
       assert Manifest.auth_header(m) == {"Authorization", "Bearer {token}"}
     end
   end
+
+  describe "events setting type" do
+    @req ["media_request.created", "media_request.approved", "media_request.rejected"]
+
+    defp events_map(field_overrides \\ %{}, top \\ %{}) do
+      field =
+        Map.merge(%{"key" => "events", "label" => "Events", "type" => "events"}, field_overrides)
+
+      valid_map(
+        Map.merge(
+          %{
+            "capabilities" => %{"events:subscribe" => @req ++ ["download.completed"]},
+            "settings_schema" => [field]
+          },
+          top
+        )
+      )
+    end
+
+    test "request event types parse in events:subscribe" do
+      assert {:ok, %Manifest{events: events}} = Manifest.parse(events_map())
+      assert @req -- events == []
+    end
+
+    test "an events field parses and is exposed on the descriptor" do
+      assert {:ok, manifest} = Manifest.parse(events_map(%{"default" => ["download.completed"]}))
+
+      assert Manifest.event_selection_field(manifest.settings_schema) ==
+               %{key: "events", default: ["download.completed"]}
+
+      assert %Plugin{event_selection: %{key: "events"}} = Plugin.from_manifest(manifest)
+    end
+
+    test "no events field yields nil" do
+      assert {:ok, manifest} = Manifest.parse(valid_map())
+      assert Manifest.event_selection_field(manifest.settings_schema) == nil
+      assert Plugin.from_manifest(manifest).event_selection == nil
+    end
+
+    test "default outside events:subscribe is rejected" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(events_map(%{"default" => ["media_item.added"]}))
+    end
+
+    test "default that is not a list of strings is rejected" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(events_map(%{"default" => "download.completed"}))
+
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(events_map(%{"default" => [1]}))
+    end
+
+    test "two events fields are rejected" do
+      map = events_map()
+      second = %{"key" => "more", "label" => "More", "type" => "events"}
+      map = Map.update!(map, "settings_schema", &(&1 ++ [second]))
+      assert {:error, %Error{type: :invalid_manifest}} = Manifest.parse(map)
+    end
+
+    test "an events field on a multi_instance plugin is rejected" do
+      assert {:error, %Error{type: :invalid_manifest}} =
+               Manifest.parse(events_map(%{}, %{"multi_instance" => true}))
+    end
+  end
 end

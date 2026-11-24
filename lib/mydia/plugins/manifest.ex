@@ -164,6 +164,9 @@ defmodule Mydia.Plugins.Manifest do
     playback.paused
     playback.finished
     playback.unwatched
+    media_request.created
+    media_request.approved
+    media_request.rejected
   )
 
   # All taxonomy classes (reserved + implemented). The schema/approval UI know
@@ -222,7 +225,7 @@ defmodule Mydia.Plugins.Manifest do
 
   # Field types a `settings_schema` entry may declare. `text` renders as a
   # multiline textarea (used for template fields); otherwise like `string`.
-  @setting_types ~w(string url secret enum text)
+  @setting_types ~w(string url secret enum text events)
 
   @doc """
   Returns the v1 event catalog: the plugin subscription contract for
@@ -287,10 +290,16 @@ defmodule Mydia.Plugins.Manifest do
          :ok <- validate_page(page, capabilities),
          {:ok, shelves} <- validate_shelves(Map.get(map, "shelves"), capabilities),
          {:ok, settings_schema} <- validate_settings_schema(settings_schema),
+         {:ok, multi_instance} <- validate_flag(map, "multi_instance"),
+         :ok <-
+           validate_event_selection(
+             settings_schema,
+             Map.get(capabilities, "events:subscribe", []),
+             multi_instance
+           ),
          {:ok, connection} <- validate_connection(connection, capabilities),
          :ok <- validate_schedule(schedule, capabilities),
          :ok <- validate_min_host_version(Map.get(map, "min_host_version")),
-         {:ok, multi_instance} <- validate_flag(map, "multi_instance"),
          {:ok, setup} <- validate_flag(map, "setup"),
          {:ok, category} <- validate_category(Map.get(map, "category")) do
       {:ok,
@@ -944,10 +953,70 @@ defmodule Mydia.Plugins.Manifest do
       not valid_hint?(Map.get(field, "hint")) ->
         {:error, Error.new(:invalid_manifest, "hint on #{key} must be a non-empty string")}
 
+      type == "events" and not valid_events_default?(Map.get(field, "default")) ->
+        {:error,
+         Error.new(
+           :invalid_manifest,
+           "default on events setting #{key} must be a list of event names"
+         )}
+
       true ->
         :ok
     end
   end
+
+  defp valid_events_default?(nil), do: true
+  defp valid_events_default?(list) when is_list(list), do: Enum.all?(list, &is_binary/1)
+  defp valid_events_default?(_), do: false
+
+  # An `events` setting lets each instance choose which of the plugin's
+  # subscribed events it receives. It needs the plugin-level event list to check
+  # `default` against, and is meaningless on a multi_instance plugin, so these
+  # checks run after both are known.
+  defp validate_event_selection(schema, events, multi_instance) do
+    fields = Enum.filter(schema, &(Map.get(&1, "type") == "events"))
+
+    cond do
+      fields == [] ->
+        :ok
+
+      length(fields) > 1 ->
+        {:error,
+         Error.new(:invalid_manifest, "settings_schema may declare at most one events field")}
+
+      multi_instance ->
+        {:error,
+         Error.new(:invalid_manifest, "an events field is not allowed on a multi_instance plugin")}
+
+      true ->
+        [field] = fields
+        extra = List.wrap(Map.get(field, "default")) -- events
+
+        if extra == [] do
+          :ok
+        else
+          {:error,
+           Error.new(
+             :invalid_manifest,
+             "default on events setting #{field["key"]} names events the plugin does not subscribe to: #{Enum.join(extra, ", ")}"
+           )}
+        end
+    end
+  end
+
+  @doc """
+  The `events` field of a settings schema as `%{key: key, default: default}`, or
+  `nil` when it declares none. `default` is `nil` when the field omits it.
+  """
+  @spec event_selection_field([map()]) :: %{key: String.t(), default: [String.t()] | nil} | nil
+  def event_selection_field(schema) when is_list(schema) do
+    case Enum.find(schema, &(is_map(&1) and Map.get(&1, "type") == "events")) do
+      nil -> nil
+      field -> %{key: field["key"], default: Map.get(field, "default")}
+    end
+  end
+
+  def event_selection_field(_), do: nil
 
   # `hint` (optional) is help text the settings UI shows under the field.
   defp valid_hint?(nil), do: true
