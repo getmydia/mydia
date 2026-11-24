@@ -1000,6 +1000,94 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "operator settings + host disclosure (U3, U4)" do
+    defp seed_event_chooser(slug, opts \\ %{}) do
+      field =
+        Map.merge(
+          %{"key" => "events", "type" => "events", "label" => "Events"},
+          opts
+        )
+
+      manifest =
+        slug
+        |> manifest_map("Chooser")
+        |> put_in(["capabilities", "events:subscribe"], [
+          "media_request.created",
+          "media_request.approved"
+        ])
+        |> Map.put("settings_schema", [field])
+
+      {:ok, config} =
+        Settings.create_plugin_config(%{
+          slug: slug,
+          name: "Chooser",
+          version: "1.0.0",
+          manifest: manifest,
+          wasm_module: guest_wasm(),
+          granted_capabilities: %{
+            "events:subscribe" => ["media_request.created", "media_request.approved"]
+          },
+          enabled: false
+        })
+
+      config
+    end
+
+    defp event_box(type),
+      do: "#plugin-settings-form input[type=checkbox][name='events[]'][value='#{type}']"
+
+    test "the events setting renders one checkbox per subscribed event, defaults checked",
+         %{conn: conn} do
+      seed_event_chooser("chooser", %{"default" => ["media_request.created"]})
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-chooser") |> render_click()
+
+      assert has_element?(view, event_box("media_request.created") <> "[checked]")
+      assert has_element?(view, event_box("media_request.approved"))
+      refute has_element?(view, event_box("media_request.approved") <> "[checked]")
+      assert has_element?(view, "#setting-events-media_request-created")
+    end
+
+    test "the events setting saves the checked events", %{conn: conn} do
+      seed_event_chooser("chooser", %{"default" => ["media_request.created"]})
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-chooser") |> render_click()
+
+      view
+      |> form("#plugin-settings-form", %{"events" => ["media_request.created"]})
+      |> render_submit()
+
+      config = Settings.get_plugin_config_by_slug("chooser")
+      assert config.settings["events"] == ["media_request.created"]
+
+      default = Mydia.Plugins.Instances.default_instance("chooser")
+      assert default.settings["events"] == ["media_request.created"]
+    end
+
+    test "unchecking everything stores an empty list", %{conn: conn} do
+      seed_event_chooser("chooser", %{"default" => ["media_request.created"]})
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-chooser") |> render_click()
+
+      # What the browser sends with every chip unchecked: only the hidden "".
+      render_submit(view, "save_plugin_settings", %{"slug" => "chooser", "events" => [""]})
+
+      assert Settings.get_plugin_config_by_slug("chooser").settings["events"] == []
+    end
+
+    test "forged event names are dropped on save", %{conn: conn} do
+      seed_event_chooser("chooser")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-chooser") |> render_click()
+
+      render_submit(view, "save_plugin_settings", %{
+        "slug" => "chooser",
+        "events" => ["", "media_request.created", "system.bogus"]
+      })
+
+      assert Settings.get_plugin_config_by_slug("chooser").settings["events"] ==
+               ["media_request.created"]
+    end
+
     test "a field's hint renders under it, joined with the private-network note on urls",
          %{conn: conn} do
       seed_with_hints("hinted", "Hinted")
