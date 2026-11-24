@@ -7,8 +7,17 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
 
   # `flash: %{}` and `private.live_temp` satisfy `Phoenix.LiveView.put_flash/3`,
   # which some of the async handlers still call on their remaining paths.
+  # Every write handler checks the role and that the file belongs to the page's
+  # item, so the default socket is an admin on an item owning "mf-1".
   defp socket(assigns \\ %{}) do
-    base = %{__changed__: %{}, flash: %{}, selected_languages: ["en"]}
+    base = %{
+      __changed__: %{},
+      flash: %{},
+      selected_languages: ["en"],
+      current_user: %Mydia.Accounts.User{role: "admin"},
+      media_item: %{media_files: [%{id: "mf-1"}]},
+      media_file_subtitle_tracks: %{}
+    }
 
     %Phoenix.LiveView.Socket{
       assigns: Map.merge(base, assigns),
@@ -236,7 +245,7 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       {:noreply, socket} =
         SubtitleEvents.delete_subtitle(
           %{"subtitle-id" => subtitle.id},
-          socket(%{media_item: media_item, selected_media_file: media_file})
+          page_socket(media_item, %{selected_media_file: media_file})
         )
 
       assert socket.assigns.manage_tracks == []
@@ -275,10 +284,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
     # here and returns :error. The success flash is exercised end to end in
     # the connected LiveView test instead, which starts its own Oban instance.
     test "flashes an error rather than crashing when the enqueue fails" do
+      id = Ecto.UUID.generate()
+
       {:noreply, socket} =
         SubtitleEvents.resync_subtitle(
-          %{"media-file-id" => Ecto.UUID.generate(), "track-ref" => "3"},
-          socket()
+          %{"media-file-id" => id, "track-ref" => "3"},
+          socket(%{media_item: %{media_files: [%{id: id}]}})
         )
 
       assert flash(socket)["error"] == "Could not start the re-sync."
@@ -431,6 +442,14 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
       {%{media_item | media_files: [media_file]}, media_file, subtitle}
     end
 
+    # A socket as mount leaves it: the item plus the track list it rendered,
+    # which is where a delete looks up the subtitle id it was sent.
+    defp page_socket(media_item, assigns \\ %{}) do
+      tracks = MydiaWeb.MediaLive.Show.Loaders.load_media_file_subtitle_tracks(media_item)
+
+      socket(Map.merge(%{media_item: media_item, media_file_subtitle_tracks: tracks}, assigns))
+    end
+
     test "refreshes manage_tracks for the file open in the manage modal" do
       {media_item, media_file, subtitle} = movie_with_subtitle_row("rescan-refresh-hash")
 
@@ -548,6 +567,139 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEventsTest do
 
       assert [subtitle] = Mydia.Subtitles.list_subtitles(media_file.id)
       on_exit(fn -> File.rm(subtitle.file_path) end)
+    end
+  end
+
+  # Every write handler takes a role that can update media, and only a file or
+  # subtitle belonging to the item on the page, like the page's other
+  # media-mutating events.
+  describe "authorization" do
+    @view_only_roles ["readonly", "guest"]
+
+    defp as_role(socket, role),
+      do: %{socket | assigns: %{socket.assigns | current_user: %Mydia.Accounts.User{role: role}}}
+
+    for role <- @view_only_roles do
+      test "a #{role} account cannot delete a subtitle" do
+        {media_item, media_file, subtitle} =
+          movie_with_subtitle_row("authz-delete-#{unquote(role)}")
+
+        {:noreply, socket} =
+          SubtitleEvents.delete_subtitle(
+            %{"subtitle-id" => subtitle.id},
+            media_item |> page_socket() |> as_role(unquote(role))
+          )
+
+        assert flash(socket)["error"] =~ "permission"
+        assert [%{id: id}] = Mydia.Subtitles.list_subtitles(media_file.id)
+        assert id == subtitle.id
+      end
+
+      test "a #{role} account cannot set or nudge a track's offset" do
+        {media_item, media_file, _subtitle} =
+          movie_with_subtitle_row("authz-offset-#{unquote(role)}")
+
+        socket = media_item |> page_socket() |> as_role(unquote(role))
+
+        {:noreply, _} =
+          SubtitleEvents.set_subtitle_offset(
+            %{"media-file-id" => media_file.id, "track-ref" => "0", "offset_ms" => "1500"},
+            socket
+          )
+
+        {:noreply, _} =
+          SubtitleEvents.nudge_subtitle_offset(
+            %{"media-file-id" => media_file.id, "track-ref" => "0", "delta" => "100"},
+            socket
+          )
+
+        assert Mydia.Subtitles.TrackSettings.offset_ms(media_file.id, "0") == 0
+      end
+
+      test "a #{role} account cannot open the search or upload modals, resync or rescan" do
+        socket = as_role(socket(%{show_subtitle_manage_modal: true}), unquote(role))
+        params = %{"media-file-id" => "mf-1", "track-ref" => "0"}
+
+        for handler <- [:open_subtitle_search, :open_subtitle_upload, :resync_subtitle] do
+          {:noreply, result} = apply(SubtitleEvents, handler, [params, socket])
+          refute result.assigns[:show_subtitle_search_modal]
+          refute result.assigns[:show_subtitle_upload_modal]
+          assert flash(result)["error"] =~ "permission"
+        end
+
+        {:noreply, result} = SubtitleEvents.rescan_subtitles(params, socket)
+        assert flash(result)["error"] =~ "permission"
+      end
+
+      test "a #{role} account cannot search, download or upload for a file it selected" do
+        # The manage modal is open to every role and sets :selected_media_file.
+        socket =
+          socket(%{
+            selected_media_file: %{id: "mf-1"},
+            subtitle_search_results: [%{}],
+            downloading_subtitle_index: nil
+          })
+          |> as_role(unquote(role))
+
+        {:noreply, searched} = SubtitleEvents.perform_subtitle_search(%{}, socket)
+        refute searched.assigns[:subtitle_search_state] == :searching
+
+        {:noreply, downloaded} =
+          SubtitleEvents.download_subtitle_result(%{"index" => "0"}, socket)
+
+        assert downloaded.assigns.downloading_subtitle_index == nil
+
+        {:noreply, uploaded} = SubtitleEvents.save_subtitle_upload(%{}, socket)
+        assert flash(uploaded)["error"] =~ "permission"
+      end
+
+      test "a #{role} account cannot queue a season subtitle fetch" do
+        {:noreply, socket} =
+          SubtitleEvents.fetch_season_subtitles(
+            %{"season-number" => "1"},
+            as_role(socket(%{fetching_season_subtitles: nil}), unquote(role))
+          )
+
+        assert socket.assigns.fetching_season_subtitles == nil
+        assert flash(socket)["error"] =~ "permission"
+      end
+    end
+
+    test "a subtitle belonging to another item cannot be deleted from this page" do
+      {media_item, _media_file, _subtitle} = movie_with_subtitle_row("authz-own-item")
+      {_other_item, other_file, other_subtitle} = movie_with_subtitle_row("authz-other-item")
+
+      {:noreply, socket} =
+        SubtitleEvents.delete_subtitle(
+          %{"subtitle-id" => other_subtitle.id},
+          page_socket(media_item)
+        )
+
+      assert flash(socket)["error"] =~ "not part of this item"
+      assert [_] = Mydia.Subtitles.list_subtitles(other_file.id)
+    end
+
+    test "a file belonging to another item cannot have its offset changed from this page" do
+      {media_item, _media_file, _subtitle} = movie_with_subtitle_row("authz-own-offset")
+      {_other_item, other_file, _other_subtitle} = movie_with_subtitle_row("authz-other-offset")
+
+      {:noreply, socket} =
+        SubtitleEvents.set_subtitle_offset(
+          %{"media-file-id" => other_file.id, "track-ref" => "0", "offset_ms" => "1500"},
+          page_socket(media_item)
+        )
+
+      assert flash(socket)["error"] =~ "not part of this item"
+      assert Mydia.Subtitles.TrackSettings.offset_ms(other_file.id, "0") == 0
+    end
+
+    test "the manage modal opens only for this item's files, for any role" do
+      readonly = as_role(socket(%{show_subtitle_manage_modal: false}), "readonly")
+
+      {:noreply, foreign} =
+        SubtitleEvents.open_subtitle_manage(%{"media-file-id" => Ecto.UUID.generate()}, readonly)
+
+      refute foreign.assigns.show_subtitle_manage_modal
     end
   end
 end

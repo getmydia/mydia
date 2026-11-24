@@ -7,10 +7,21 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   import Phoenix.LiveView, only: [consume_uploaded_entries: 3, put_flash: 3, start_async: 3]
 
   import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_file_subtitle_tracks: 1]
+  import MydiaWeb.MediaLive.Show.Helpers, only: [all_media_files: 1]
+
+  alias MydiaWeb.Live.Authorization
 
   require Logger
 
   def fetch_season_subtitles(%{"season-number" => season_number_str}, socket) do
+    with :ok <- Authorization.authorize_update_media(socket) do
+      queue_season_subtitles(season_number_str, socket)
+    else
+      {:unauthorized, socket} -> {:noreply, socket}
+    end
+  end
+
+  defp queue_season_subtitles(season_number_str, socket) do
     media_item = socket.assigns.media_item
     season_num = String.to_integer(season_number_str)
 
@@ -37,18 +48,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   end
 
   def open_subtitle_search(%{"media-file-id" => media_file_id}, socket) do
-    # library_path is what resolves the file's location for the modal header.
-    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+    with_writable_file(socket, media_file_id, fn socket ->
+      # library_path is what resolves the file's location for the modal header.
+      media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
 
-    {:noreply,
-     socket
-     |> assign(:show_subtitle_search_modal, true)
-     |> assign(:show_subtitle_manage_modal, false)
-     |> assign(:return_to_manage, socket.assigns.show_subtitle_manage_modal)
-     |> assign(:selected_media_file, media_file)
-     |> assign(:subtitle_search_state, :idle)
-     |> assign(:subtitle_search_results, [])
-     |> assign(:subtitle_providers, [])}
+      {:noreply,
+       socket
+       |> assign(:show_subtitle_search_modal, true)
+       |> assign(:show_subtitle_manage_modal, false)
+       |> assign(:return_to_manage, socket.assigns.show_subtitle_manage_modal)
+       |> assign(:selected_media_file, media_file)
+       |> assign(:subtitle_search_state, :idle)
+       |> assign(:subtitle_search_results, [])
+       |> assign(:subtitle_providers, [])}
+    end)
   end
 
   # Whether this reopens the manage modal or drops back to the bare page
@@ -77,18 +90,25 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply, socket}
   end
 
+  # Viewing the track list is open to every role that can see the item, so this
+  # only checks the file belongs to it. The modal renders read-only for a role
+  # that cannot update media (see :can_update_media).
   def open_subtitle_manage(%{"media-file-id" => media_file_id}, socket) do
-    # library_path is what resolves the file's location for the modal header.
-    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+    if owns_media_file?(socket, media_file_id) do
+      # library_path is what resolves the file's location for the modal header.
+      media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
 
-    {:noreply,
-     socket
-     |> assign(:show_subtitle_manage_modal, true)
-     |> assign(:selected_media_file, media_file)
-     |> assign(
-       :manage_tracks,
-       Map.get(socket.assigns.media_file_subtitle_tracks, media_file_id, [])
-     )}
+      {:noreply,
+       socket
+       |> assign(:show_subtitle_manage_modal, true)
+       |> assign(:selected_media_file, media_file)
+       |> assign(
+         :manage_tracks,
+         Map.get(socket.assigns.media_file_subtitle_tracks, media_file_id, [])
+       )}
+    else
+      {:noreply, socket}
+    end
   end
 
   def close_subtitle_manage(_params, socket) do
@@ -114,16 +134,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     {:noreply, assign(socket, :selected_languages, [])}
   end
 
+  # The manage modal also sets :selected_media_file, and any role can open it,
+  # so a selected file proves nothing about who selected it.
   def perform_subtitle_search(_params, socket) do
-    media_file = socket.assigns.selected_media_file
-    languages = Enum.join(socket.assigns.selected_languages, ",")
+    with_writable_file(socket, selected_media_file_id(socket), fn socket ->
+      media_file = socket.assigns.selected_media_file
+      languages = Enum.join(socket.assigns.selected_languages, ",")
 
-    {:noreply,
-     socket
-     |> assign(:subtitle_search_state, :searching)
-     |> start_async(:subtitle_search, fn ->
-       Mydia.Subtitles.search_candidates(media_file.id, languages)
-     end)}
+      {:noreply,
+       socket
+       |> assign(:subtitle_search_state, :searching)
+       |> start_async(:subtitle_search, fn ->
+         Mydia.Subtitles.search_candidates(media_file.id, languages)
+       end)}
+    end)
   end
 
   # The result is looked up from the socket rather than rebuilt from the click
@@ -131,6 +155,20 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # server both trusted it and had to parse it; parsing it as an integer killed
   # the LiveView for every relay and Gestdown result, whose ids are strings.
   def download_subtitle_result(%{"index" => index}, socket) when is_binary(index) do
+    with_writable_file(socket, selected_media_file_id(socket), fn socket ->
+      download_result_at(index, socket)
+    end)
+  end
+
+  # The rendered button always sends a string index, so this clause only
+  # guards a hand-crafted payload (a nil, a JSON number, or a missing key).
+  # This handler must never let a client value reach a parser that can raise.
+  def download_subtitle_result(_params, socket) do
+    {:noreply,
+     put_flash(socket, :error, gettext("That result is no longer available. Search again."))}
+  end
+
+  defp download_result_at(index, socket) do
     media_file = socket.assigns.selected_media_file
 
     with {position, ""} <- Integer.parse(index),
@@ -150,15 +188,25 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
     end
   end
 
-  # The rendered button always sends a string index, so this clause only
-  # guards a hand-crafted payload (a nil, a JSON number, or a missing key).
-  # This handler must never let a client value reach a parser that can raise.
-  def download_subtitle_result(_params, socket) do
-    {:noreply,
-     put_flash(socket, :error, gettext("That result is no longer available. Search again."))}
+  # The id must name a deletable track already listed on this page. That
+  # confines it to this item's files, and keeps an embedded track's id (which
+  # names a stream, not a subtitles row) from ever reaching the delete.
+  def delete_subtitle(%{"subtitle-id" => subtitle_id}, socket) when is_binary(subtitle_id) do
+    with :ok <- Authorization.authorize_update_media(socket),
+         true <- deletable_track_on_page?(socket, subtitle_id) do
+      do_delete_subtitle(subtitle_id, socket)
+    else
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      false ->
+        {:noreply, put_flash(socket, :error, gettext("That subtitle is not part of this item"))}
+    end
   end
 
-  def delete_subtitle(%{"subtitle-id" => subtitle_id}, socket) do
+  def delete_subtitle(_params, socket), do: {:noreply, socket}
+
+  defp do_delete_subtitle(subtitle_id, socket) do
     case Mydia.Subtitles.delete_subtitle(subtitle_id) do
       :ok ->
         tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
@@ -197,14 +245,16 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
         socket
       )
       when is_binary(raw) do
-    case Integer.parse(raw) do
-      {offset_ms, ""} ->
-        store_offset(socket, media_file_id, track_ref, offset_ms)
+    with_writable_file(socket, media_file_id, fn socket ->
+      case Integer.parse(raw) do
+        {offset_ms, ""} ->
+          store_offset(socket, media_file_id, track_ref, offset_ms)
 
-      _ ->
-        {:noreply,
-         put_flash(socket, :error, gettext("Offset must be a whole number of milliseconds"))}
-    end
+        _ ->
+          {:noreply,
+           put_flash(socket, :error, gettext("Offset must be a whole number of milliseconds"))}
+      end
+    end)
   end
 
   # A hand-crafted payload whose offset is not even a string, or one missing
@@ -220,12 +270,14 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
         socket
       )
       when is_binary(raw) do
-    with {delta, ""} <- Integer.parse(raw) do
-      current = Mydia.Subtitles.TrackSettings.offset_ms(media_file_id, track_ref)
-      store_offset(socket, media_file_id, track_ref, current + delta)
-    else
-      _ -> {:noreply, socket}
-    end
+    with_writable_file(socket, media_file_id, fn socket ->
+      with {delta, ""} <- Integer.parse(raw) do
+        current = Mydia.Subtitles.TrackSettings.offset_ms(media_file_id, track_ref)
+        store_offset(socket, media_file_id, track_ref, current + delta)
+      else
+        _ -> {:noreply, socket}
+      end
+    end)
   end
 
   # See set_subtitle_offset/2's fallback clause: the is_binary/1 guard above
@@ -240,14 +292,16 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # The click only starts the job; the outcome shows up later as this track's
   # resync_state, once MediaLive.Show.Loaders reloads media_file_subtitle_tracks.
   def resync_subtitle(%{"media-file-id" => media_file_id, "track-ref" => track_ref}, socket) do
-    case Mydia.Subtitles.ResyncEnqueue.enqueue(media_file_id, track_ref) do
-      :ok ->
-        {:noreply,
-         put_flash(socket, :info, gettext("Re-syncing this subtitle in the background."))}
+    with_writable_file(socket, media_file_id, fn socket ->
+      case Mydia.Subtitles.ResyncEnqueue.enqueue(media_file_id, track_ref) do
+        :ok ->
+          {:noreply,
+           put_flash(socket, :info, gettext("Re-syncing this subtitle in the background."))}
 
-      :error ->
-        {:noreply, put_flash(socket, :error, gettext("Could not start the re-sync."))}
-    end
+        :error ->
+          {:noreply, put_flash(socket, :error, gettext("Could not start the re-sync."))}
+      end
+    end)
   end
 
   # A hand-crafted payload missing either key. The rendered button's
@@ -266,26 +320,32 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   # for this user with no loading indicator, which is worst on the network
   # mounts a self-hosted NAS setup is likely to use.
   def rescan_subtitles(%{"media-file-id" => media_file_id}, socket) do
-    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+    with_writable_file(socket, media_file_id, fn socket ->
+      media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
 
-    {:noreply,
-     socket
-     |> put_flash(:info, gettext("Checking for subtitle files on disk..."))
-     |> start_async(:rescan_subtitles, fn -> Mydia.Subtitles.Sidecars.reconcile(media_file) end)}
+      {:noreply,
+       socket
+       |> put_flash(:info, gettext("Checking for subtitle files on disk..."))
+       |> start_async(:rescan_subtitles, fn ->
+         Mydia.Subtitles.Sidecars.reconcile(media_file)
+       end)}
+    end)
   end
 
   def open_subtitle_upload(%{"media-file-id" => media_file_id}, socket) do
-    # library_path is what resolves the file's location, both for the modal
-    # header and for Mydia.Subtitles.Uploader to compute a destination path.
-    media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
+    with_writable_file(socket, media_file_id, fn socket ->
+      # library_path is what resolves the file's location, both for the modal
+      # header and for Mydia.Subtitles.Uploader to compute a destination path.
+      media_file = Mydia.Library.get_media_file!(media_file_id, preload: [:library_path])
 
-    {:noreply,
-     socket
-     |> assign(:show_subtitle_upload_modal, true)
-     |> assign(:show_subtitle_manage_modal, false)
-     |> assign(:return_to_manage, socket.assigns.show_subtitle_manage_modal)
-     |> assign(:selected_media_file, media_file)
-     |> assign(:subtitle_upload_error, nil)}
+      {:noreply,
+       socket
+       |> assign(:show_subtitle_upload_modal, true)
+       |> assign(:show_subtitle_manage_modal, false)
+       |> assign(:return_to_manage, socket.assigns.show_subtitle_manage_modal)
+       |> assign(:selected_media_file, media_file)
+       |> assign(:subtitle_upload_error, nil)}
+    end)
   end
 
   # See close_subtitle_search_modal/2: reopening the manage modal must stay
@@ -318,6 +378,12 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
   def validate_subtitle_upload(_params, socket), do: {:noreply, socket}
 
   def save_subtitle_upload(params, socket) do
+    with_writable_file(socket, selected_media_file_id(socket), fn socket ->
+      consume_subtitle_upload(params, socket)
+    end)
+  end
+
+  defp consume_subtitle_upload(params, socket) do
     media_file = socket.assigns.selected_media_file
     language = Map.get(params, "language", "en")
     forced = Map.get(params, "forced") == "on"
@@ -380,6 +446,46 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
       {:error, message} ->
         {:noreply, assign(socket, :subtitle_upload_error, message)}
     end
+  end
+
+  # Every subtitle write goes through here. The role check matches the other
+  # media-mutating events on this page. The ownership check confines a
+  # client-supplied file id to this item's files, which mount already loaded
+  # through the viewer's scope, so a restricted account cannot reach a file
+  # outside its category or rating limits by naming it.
+  defp with_writable_file(socket, media_file_id, fun) do
+    with :ok <- Authorization.authorize_update_media(socket),
+         true <- owns_media_file?(socket, media_file_id) do
+      fun.(socket)
+    else
+      {:unauthorized, socket} ->
+        {:noreply, socket}
+
+      false ->
+        {:noreply, put_flash(socket, :error, gettext("That file is not part of this item"))}
+    end
+  end
+
+  defp owns_media_file?(socket, media_file_id) when is_binary(media_file_id) do
+    socket.assigns.media_item
+    |> all_media_files()
+    |> Enum.any?(&(&1.id == media_file_id))
+  end
+
+  defp owns_media_file?(_socket, _media_file_id), do: false
+
+  defp selected_media_file_id(socket) do
+    case socket.assigns.selected_media_file do
+      %{id: id} -> id
+      _ -> nil
+    end
+  end
+
+  defp deletable_track_on_page?(socket, subtitle_id) do
+    socket.assigns.media_file_subtitle_tracks
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.any?(&(&1.origin != :embedded and to_string(&1.track_id) == subtitle_id))
   end
 
   defp store_offset(socket, media_file_id, track_ref, offset_ms) do

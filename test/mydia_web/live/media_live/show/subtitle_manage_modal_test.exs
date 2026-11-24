@@ -30,8 +30,29 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleManageModalTest do
     }
   end
 
-  defp modal(tracks) do
-    render_component(&SubtitleModal.subtitle_manage_modal/1, media_file: file(), tracks: tracks)
+  defp modal(tracks, can_edit \\ true) do
+    render_component(&SubtitleModal.subtitle_manage_modal/1,
+      media_file: file(),
+      tracks: tracks,
+      can_edit: can_edit
+    )
+  end
+
+  describe "for a role that cannot update media" do
+    test "lists the tracks with no controls or actions" do
+      html = modal([track(track_id: "sub-uuid", offset_ms: 250)], false)
+
+      assert html =~ "English"
+      assert html =~ ~s|id="subtitle-offset-mf-1-sub-uuid"|
+      refute html =~ "subtitle-offset-form-"
+      refute html =~ ~s|phx-click="delete_subtitle"|
+      refute html =~ ~s|phx-click="resync_subtitle"|
+      refute html =~ ~s|id="subtitle-manage-actions"|
+    end
+
+    test "omits the offset note for a track with no correction" do
+      refute modal([track(track_id: 1)], false) =~ "subtitle-offset-mf-1-1"
+    end
   end
 
   test "names the file it is managing" do
