@@ -273,13 +273,18 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   defp creates?(adapter, client_config, input) do
     case TorrentFetch.prepared_info_hash(input) do
       nil -> false
-      hash -> not match?({:ok, _}, Client.get_status(adapter, config_to_map(client_config), hash))
+      hash -> absent?(Client.get_status(adapter, config_to_map(client_config), hash))
     end
   rescue
     _error -> false
   catch
     :exit, _reason -> false
   end
+
+  # Only an explicit not-found proves absence; a status that failed any other
+  # way (refused, timed out, server error) leaves it unknown.
+  defp absent?({:error, %Client.Error{type: :not_found}}), do: true
+  defp absent?(_status), do: false
 
   # A selection that keeps every file leaves `only_files` nil, but the add
   # still names every listed file: rqbit keeps an older, narrower selection on

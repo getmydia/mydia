@@ -47,7 +47,18 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
     def test_connection(_config), do: {:ok, %{version: "1.0.0", api_version: "1.0"}}
     @impl true
     # `{__MODULE__, :held}` names the hashes the client already holds.
+    # `{__MODULE__, :status_down}` makes the status lookup fail with a
+    # connection error.
     def get_status(_config, client_id) do
+      if :persistent_term.get({__MODULE__, :status_down}, false),
+        do: throw({:status, {:error, Error.connection_failed("refused")}})
+
+      do_get_status(client_id)
+    catch
+      {:status, result} -> result
+    end
+
+    defp do_get_status(client_id) do
       if client_id in :persistent_term.get({__MODULE__, :held}, []),
         do:
           {:ok,
@@ -79,6 +90,7 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
       :persistent_term.erase({RecordingAdapter, :on_add})
       :persistent_term.erase({RecordingAdapter, :on_remove})
       :persistent_term.erase({RecordingAdapter, :held})
+      :persistent_term.erase({RecordingAdapter, :status_down})
 
       if previous,
         do: Registry.register(:transmission, previous),
@@ -130,6 +142,21 @@ defmodule Mydia.Downloads.Queue.UndoOrphanAddTest do
     # rollback must not take it or its data.
     test "keeps a torrent the client already held untracked before the add" do
       :persistent_term.put({RecordingAdapter, :held}, [String.duplicate("a", 40)])
+      gone = media_item_fixture(%{type: "movie", title: "The Glass Meadow"})
+      :persistent_term.put({RecordingAdapter, :on_add}, fn -> Repo.delete!(gone) end)
+
+      capture_log(fn ->
+        assert {:error, _reason} = Queue.initiate_download(result(), media_item_id: gone.id)
+      end)
+
+      assert_received :added
+      refute_received {:removed, _, _}
+    end
+
+    # Only a not-found answer proves the client lacked the torrent. Any other
+    # failure leaves it unknown, and unknown is treated as held.
+    test "keeps the torrent when the client could not say whether it held it" do
+      :persistent_term.put({RecordingAdapter, :status_down}, true)
       gone = media_item_fixture(%{type: "movie", title: "The Glass Meadow"})
       :persistent_term.put({RecordingAdapter, :on_add}, fn -> Repo.delete!(gone) end)
 
