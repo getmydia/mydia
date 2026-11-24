@@ -100,7 +100,7 @@ defmodule Mydia.Library.FileNamer do
       sanitize_title(media_item.title),
       if(media_item.year, do: "(#{media_item.year})", else: nil),
       "- S#{season}E#{ep_num} -",
-      sanitize_title(episode.title),
+      episode.title && sanitize_title(episode.title),
       build_quality_tag(quality_info),
       build_audio_tag(quality_info.audio),
       build_hdr_tag(quality_info),
@@ -213,13 +213,20 @@ defmodule Mydia.Library.FileNamer do
   defp extract_release_group(filename) do
     # Release group is usually after the last hyphen
     # Example: "Movie.1080p.BluRay.x264-GROUP" -> "GROUP"
+    #
+    # A tail with whitespace or brackets is not a group: it is the rest of an
+    # already formatted name ("Show - S01E01 - [1080p] [h264]"), and treating it
+    # as one makes every rename of a canonical file append a fresh suffix.
     case String.split(filename, "-") do
       parts when length(parts) > 1 ->
-        parts
-        |> List.last()
-        |> String.trim()
-        # Remove common extensions that might be included
-        |> String.replace(~r/\.(mkv|mp4|avi)$/i, "")
+        group =
+          parts
+          |> List.last()
+          |> String.trim()
+          # Remove common extensions that might be included
+          |> String.replace(~r/\.(mkv|mp4|avi)$/i, "")
+
+        if group =~ ~r/[\s\[\]]/, do: nil, else: group
 
       _ ->
         nil
