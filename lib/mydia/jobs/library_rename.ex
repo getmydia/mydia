@@ -7,7 +7,8 @@ defmodule Mydia.Jobs.LibraryRename do
   `:library_rename_progress` (at most once per media item) and
   `:library_rename_completed`. Completion is broadcast on failure too, with an
   `:error` reason (`:library_unavailable` for a deleted or unmounted library
-  path), so a waiting UI never hangs.
+  path, `:busy` while a `Mydia.Jobs.SidecarCleanup` of the same library
+  executes), so a waiting UI never hangs.
   """
 
   use Oban.Worker,
@@ -19,9 +20,12 @@ defmodule Mydia.Jobs.LibraryRename do
       states: [:available, :scheduled, :executing, :retryable, :suspended]
     ]
 
+  import Ecto.Query, warn: false
+
   require Logger
 
   alias Mydia.Library.BulkRename
+  alias Mydia.Repo
   alias Mydia.Settings
 
   defmodule Args do
@@ -54,6 +58,7 @@ defmodule Mydia.Jobs.LibraryRename do
     end
 
     with {:ok, library_path} <- fetch_library_path(library_path_id),
+         :ok <- check_idle(library_path_id),
          {:ok, counts} <- BulkRename.run(library_path, on_progress: on_progress) do
       Logger.info("Library rename completed", Map.to_list(counts))
       broadcast(:library_rename_completed, Map.put(counts, :library_path_id, library_path_id))
@@ -94,6 +99,20 @@ defmodule Mydia.Jobs.LibraryRename do
     {:ok, Settings.get_library_path!(id)}
   rescue
     Ecto.NoResultsError -> {:error, :library_unavailable}
+  end
+
+  # A cleanup of the same library could take a sidecar whose video is between
+  # names; JSON operators differ across adapters, so args are matched here.
+  defp check_idle(library_path_id) do
+    busy? =
+      from(j in Oban.Job,
+        where: j.worker == ^inspect(Mydia.Jobs.SidecarCleanup) and j.state == "executing",
+        select: j.args
+      )
+      |> Repo.all()
+      |> Enum.any?(&(&1["library_path_id"] == library_path_id))
+
+    if busy?, do: {:error, :busy}, else: :ok
   end
 
   defp broadcast(event, payload), do: Phoenix.PubSub.broadcast(@pubsub, @topic, {event, payload})

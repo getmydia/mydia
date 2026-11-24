@@ -166,4 +166,23 @@ defmodule MydiaWeb.AdminLibraryPathsMaintenanceTest do
     assert html =~ "Cleanup skipped: a rename or move is running on this library"
     refute html =~ "Cleanup failed"
   end
+
+  test "a busy rename flashes that it was skipped", %{view: view, lp: lp} do
+    send(
+      view.pid,
+      {:library_rename_completed,
+       %{
+         library_path_id: lp.id,
+         renamed: 0,
+         unchanged: 0,
+         conflicts: 0,
+         errors: 0,
+         error: :busy
+       }}
+    )
+
+    html = render(view)
+    assert html =~ "Rename skipped: a cleanup is running on this library"
+    refute html =~ "Rename failed"
+  end
 end

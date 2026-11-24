@@ -117,7 +117,7 @@ defmodule Mydia.Library.SidecarCleanup do
         |> Enum.group_by(&Path.dirname/1)
         |> Enum.flat_map(fn {dir, dir_paths} ->
           orphans = MapSet.new(dir_orphans(dir, dir_paths, root, trash))
-          Enum.map(dir_paths, &move_if_orphan(&1, orphans, root, container))
+          Enum.map(dir_paths, &move_if_orphan(&1, orphans, root, trash, container))
         end)
 
       moved = for {:moved, path} <- results, do: path
@@ -131,13 +131,20 @@ defmodule Mydia.Library.SidecarCleanup do
     end
   end
 
-  defp move_if_orphan(path, orphans, root, container) do
-    if MapSet.member?(orphans, path) and move(path, root, container) == :ok do
+  # The batch verdict can be stale by the time a file's turn comes (a rename
+  # may have given its video the name since), so each move re-checks the
+  # directory with a fresh listing. Orphans are few; the cost is small.
+  defp move_if_orphan(path, orphans, root, trash, container) do
+    if MapSet.member?(orphans, path) and still_orphan?(path, root, trash) and
+         move(path, root, container) == :ok do
       {:moved, path}
     else
       {:kept, path}
     end
   end
+
+  defp still_orphan?(path, root, trash),
+    do: path in dir_orphans(Path.dirname(path), [path], root, trash)
 
   @doc """
   Whether `path` is an orphaned sidecar of the library path. False whenever
@@ -206,10 +213,21 @@ defmodule Mydia.Library.SidecarCleanup do
   # The orphans among `paths` (absolute, all in `dir`). An unlistable
   # directory has none.
   defp dir_orphans(dir, paths, root, trash) do
-    case File.ls(dir) do
-      {:ok, entries} -> orphans_in(dir, entries, Enum.map(paths, &Path.basename/1), root, trash)
-      {:error, _} -> []
+    with true <- plain_chain?(dir, root),
+         {:ok, entries} <- File.ls(dir) do
+      orphans_in(dir, entries, Enum.map(paths, &Path.basename/1), root, trash)
+    else
+      _ -> []
     end
+  end
+
+  # Whether every directory from `root` (exclusive) down to `dir` is a real
+  # directory, not a symlink: a link inside the library could lead anywhere.
+  defp plain_chain?(root, root), do: true
+
+  defp plain_chain?(dir, root) do
+    under?(dir, root) and match?({:ok, %File.Stat{type: :directory}}, File.lstat(dir)) and
+      plain_chain?(Path.dirname(dir), root)
   end
 
   # The orphans among `candidates` (basenames) of one directory listing.
@@ -340,6 +358,10 @@ defmodule Mydia.Library.SidecarCleanup do
       :ok ->
         case File.rm(source) do
           :ok ->
+            :ok
+
+          # Already gone: the goal state (bytes only at the destination) holds.
+          {:error, :enoent} ->
             :ok
 
           {:error, _} = error ->

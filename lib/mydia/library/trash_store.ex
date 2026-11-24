@@ -738,21 +738,19 @@ defmodule Mydia.Library.TrashStore do
     end
   end
 
+  # Regular-file bytes under `path`, nested directories included; symlinks are not followed.
   defp bytes_in(path) do
     case File.ls(path) do
-      {:ok, entries} ->
-        entries
-        |> Enum.map(&Path.join(path, &1))
-        |> Enum.map(fn entry ->
-          case File.stat(entry) do
-            {:ok, %{size: size, type: :regular}} -> size
-            _ -> 0
-          end
-        end)
-        |> Enum.sum()
+      {:ok, entries} -> entries |> Enum.map(&entry_bytes(Path.join(path, &1))) |> Enum.sum()
+      _ -> 0
+    end
+  end
 
-      _ ->
-        0
+  defp entry_bytes(entry) do
+    case File.lstat(entry) do
+      {:ok, %{type: :directory}} -> bytes_in(entry)
+      {:ok, %{type: :regular, size: size}} -> size
+      _ -> 0
     end
   end
 

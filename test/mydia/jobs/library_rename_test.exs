@@ -52,6 +52,19 @@ defmodule Mydia.Jobs.LibraryRenameTest do
                     }}
   end
 
+  test "an executing sidecar cleanup of the library refuses as busy", ctx do
+    Phoenix.PubSub.subscribe(Mydia.PubSub, "library_scanner")
+
+    %{"library_path_id" => ctx.lp.id, "paths" => []}
+    |> Oban.Job.new(worker: Mydia.Jobs.SidecarCleanup)
+    |> Ecto.Changeset.change(state: "executing")
+    |> Repo.insert!()
+
+    assert {:error, :busy} = perform_job(LibraryRename, %{"library_path_id" => ctx.lp.id})
+    assert_receive {:library_rename_completed, %{renamed: 0, errors: 0, error: :busy}}
+    assert File.exists?(Path.join(ctx.root, "paper.comet.junk.mkv"))
+  end
+
   # Oban does not run in test (`engine: false`), so `enqueue/1` cannot insert.
   # Assert the job it would insert instead.
   test "enqueue builds a media-queue job keyed on the library path", ctx do

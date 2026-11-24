@@ -58,6 +58,8 @@ defmodule Mydia.Library.SidecarCleanupTest do
   end
 
   test "artwork and item nfos are never orphans", %{lp: lp, root: root} do
+    touch(root, Path.join(@show, "Quiet Orchard - S01E01 - Pilot.mkv"))
+
     for name <- ["tvshow.nfo", "poster.jpg", "season01-poster.jpg", "fanart.jpg", "season.nfo"] do
       touch(root, Path.join(@show, name))
     end
@@ -114,11 +116,13 @@ defmodule Mydia.Library.SidecarCleanupTest do
     File.mkdir_p!(Path.join(root, "folder.nfo.d/x.nfo"))
     refute SidecarCleanup.orphan?(Path.join(root, "folder.nfo.d/x.nfo"), lp)
 
+    touch(tmp_dir, "outside/Other.mkv")
     outside = touch(tmp_dir, "outside/old.nfo")
     refute SidecarCleanup.orphan?(outside, lp)
   end
 
   test "a trash directory inside the library is never walked or touched", %{lp: lp, root: root} do
+    touch(root, Path.join(TrashStore.dir_name(), "x/Quiet Orchard - S01E01 - Pilot.mkv"))
     kept = touch(root, Path.join(TrashStore.dir_name(), "x/old.nfo"))
 
     assert listed(lp) == []
@@ -293,5 +297,21 @@ defmodule Mydia.Library.SidecarCleanupTest do
   test "a missing library root is unavailable", %{lp: lp, root: root} do
     File.rm_rf!(root)
     assert {:error, :library_unavailable} = SidecarCleanup.preview(lp)
+  end
+
+  test "nothing under a symlinked directory is moved or listed", %{
+    lp: lp,
+    root: root,
+    tmp_dir: tmp_dir
+  } do
+    touch(tmp_dir, "elsewhere/Other.mkv")
+    nfo = touch(tmp_dir, "elsewhere/old.name.nfo")
+    File.ln_s!(Path.join(tmp_dir, "elsewhere"), Path.join(root, "linked"))
+    via_link = Path.join([root, "linked", "old.name.nfo"])
+
+    assert listed(lp) == []
+    refute SidecarCleanup.orphan?(via_link, lp)
+    assert {:ok, %{moved: 0, kept: 1, container: nil}} = SidecarCleanup.run(lp, [via_link])
+    assert File.exists?(nfo)
   end
 end

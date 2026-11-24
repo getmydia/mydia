@@ -99,6 +99,14 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Maintenance do
       |> update(:rename_progress, &Map.delete(&1, id))
 
     case result do
+      %{error: :busy} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           gettext("Rename skipped: a cleanup is running on this library")
+         )}
+
       %{error: reason} ->
         {:noreply,
          put_flash(
