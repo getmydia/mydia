@@ -45,7 +45,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.MaintenanceModals do
             <h4 class="font-semibold text-sm mb-2">
               {gettext("These files will be skipped")}
             </h4>
-            <ul class="text-sm space-y-1 max-h-40 overflow-y-auto">
+            <ul class="text-sm space-y-1 sm:max-h-40 sm:overflow-y-auto">
               <li :for={{item, reason} <- preview.conflicts} class="break-all">
                 <span class="font-mono">{item.current_filename}</span>
                 <span class="text-base-content/60">
@@ -57,7 +57,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.MaintenanceModals do
 
           <div :if={preview.sample != []} id="bulk-rename-sample">
             <h4 class="font-semibold text-sm mb-2">{gettext("Sample")}</h4>
-            <ul class="text-sm space-y-2 max-h-72 overflow-y-auto">
+            <ul class="text-sm space-y-2 sm:max-h-72 sm:overflow-y-auto">
               <li :for={item <- preview.sample} class="break-all">
                 <div class="font-mono text-base-content/60">{item.current_filename}</div>
                 <div class="font-mono">
@@ -112,7 +112,7 @@ defmodule MydiaWeb.AdminLibraryPathsLive.MaintenanceModals do
               {preview.destination}
             </span>
           </p>
-          <div id="sidecar-cleanup-folders" class="space-y-3 max-h-80 overflow-y-auto text-sm">
+          <div id="sidecar-cleanup-folders" class="space-y-3 sm:max-h-80 sm:overflow-y-auto text-sm">
             <div :for={{dir, paths} <- preview.folders}>
               <div class="font-mono font-semibold break-all">{dir}</div>
               <ul class="font-mono text-base-content/70 break-all">

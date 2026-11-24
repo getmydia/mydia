@@ -107,13 +107,7 @@ defmodule Mydia.Library.SidecarCleanup do
         |> Enum.filter(&is_binary/1)
         |> Enum.map(&Path.expand/1)
         |> Enum.uniq()
-        |> Enum.map(fn path ->
-          if orphan?(path, library_path) and move(path, root, container) == :ok do
-            {:moved, path}
-          else
-            {:kept, path}
-          end
-        end)
+        |> Enum.map(&move_if_orphan(&1, library_path, root, container))
 
       moved = for {:moved, path} <- results, do: path
 
@@ -123,6 +117,14 @@ defmodule Mydia.Library.SidecarCleanup do
          kept: length(results) - length(moved),
          container: if(moved == [], do: nil, else: container)
        }}
+    end
+  end
+
+  defp move_if_orphan(path, library_path, root, container) do
+    if orphan?(path, library_path) and move(path, root, container) == :ok do
+      {:moved, path}
+    else
+      {:kept, path}
     end
   end
 

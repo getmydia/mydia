@@ -389,13 +389,9 @@ defmodule Mydia.Library.TrashStore do
   `MYDIA_TRASH_DIR` says.
   """
   @spec root_for(MediaFile.t()) :: String.t() | nil
-  def root_for(%MediaFile{library_path: %{} = library_path}), do: root_for_library(library_path)
-  def root_for(%MediaFile{}), do: nil
+  def root_for(%MediaFile{library_path: library_path}), do: root_for_library(library_path)
 
-  @doc """
-  The trash root `root_for/1` gives any file of the library path, for callers
-  that have no media file (the sidecar cleanup).
-  """
+  @doc "The trash root of a library path, for callers with no media file."
   @spec root_for_library(Mydia.Settings.LibraryPath.t() | map()) :: String.t() | nil
   def root_for_library(%{path: "s3://" <> _ = path}), do: Path.join(path, @dir_name)
 
@@ -633,10 +629,7 @@ defmodule Mydia.Library.TrashStore do
   @spec audit() :: %{retained: [map()], orphaned: [map()]}
   def audit do
     containers = Enum.flat_map(roots(), &containers_in/1)
-
-    # Only UUID-named containers can belong to a media file. Others (the
-    # sidecar cleanup's `sidecar-cleanup-<ts>`) are never looked up: PostgreSQL
-    # raises on casting them to the `:binary_id` primary key.
+    # Non-UUID containers (`sidecar-cleanup-<ts>`) are never looked up: Postgres raises on them.
     ids = for %{id: id} <- containers, match?({:ok, _}, Ecto.UUID.cast(id)), do: id
 
     rows =

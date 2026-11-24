@@ -114,9 +114,13 @@ A re-run is idempotent: canonical files preview as unchanged.
   explicit deny list (`tvshow.nfo`, `movie.nfo`, `season.nfo`,
   `season\d+-*`, `poster.*`, `fanart.*`, `folder.*`, `banner.*`,
   `clearlogo.*`, `landscape.*`) as a second line of defence.
-- No **video file on disk** in the same directory claims it under the
-  sidecar prefix rule. Checking disk rather than `media_files` rows means a
-  video the scanner has not picked up yet still protects its sidecars.
+- It sits in a directory that holds a file with a scanner video extension,
+  and no regular non-sidecar-form file in that directory claims it. A file
+  claims a sidecar when the sidecar's name starts with the file's root,
+  compared case-insensitively. So an `.iso`, `.strm` or `VIDEO_TS.IFO` protects
+  its sidecars too, while `Subs/` folders and directories without a video are
+  never touched. Checking disk rather than `media_files` rows means a video
+  the scanner has not picked up yet still protects its sidecars.
 - It is not a subtitle Mydia tracks (a path recorded by the subtitle
   reconciliation in `Mydia.Subtitles.Sidecars`).
 - It is under the library path and outside every directory the scanner skips
@@ -133,17 +137,15 @@ A re-run is idempotent: canonical files preview as unchanged.
   library>`. The trash root is the one `Mydia.Library.TrashStore` uses for
   this library (`root_for/1`'s rule), so the move is a same-filesystem
   `rename(2)`, and the scanner never sees the container.
-- After moving, it removes each directory the run emptied, walking upward,
-  stopping at the first non-empty directory and never removing the library
-  root or a directory above an item folder (`ItemFolders`/`PathAnchor`).
-  "Empty" means no entries at all.
+- There is no directory pruning. Under the eligibility rule every orphan sits
+  in a directory that still holds a video, so a run never empties a directory.
 - Local libraries only in the first version. On an S3 library the action is
-  hidden; `Storage` has no directory pruning and object listings make the
-  disk-claim rule expensive.
+  hidden; object listings make the disk-claim rule expensive.
 
 **Retention and restore.** A `sidecar-cleanup-*` container has no
-`media_files` row, so `TrashStore.audit/0` already reports it as orphaned and
-the Trash admin page can sweep it. Restoring is a manual move back; the
+`media_files` row, so `TrashStore.audit/0` reports it as orphaned (it
+classifies non-UUID containers like this one as orphaned without querying
+them) and the Trash admin page can sweep it. Restoring is a manual move back; the
 preview and the completion message both say where the files went. This is
 deliberate: these are files Mydia never read, and a restore flow is not worth
 building for them.
@@ -195,9 +197,21 @@ All fixtures use invented titles.
 - `SidecarCleanup`: orphan classification; artwork and item NFOs spared;
   tracked subtitles spared; sidecars of an unscanned video on disk spared;
   run-time re-check after a video appears; files land under the trash
-  container with relative paths preserved; empty directories pruned and the
-  item folder and library root never removed; `TrashStore.audit/0` reports
-  the container.
+  container with relative paths preserved; `Subs/` folders and video-less
+  directories untouched; `.iso`/`.strm` protect their sidecars;
+  `TrashStore.audit/0` reports the container.
 - Both Oban workers via `perform_job`, including uniqueness.
 - LiveView tests for both modals: preview renders, confirm enqueues the job,
   completion broadcast updates the row.
+
+## Changes during implementation
+
+- Cleanup's orphan rule: a directory is eligible only if it holds a file with
+  a scanner video extension; in it, any regular non-sidecar-form file claims
+  sidecars by root, case-insensitively. `Subs/` folders and video-less
+  directories are never touched, and `.iso`/`.strm` protect their sidecars.
+- There is no directory pruning, because it is unreachable under that rule.
+- `TrashStore.audit/0` classifies non-UUID containers (like
+  `sidecar-cleanup-<ts>`) as orphaned without querying them.
+- `FileNamer` no longer reads a canonical name's bracketed tail as a release
+  group, so a name such as `-GROUP[tracker]` is kept whole.
