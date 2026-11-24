@@ -23,7 +23,7 @@ defmodule Mydia.Media.Recommendations do
   alias Mydia.Media.RemoteFilter
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
-  alias Mydia.Metadata.Structs.SearchResult
+  alias Mydia.Metadata.Structs.{RecommendationPools, SearchResult}
 
   @media_types %{"movie" => :movie, "tv_show" => :tv_show}
 
@@ -41,7 +41,9 @@ defmodule Mydia.Media.Recommendations do
   Returns recommendations for a library item, or `:none`.
 
   Results are filtered for `scope` before ranking, so a restricted account still
-  gets a full rail instead of a short or empty one after the cap.
+  gets a full rail instead of a short or empty one after the cap. When the
+  filter leaves fewer than a full rail, TMDB's similar titles top it up; see
+  `fetch/4`.
 
   `config` is the relay configuration; it defaults to
   `Metadata.default_relay_config/0` and exists so tests can inject a stub without
@@ -115,13 +117,25 @@ defmodule Mydia.Media.Recommendations do
     case Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, tmdb_id},
            media_type: media_type
          ) do
-      {:ok, []} ->
+      {:ok, %RecommendationPools{recommendations: []}} ->
         :none
 
-      {:ok, results} when is_list(results) ->
-        case results |> RemoteFilter.filter(scope) |> rank() do
+      {:ok, %RecommendationPools{recommendations: results, similar: similar}} ->
+        allowed = RemoteFilter.filter(results, scope)
+        ranked = rank(allowed)
+
+        # Backfill only when the scope removed something. An unrestricted rail
+        # stays exactly TMDB's recommendations, however short; a restricted one
+        # is not left with two cards because most of TMDB's twenty were rated
+        # above the viewer's limit (#1507).
+        rail =
+          if length(allowed) < length(results) and length(ranked) < @rail_limit,
+            do: ranked ++ backfill(similar, results, scope),
+            else: ranked
+
+        case Enum.take(rail, @rail_limit) do
           [] -> :none
-          ranked -> {:ok, ranked}
+          capped -> {:ok, capped}
         end
 
       {:error, reason} ->
@@ -131,6 +145,20 @@ defmodule Mydia.Media.Recommendations do
 
         :none
     end
+  end
+
+  # TMDB's similar titles (genre and keyword overlap) are a weaker signal than
+  # its recommendations, so they only ever follow them. Anything already in the
+  # recommendation pool is dropped, allowed or not: an allowed one is on the
+  # rail already, and a blocked one would only be refused again.
+  defp backfill(similar, recommended, scope) do
+    seen = MapSet.new(recommended, & &1.provider_id)
+
+    similar
+    |> Enum.reject(&MapSet.member?(seen, &1.provider_id))
+    |> Enum.uniq_by(& &1.provider_id)
+    |> RemoteFilter.filter(scope)
+    |> rank()
   end
 
   defp mean_rating(results) do

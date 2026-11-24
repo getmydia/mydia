@@ -42,15 +42,19 @@ defmodule Mydia.MetadataCacheHelpers do
 
   `results` are raw TMDB result maps with string keys, for example
   `%{"id" => 123, "title" => "X", "release_date" => "2005-01-01"}`.
+
+  Options: `:similar`, raw results for TMDB's `similar` pool, which arrives in
+  the same response and is cached with the recommendations (default `[]`).
   """
-  def warm_recommendations_cache(tmdb_id, media_type, results) do
+  def warm_recommendations_cache(tmdb_id, media_type, results, opts \\ []) do
+    similar = Keyword.get(opts, :similar, [])
     bypass = Bypass.open()
     relay = Metadata.default_relay_config()
     config = %{relay | base_url: "http://localhost:#{bypass.port}"}
 
     on_exit(fn ->
       Cache.delete(
-        "recommendations:#{relay.type}:#{tmdb_id}:#{media_type}:#{relay.options.language}"
+        "recommendations:v2:#{relay.type}:#{tmdb_id}:#{media_type}:#{relay.options.language}"
       )
     end)
 
@@ -66,7 +70,8 @@ defmodule Mydia.MetadataCacheHelpers do
           "results" => results,
           "total_pages" => 1,
           "total_results" => length(results)
-        }
+        },
+        "similar" => %{"page" => 1, "results" => similar}
       }
 
       conn
