@@ -13,11 +13,11 @@ The host hands `on-event` a typed `event` record:
 | Field | Type | Notes |
 |-------|------|-------|
 | `event` | `string` | The event name, such as `media_item.added`. |
-| `category` | `option<string>` | `media`, `downloads` or `playback`. |
+| `category` | `option<string>` | `media`, `downloads`, `playback` or `requests`. |
 | `severity` | `option<string>` | `info` or `error` when the event sets one. |
 | `actor-type` | `option<string>` | `user`, `system` or `job`. |
 | `actor-id` | `option<string>` | The user id, or the name of the job or system actor. |
-| `resource-type` | `option<string>` | What the event concerns: `media_item`, `episode` or `download`. |
+| `resource-type` | `option<string>` | What the event concerns: `media_item`, `episode`, `download` or `media_request`. |
 | `resource-id` | `option<string>` | The id of that resource. |
 | `metadata-json` | `string` | A JSON object string with two keys, `metadata` and `config`. |
 
@@ -31,7 +31,9 @@ empty.
 ## Delivery rules
 
 - The host delivers an event to every enabled instance of each plugin that
-  subscribed to it.
+  subscribed to it. A plugin that declares an
+  [`events` setting](manifest.md#choosing-events-per-instance) delivers it only
+  to the instances whose selection includes the event.
 - Events are delivered after they are recorded, off the request that caused
   them. A slow or failing plugin never delays other plugins or the action.
 - The dispatcher never delivers an event back to the plugin that caused it. An
@@ -55,6 +57,9 @@ empty.
 | [`media_file.imported`](#media_fileimported) | A media file is imported for an item. | `file_path`, `resolution`, `codec`, `size`, `media_title`, `media_type` | 0.12.0 |
 | [`download.completed`](#downloadcompleted) | A download finishes. | `title`, `download_client`, `download_id`, optional media context | 0.12.0 |
 | [`download.failed`](#downloadfailed) | A download fails. | `title`, `download_client`, `download_id`, `error_message`, optional media context and failure classification | 0.12.0 |
+| [`media_request.created`](#media_requestcreated) | A user requests a movie or show. | `title`, `year`, `media_type`, `tmdb_id`, `requester`, optional `requester_notes` | 0.20.0 |
+| [`media_request.approved`](#media_requestapproved) | A request is approved, by an admin or automatically. | `title`, `year`, `media_type`, `tmdb_id`, `requester`, `auto`, optional `approved_by`, `requester_notes` | 0.20.0 |
+| [`media_request.rejected`](#media_requestrejected) | An admin rejects a request. | `title`, `year`, `media_type`, `tmdb_id`, `requester`, optional `approved_by`, `requester_notes`, `rejection_reason` | 0.20.0 |
 | [`playback.started`](#playbackstarted) | A user starts a streaming session. | `media_item_id` or `episode_id`, `origin` | 0.12.0 |
 | [`playback.progressed`](#playbackprogressed) | A progress write crosses a 5% completion bucket. | Playback fields | 0.12.0 |
 | [`playback.paused`](#playbackpaused) | Reserved. Nothing emits it yet. | Playback fields | 0.12.0 |
@@ -102,6 +107,50 @@ Recorded with category `media`, resource type `media_item`.
 | `media_type` | string | `movie` or `tv_show`. |
 
 <!-- source: lib/mydia/events.ex:489-503 -->
+
+### media_request.created
+
+Recorded with category `requests`, resource type `media_request`, actor `user`
+(the requester). Guests never see request events.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `title` | string | The requested title. |
+| `year` | integer | Release year. Absent when unknown. |
+| `media_type` | string | `movie` or `tv_show`. |
+| `tmdb_id` | integer | TMDB id. Absent when unknown. |
+| `requester` | string | The requester's display name, or their username when they have none. |
+| `requester_notes` | string | The note the requester left. Absent when they left none. |
+
+Fields with no value are left out of `metadata` rather than sent as `null`.
+
+### media_request.approved
+
+Recorded with category `requests`, resource type `media_request`. The actor is
+the approving admin (`user`), or `system` for an automatic approval.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `title`, `year`, `media_type`, `tmdb_id`, `requester` | | As in [`media_request.created`](#media_requestcreated). |
+| `auto` | boolean | `true` when auto-approval approved the request. |
+| `approved_by` | string | The approving admin's display name. Absent for auto-approval. |
+
+When an approval links a request to a title already in the library, any other
+pending requests for that title are approved with it, and each one emits its own
+event.
+
+### media_request.rejected
+
+Recorded with category `requests`, resource type `media_request`, actor `user`
+(the rejecting admin).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `title`, `year`, `media_type`, `tmdb_id`, `requester` | | As in [`media_request.created`](#media_requestcreated). |
+| `approved_by` | string | The rejecting admin's display name. The name is the same field used for approvals. |
+| `rejection_reason` | string | The reason the admin gave. Absent when none was given. |
+
+Withdrawing a request emits no event.
 
 ### media_file.imported
 
