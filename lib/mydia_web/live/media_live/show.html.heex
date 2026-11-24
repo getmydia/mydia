@@ -576,6 +576,7 @@
     <SubtitleModal.subtitle_manage_modal
       media_file={@selected_media_file}
       tracks={@manage_tracks}
+      can_edit={@can_update_media}
     />
   <% end %>
   <%= if @show_category_modal && @category_form do %>

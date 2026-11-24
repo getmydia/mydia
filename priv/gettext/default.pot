@@ -71,7 +71,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:15
 #: lib/mydia_web/live/collection_live/components.ex:145
 #: lib/mydia_web/live/collection_live/preset_components.ex:124
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:447
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:456
 #: lib/mydia_web/live/profile_live/index.html.heex:252
 #, elixir-autogen, elixir-format
 msgid "Language"
@@ -246,7 +246,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:145
 #: lib/mydia_web/live/media_live/show/poster_picker.ex:360
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:96
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:507
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:516
 #: lib/mydia_web/live/plugin_setup_live/modal.ex:259
 #: lib/mydia_web/live/profile_live/index.html.heex:587
 #: lib/mydia_web/live/profile_live/passkeys_component.ex:292
@@ -691,7 +691,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/modals.ex:487
 #: lib/mydia_web/live/media_live/show/modals.ex:521
 #: lib/mydia_web/live/media_live/show/modals.ex:679
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:213
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:225
 #: lib/mydia_web/live/search_live/index.ex:770
 #: lib/mydia_web/live/search_live/index.ex:782
 #: lib/mydia_web/live/search_live/index.ex:1345
@@ -912,7 +912,7 @@ msgid "Display Name"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:379
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:406
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:415
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:346
 #: lib/mydia_web/live/search_live/index.html.heex:631
 #: lib/mydia_web/live/search_live/index.html.heex:657
@@ -1783,7 +1783,7 @@ msgid_plural "%{count} dismissed, %{skipped} skipped"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:387
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:396
 #, elixir-autogen, elixir-format
 msgid "%{count} download"
 msgid_plural "%{count} downloads"
@@ -2187,7 +2187,7 @@ msgstr ""
 msgid "%{downloaded}/%{total} episodes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:538
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:547
 #, elixir-autogen, elixir-format
 msgid "%{failed} of %{total} providers failed"
 msgstr ""
@@ -2420,7 +2420,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/download_components.ex:91
 #: lib/mydia_web/live/media_live/show/download_components.ex:110
 #: lib/mydia_web/live/media_live/show/modals.ex:888
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:216
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:225
 #, elixir-autogen, elixir-format
 msgid "+%{count} more"
 msgstr ""
@@ -2575,7 +2575,7 @@ msgstr ""
 msgid "Add a path mapping"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:280
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:289
 #, elixir-autogen, elixir-format
 msgid "Add a provider before searching. Nothing is enabled and healthy right now."
 msgstr ""
@@ -2839,7 +2839,7 @@ msgstr ""
 msgid "Already downloading"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:227
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:239
 #, elixir-autogen, elixir-format
 msgid "Already in sync"
 msgstr ""
@@ -3085,12 +3085,12 @@ msgstr ""
 msgid "Auto-populate based on filter rules"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:174
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:186
 #, elixir-autogen, elixir-format
 msgid "Auto-sync"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:172
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:184
 #, elixir-autogen, elixir-format
 msgid "Auto-sync this subtitle to the audio"
 msgstr ""
@@ -3364,7 +3364,7 @@ msgstr ""
 msgid "Checking folders…"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:273
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:328
 #, elixir-autogen, elixir-format
 msgid "Checking for subtitle files on disk..."
 msgstr ""
@@ -3381,7 +3381,7 @@ msgstr ""
 msgid "Checking…"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:340
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:406
 #, elixir-autogen, elixir-format
 msgid "Choose a file first"
 msgstr ""
@@ -3396,7 +3396,7 @@ msgstr ""
 msgid "Choose country"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:244
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:253
 #, elixir-autogen, elixir-format
 msgid "Choose one or more languages"
 msgstr ""
@@ -3473,7 +3473,7 @@ msgstr ""
 msgid "Clear search"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:176
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:185
 #, elixir-autogen, elixir-format
 msgid "Clear selected languages"
 msgstr ""
@@ -3566,8 +3566,8 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/picker_modals.ex:202
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:31
 #: lib/mydia_web/live/media_live/show/rename_modal.ex:64
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:51
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:158
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:55
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:167
 #: lib/mydia_web/live/my_requests_live/index.html.heex:159
 #: lib/mydia_web/live/plugin_setup_live/modal.ex:269
 #: lib/mydia_web/live/search_live/index.html.heex:652
@@ -3705,7 +3705,7 @@ msgstr ""
 msgid "Configure library paths"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:285
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:294
 #, elixir-autogen, elixir-format
 msgid "Configure providers"
 msgstr ""
@@ -3898,7 +3898,7 @@ msgstr ""
 msgid "Could not load this row."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:228
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:240
 #, elixir-autogen, elixir-format
 msgid "Could not match the audio confidently"
 msgstr ""
@@ -3914,7 +3914,7 @@ msgstr ""
 msgid "Could not read %{clients}. This list may be incomplete."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:448
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:554
 #, elixir-autogen, elixir-format
 msgid "Could not read that file's directory: %{reason}"
 msgstr ""
@@ -4021,7 +4021,7 @@ msgstr ""
 msgid "Could not start the connection. Please try again."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:249
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:302
 #, elixir-autogen, elixir-format
 msgid "Could not start the re-sync."
 msgstr ""
@@ -4354,12 +4354,12 @@ msgstr ""
 msgid "Delete selected downloads?"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:193
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:205
 #, elixir-autogen, elixir-format
 msgid "Delete subtitle"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:192
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:204
 #, elixir-autogen, elixir-format
 msgid "Delete this subtitle file?"
 msgstr ""
@@ -4847,7 +4847,7 @@ msgstr ""
 msgid "Every file in this library is linked."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:292
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:301
 #, elixir-autogen, elixir-format
 msgid "Every provider failed"
 msgstr ""
@@ -4877,7 +4877,7 @@ msgstr ""
 msgid "Everything released between 2020 and 2029."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:351
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:360
 #, elixir-autogen, elixir-format
 msgid "Exact match"
 msgstr ""
@@ -4993,7 +4993,7 @@ msgstr ""
 msgid "Failed to delete media file"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:190
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:238
 #, elixir-autogen, elixir-format
 msgid "Failed to delete subtitle: %{reason}"
 msgstr ""
@@ -5214,7 +5214,7 @@ msgstr ""
 msgid "Favorites"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:35
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:46
 #, elixir-autogen, elixir-format
 msgid "Fetching subtitles for season %{number}..."
 msgstr ""
@@ -5347,7 +5347,7 @@ msgstr ""
 msgid "FlareSolverr: unknown"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:462
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:471
 #, elixir-autogen, elixir-format
 msgid "Forced"
 msgstr ""
@@ -5524,7 +5524,7 @@ msgstr ""
 msgid "Healthy"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:466
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:475
 #, elixir-autogen, elixir-format
 msgid "Hearing impaired"
 msgstr ""
@@ -5728,7 +5728,7 @@ msgstr ""
 msgid "In your country"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:356
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:365
 #, elixir-autogen, elixir-format
 msgid "Includes hearing impaired captions"
 msgstr ""
@@ -6751,12 +6751,12 @@ msgstr ""
 msgid "No provider match"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:230
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:242
 #, elixir-autogen, elixir-format
 msgid "No readable audio track"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:232
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:244
 #, elixir-autogen, elixir-format
 msgid "No readable subtitle timings"
 msgstr ""
@@ -6812,17 +6812,17 @@ msgstr ""
 msgid "No season packs"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:277
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:286
 #, elixir-autogen, elixir-format
 msgid "No subtitle providers configured"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:61
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:65
 #, elixir-autogen, elixir-format
 msgid "No subtitle tracks for this file yet."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:319
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:328
 #, elixir-autogen, elixir-format
 msgid "No subtitles found"
 msgstr ""
@@ -6990,12 +6990,12 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:206
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:255
 #, elixir-autogen, elixir-format
 msgid "Offset must be a whole number of milliseconds"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:410
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:516
 #, elixir-autogen, elixir-format
 msgid "Offset must be between -%{max} and %{max} milliseconds"
 msgstr ""
@@ -7045,7 +7045,7 @@ msgstr ""
 msgid "Online now"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:521
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:530
 #, elixir-autogen, elixir-format
 msgid "Only .srt, .ass, .ssa and .vtt files are accepted"
 msgstr ""
@@ -7753,12 +7753,12 @@ msgstr ""
 msgid "Re-scanning series: discovering new files and refreshing metadata..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:233
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:245
 #, elixir-autogen, elixir-format
 msgid "Re-sync failed"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:246
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:299
 #, elixir-autogen, elixir-format
 msgid "Re-syncing this subtitle in the background."
 msgstr ""
@@ -8152,12 +8152,12 @@ msgid "Requesting..."
 msgstr ""
 
 #: lib/mydia_web/live/downloads_live/index.html.heex:662
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:100
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:109
 #, elixir-autogen, elixir-format
 msgid "Rescan"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:425
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:531
 #, elixir-autogen, elixir-format
 msgid "Rescan complete: %{adopted} adopted, %{removed} removed"
 msgstr ""
@@ -8211,7 +8211,7 @@ msgstr[1] ""
 msgid "Restored to pending."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:229
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:241
 #, elixir-autogen, elixir-format
 msgid "Result was out of range"
 msgstr ""
@@ -8260,8 +8260,8 @@ msgstr[1] ""
 #: lib/mydia_web/live/downloads_live/index.html.heex:170
 #: lib/mydia_web/live/downloads_live/issue_components.ex:306
 #: lib/mydia_web/live/media_live/show/poster_picker/tabs.ex:54
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:267
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:305
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:276
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:314
 #: lib/mydia_web/live/search_live/index.html.heex:469
 #, elixir-autogen, elixir-format
 msgid "Retry"
@@ -8344,7 +8344,7 @@ msgstr ""
 msgid "S%{season}E%{episode} - %{title}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:484
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:493
 #, elixir-autogen, elixir-format
 msgid "SRT, ASS, SSA or VTT, up to 2 MB"
 msgstr ""
@@ -8457,7 +8457,7 @@ msgstr ""
 msgid "Score"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:371
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:380
 #, elixir-autogen, elixir-format
 msgid "Score %{score}"
 msgstr ""
@@ -8482,7 +8482,7 @@ msgstr ""
 msgid "Search Media"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:146
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:155
 #, elixir-autogen, elixir-format
 msgid "Search Subtitles"
 msgstr ""
@@ -8546,7 +8546,7 @@ msgid "Search downloads"
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/event_text.ex:62
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:258
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:267
 #, elixir-autogen, elixir-format
 msgid "Search failed"
 msgstr ""
@@ -8652,7 +8652,7 @@ msgstr ""
 msgid "Search your library or add a new title..."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:231
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:240
 #, elixir-autogen, elixir-format
 msgid "Searching"
 msgstr ""
@@ -9004,7 +9004,7 @@ msgid_plural "Show %{count} more devices"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:218
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:227
 #, elixir-autogen, elixir-format
 msgid "Show fewer"
 msgstr ""
@@ -9022,7 +9022,7 @@ msgid "Show on posters"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:143
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:369
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:378
 #, elixir-autogen, elixir-format
 msgid "Show score breakdown"
 msgstr ""
@@ -9032,12 +9032,12 @@ msgstr ""
 msgid "Show status"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:136
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:148
 #, elixir-autogen, elixir-format
 msgid "Show subtitles 100 ms earlier"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:157
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:169
 #, elixir-autogen, elixir-format
 msgid "Show subtitles 100 ms later"
 msgstr ""
@@ -9311,46 +9311,46 @@ msgstr ""
 msgid "Submit a series request"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:169
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:217
 #, elixir-autogen, elixir-format
 msgid "Subtitle deleted successfully"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:534
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:546
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:640
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:652
 #, elixir-autogen, elixir-format
 msgid "Subtitle download failed: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:499
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:605
 #, elixir-autogen, elixir-format
 msgid "Subtitle downloaded successfully"
 msgstr ""
 
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:64
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:320
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:171
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:180
 #, elixir-autogen, elixir-format
 msgid "Subtitle languages"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:147
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:159
 #, elixir-autogen, elixir-format
 msgid "Subtitle offset in milliseconds"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:455
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:561
 #, elixir-autogen, elixir-format
 msgid "Subtitle rescan failed unexpectedly"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:363
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:429
 #, elixir-autogen, elixir-format
 msgid "Subtitle uploaded"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/components.ex:597
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:39
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:43
 #, elixir-autogen, elixir-format
 msgid "Subtitles"
 msgstr ""
@@ -9409,7 +9409,7 @@ msgstr ""
 msgid "Sync now"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:226
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:238
 #, elixir-autogen, elixir-format
 msgid "Synced automatically"
 msgstr ""
@@ -9539,7 +9539,7 @@ msgstr ""
 msgid "That episode is not part of the selected show. Search again."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:524
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:533
 #, elixir-autogen, elixir-format
 msgid "That file could not be accepted"
 msgstr ""
@@ -9549,12 +9549,12 @@ msgstr ""
 msgid "That file is already being imported or deleted"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:518
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:527
 #, elixir-autogen, elixir-format
 msgid "That file is larger than 2 MB"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:555
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:564
 #, elixir-autogen, elixir-format
 msgid "That file is no longer in the library."
 msgstr ""
@@ -9627,8 +9627,8 @@ msgstr ""
 
 #: lib/mydia_web/live/downloads_live/match_dialog.ex:251
 #: lib/mydia_web/live/import_media_live/index.ex:728
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:149
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:158
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:168
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:187
 #, elixir-autogen, elixir-format
 msgid "That result is no longer available. Search again."
 msgstr ""
@@ -9721,12 +9721,12 @@ msgstr ""
 msgid "The relay could not be reached, so entering a code by hand will not work. Scan the QR code above instead, or try again in a moment."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:564
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:573
 #, elixir-autogen, elixir-format
 msgid "The search could not be completed. Check the server logs for details."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:561
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:570
 #, elixir-autogen, elixir-format
 msgid "The search failed unexpectedly. Check the server logs for details."
 msgstr ""
@@ -9736,7 +9736,7 @@ msgstr ""
 msgid "The selection changed since you confirmed. Check the new count before deleting."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:247
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:256
 #, elixir-autogen, elixir-format
 msgid "Then run a search to see what your providers have for this file."
 msgstr ""
@@ -9793,7 +9793,7 @@ msgstr ""
 msgid "This download imported one file, so it maps to a single episode."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:558
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:567
 #, elixir-autogen, elixir-format
 msgid "This file has no hash or metadata IDs to search with."
 msgstr ""
@@ -9982,7 +9982,7 @@ msgstr ""
 msgid "Today"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:231
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:243
 #, elixir-autogen, elixir-format
 msgid "Too few subtitle lines to match reliably"
 msgstr ""
@@ -10239,18 +10239,18 @@ msgid "Updated the match for this group."
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/poster_picker.ex:304
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:91
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:509
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:100
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:518
 #, elixir-autogen, elixir-format
 msgid "Upload"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:436
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:445
 #, elixir-autogen, elixir-format
 msgid "Upload a subtitle"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:523
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:532
 #, elixir-autogen, elixir-format
 msgid "Upload one file at a time"
 msgstr ""
@@ -10572,7 +10572,7 @@ msgstr ""
 msgid "Your personal media management system"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:322
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:331
 #, elixir-autogen, elixir-format
 msgid "Your providers answered but had nothing for this file. Try more languages."
 msgstr ""
@@ -10655,7 +10655,7 @@ msgstr ""
 msgid "between"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:598
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:704
 #, elixir-autogen, elixir-format
 msgid "check the server logs for details."
 msgstr ""
@@ -10940,32 +10940,32 @@ msgstr ""
 msgid "start a GitHub discussion"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:556
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:662
 #, elixir-autogen, elixir-format
 msgid "that file is no longer in the library."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:571
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:677
 #, elixir-autogen, elixir-format
 msgid "that provider returned an invalid language code."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:574
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:680
 #, elixir-autogen, elixir-format
 msgid "that subtitle format is not supported."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:595
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:701
 #, elixir-autogen, elixir-format
 msgid "that subtitle is in %{format} format, which Mydia cannot use."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:580
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:686
 #, elixir-autogen, elixir-format
 msgid "that subtitle is no longer available from the provider."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:559
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:665
 #, elixir-autogen, elixir-format
 msgid "the file's location on disk could not be resolved."
 msgstr ""
@@ -10976,37 +10976,37 @@ msgstr ""
 msgid "the metadata service could not be reached"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:577
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:683
 #, elixir-autogen, elixir-format
 msgid "the provider did not return everything needed to download it."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:583
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:689
 #, elixir-autogen, elixir-format
 msgid "the provider rate limited the request. Try again shortly."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:589
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:695
 #, elixir-autogen, elixir-format
 msgid "the provider rejected the request. Check its credentials."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:592
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:698
 #, elixir-autogen, elixir-format
 msgid "the provider sent a file that is not a subtitle."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:586
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:692
 #, elixir-autogen, elixir-format
 msgid "the subtitle provider is unavailable right now."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:562
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:668
 #, elixir-autogen, elixir-format
 msgid "there is already a subtitle for that language. Delete it first."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_events.ex:566
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:672
 #, elixir-autogen, elixir-format
 msgid "this file shares its filename with another file in the same folder. Try downloading from that file instead."
 msgstr ""
@@ -11255,7 +11255,7 @@ msgctxt "filters"
 msgid "Clear filters"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:359
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:368
 #, elixir-autogen, elixir-format
 msgctxt "hearing impaired abbreviation"
 msgid "HI"
@@ -11728,8 +11728,8 @@ msgstr ""
 #: lib/mydia_web/live/components/manual_search_modal_component.ex:62
 #: lib/mydia_web/live/discover_live/index.html.heex:30
 #: lib/mydia_web/live/media_live/show/components.ex:122
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:82
-#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:233
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:91
+#: lib/mydia_web/live/media_live/show/subtitle_modal.ex:242
 #: lib/mydia_web/live/search_live/index.html.heex:50
 #, elixir-autogen, elixir-format
 msgctxt "search"
@@ -11861,25 +11861,25 @@ msgctxt "smart rule field"
 msgid "Type"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:204
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:216
 #, elixir-autogen, elixir-format
 msgctxt "subtitle origin"
 msgid "Downloaded"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:203
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:215
 #, elixir-autogen, elixir-format
 msgctxt "subtitle origin"
 msgid "Embedded"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:205
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:217
 #, elixir-autogen, elixir-format
 msgctxt "subtitle origin"
 msgid "Sidecar"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/subtitle_components.ex:206
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:218
 #, elixir-autogen, elixir-format
 msgctxt "subtitle origin"
 msgid "Uploaded"
@@ -22590,4 +22590,19 @@ msgstr ""
 #: lib/mydia_web/live/activity_live/index.ex:432
 #, elixir-autogen, elixir-format
 msgid "custom poster"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/subtitle_components.ex:130
+#, elixir-autogen, elixir-format
+msgid "Offset %{offset} ms"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:465
+#, elixir-autogen, elixir-format
+msgid "That file is not part of this item"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/subtitle_events.ex:203
+#, elixir-autogen, elixir-format
+msgid "That subtitle is not part of this item"
 msgstr ""
