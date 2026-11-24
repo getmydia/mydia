@@ -109,22 +109,26 @@ A plugin with no `events` field skips the filter entirely and behaves exactly
 as today. Filtering happens before `Notifier.Delivery.enqueue/3`, so an
 unselected event creates no Oban job.
 
-### Seeding new instances
+### Seeding new installs
 
-Every path that creates a plugin instance writes the `events` key with the full
-`events:subscribe` list when the manifest declares an `events` field. The plan
-must enumerate those paths (operator "add instance", bundled default-instance
-creation, any first-enable path) and confirm that upgrading an install does not
-re-create an existing default instance, which would silently widen it.
+The `events` type is limited to single-instance plugins: multi-instance plugins
+have no plugin-level settings form, so the field would have no UI. Manifest
+validation rejects it there.
+
+Single-instance settings live on the plugin config and are mirrored into the
+default instance, and the settings modal reads the config. So seeding happens
+where a config row is first created: bundled first discovery
+(`seed_bundled/2`) and catalog install (`persist_install/4`), each writing the
+full `events:subscribe` list when the key is absent. Upgrading an install goes
+through `reconcile_bundled/3`, which does not seed, so existing notifiers keep
+the field's `default`.
 
 ### Grants
 
-The notifier's widened `events:subscribe` is a capability change. The plan must
-confirm that bundled reconciliation (`effective_grants/2` via `approve/2`)
-re-grants it automatically and the notifier does not land in
-`needs_reapproval?/1`. If it would, that is a bug to fix in the same change,
-since a bundled plugin the operator never installed by hand cannot ask them to
-re-approve.
+The notifier's widened `events:subscribe` is a capability change. Bundled
+reconciliation (`refresh_bundled_state/3`) already replaces the grant with
+`effective_grants/2` of the shipped manifest, so the notifier is re-granted on
+upgrade and never lands in `needs_reapproval?/1`. A test pins this.
 
 ### UI
 
