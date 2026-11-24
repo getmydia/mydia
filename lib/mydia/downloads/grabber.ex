@@ -124,7 +124,15 @@ defmodule Mydia.Downloads.Grabber do
   defp attach_to_client(download, search_result, opts) do
     case Queue.select_and_add_to_client(search_result, opts) do
       {:ok, client_config, client_id, _detected_type, selection} ->
-        finalize_success(download, client_config.name, client_id, selection, opts)
+        was_tracked? = Queue.ClientSelection.tracked?(client_config.name, client_id)
+        result = finalize_success(download, client_config.name, client_id, selection, opts)
+
+        # The row never got the torrent's id, so nothing would remove it; see
+        # `Queue.ClientSelection.undo_add/3`.
+        if result != :ok,
+          do: Queue.ClientSelection.undo_add(client_config, client_id, was_tracked?)
+
+        result
 
       {:error, reason} ->
         fail_grab(download, reason)
@@ -147,7 +155,7 @@ defmodule Mydia.Downloads.Grabber do
           # row the operator already removed would resurrect it in the UI as an
           # error they cannot clear.
           Logger.warning(
-            "Download row removed mid-grab; the torrent is in the client but is no longer tracked",
+            "Download row removed mid-grab; removing the torrent it added",
             download_id: download.id
           )
 

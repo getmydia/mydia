@@ -597,6 +597,50 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
     end)
   end
 
+  @doc false
+  # Whether a download row tracks this torrent. Read right after the add and
+  # before the row is saved, it says whether the client already held the
+  # torrent for someone else (an add of a known hash returns the existing one).
+  @spec tracked?(String.t(), String.t()) :: boolean()
+  def tracked?(client_name, client_id) do
+    Download
+    |> where([d], d.download_client == ^client_name and d.download_client_id == ^client_id)
+    |> Repo.exists?()
+  end
+
+  @doc false
+  # A grab adds the torrent before it saves the row that tracks it. When the
+  # save fails, most often because the item or the row was deleted mid-grab,
+  # nothing else will ever remove that torrent: the delete only cancels the
+  # torrents its rows name. So the add is undone here, data included, since
+  # the torrent is seconds old and nobody wants it. `was_tracked?` (see
+  # `tracked?/2`) keeps a torrent some other row already owned before the add.
+  # Best effort: a client that refuses is logged and the grab's error stands.
+  @spec undo_add(map(), String.t(), boolean()) :: :ok
+  def undo_add(_client_config, _client_id, true = _was_tracked?), do: :ok
+
+  def undo_add(client_config, client_id, false = _was_tracked?) do
+    with {:ok, adapter} <- get_adapter_for_client(client_config),
+         :ok <-
+           Client.remove_download(adapter, config_to_map(client_config), client_id,
+             delete_files: true
+           ) do
+      Logger.info("Removed a torrent whose download record could not be saved",
+        client: client_config.name,
+        client_id: client_id
+      )
+    else
+      error ->
+        Logger.warning("Could not remove an untracked torrent after a failed grab",
+          client: client_config.name,
+          client_id: client_id,
+          reason: inspect(error)
+        )
+    end
+
+    :ok
+  end
+
   defp find_stale_download(client_name, client_id) do
     Download
     |> where([d], d.download_client == ^client_name and d.download_client_id == ^client_id)
