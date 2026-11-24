@@ -122,6 +122,9 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
   def event_phrase("playback.paused"), do: gettext("paused playback")
   def event_phrase("playback.finished"), do: gettext("finished playback")
   def event_phrase("playback.unwatched"), do: gettext("items marked unwatched")
+  def event_phrase("media_request.created"), do: gettext("new requests")
+  def event_phrase("media_request.approved"), do: gettext("approved requests")
+  def event_phrase("media_request.rejected"), do: gettext("rejected requests")
   def event_phrase(event), do: event
 
   # Sorted by class so lines inside a group have a stable order.

@@ -12291,7 +12291,7 @@ msgstr ""
 msgid "%{healthy}/%{total} healthy, %{unknown} checking"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:147
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:150
 #, elixir-autogen, elixir-format
 msgid "%{host} (private network)"
 msgstr ""
@@ -12317,7 +12317,7 @@ msgstr ""
 msgid "%{label}: %{movies}, %{episodes}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:233
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:236
 #, elixir-autogen, elixir-format
 msgid "%{list} and %{last}"
 msgstr ""
@@ -12348,7 +12348,7 @@ msgstr ""
 msgid "%{name} - Items"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:374
+#: lib/mydia_web/live/admin_plugins_live/index.ex:378
 #, elixir-autogen, elixir-format
 msgid "%{name} approved and activated."
 msgstr ""
@@ -12391,7 +12391,7 @@ msgstr ""
 msgid "%{name} logs"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:370
+#: lib/mydia_web/live/admin_plugins_live/index.ex:374
 #, elixir-autogen, elixir-format
 msgid "%{name} re-approved. Its newly requested capabilities are now granted."
 msgstr ""
@@ -12411,7 +12411,7 @@ msgstr ""
 msgid "%{name} settings"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:223
+#: lib/mydia_web/live/admin_plugins_live/index.ex:227
 #, elixir-autogen, elixir-format
 msgid "%{name} settings saved."
 msgstr ""
@@ -12456,12 +12456,12 @@ msgstr ""
 msgid "%{size} · Trashed %{age} · Purges %{due}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:311
+#: lib/mydia_web/live/admin_plugins_live/index.ex:315
 #, elixir-autogen, elixir-format
 msgid "%{slug} has no enabled instance to test."
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:319
+#: lib/mydia_web/live/admin_plugins_live/index.ex:323
 #, elixir-autogen, elixir-format
 msgid "%{slug} is not running — enable it first."
 msgstr ""
@@ -12695,7 +12695,7 @@ msgstr ""
 msgid "Accounts (%{count})"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:157
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:160
 #, elixir-autogen, elixir-format
 msgid "Accounts people link to it"
 msgstr ""
@@ -13808,7 +13808,7 @@ msgstr ""
 msgid "Configuration - Path Mappings"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:48
+#: lib/mydia_web/live/admin_plugins_live/index.ex:52
 #, elixir-autogen, elixir-format
 msgid "Configuration - Plugins"
 msgstr ""
@@ -14058,7 +14058,7 @@ msgstr ""
 msgid "Copy key"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:133
+#: lib/mydia_web/live/admin_plugins_live/index.ex:137
 #, elixir-autogen, elixir-format
 msgid "Could not activate: %{reason}"
 msgstr ""
@@ -14118,8 +14118,8 @@ msgstr ""
 msgid "Could not save account links for %{name}: %{reason}. The mapping was left unchanged."
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:202
-#: lib/mydia_web/live/admin_plugins_live/index.ex:207
+#: lib/mydia_web/live/admin_plugins_live/index.ex:206
+#: lib/mydia_web/live/admin_plugins_live/index.ex:211
 #, elixir-autogen, elixir-format
 msgid "Could not save permissions."
 msgstr ""
@@ -15754,7 +15754,7 @@ msgstr ""
 msgid "Items with more than one file to review"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:163
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:166
 #, elixir-autogen, elixir-format
 msgid "Its own page"
 msgstr ""
@@ -17084,7 +17084,7 @@ msgstr ""
 msgid "Permanently delete this file? This cannot be undone."
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:200
+#: lib/mydia_web/live/admin_plugins_live/index.ex:204
 #, elixir-autogen, elixir-format
 msgid "Permissions saved."
 msgstr ""
@@ -17700,7 +17700,7 @@ msgstr ""
 msgid "Removed %{key}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:157
+#: lib/mydia_web/live/admin_plugins_live/index.ex:161
 #, elixir-autogen, elixir-format
 msgid "Removed %{slug}."
 msgstr ""
@@ -18130,7 +18130,7 @@ msgstr ""
 msgid "Search users"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:154
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:157
 #, elixir-autogen, elixir-format
 msgid "Search your library as the person using it"
 msgstr ""
@@ -18501,7 +18501,7 @@ msgid_plural "Suggestions failing for %{count} people"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:166
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:169
 #, elixir-autogen, elixir-format
 msgid "Suggestions on each person's Home page"
 msgstr ""
@@ -18719,7 +18719,7 @@ msgstr ""
 msgid "Test"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:303
+#: lib/mydia_web/live/admin_plugins_live/index.ex:307
 #, elixir-autogen, elixir-format
 msgid "Test %{event} dispatched to %{slug}."
 msgstr ""
@@ -18882,7 +18882,7 @@ msgstr ""
 msgid "The scan failed. Check the server logs, then try again."
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:209
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:212
 #, elixir-autogen, elixir-format
 msgid "The server you enter in %{field}"
 msgstr ""
@@ -19362,7 +19362,7 @@ msgstr ""
 msgid "Update to v%{version}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:149
+#: lib/mydia_web/live/admin_plugins_live/index.ex:153
 #, elixir-autogen, elixir-format
 msgid "Updated %{slug}."
 msgstr ""
@@ -19718,7 +19718,7 @@ msgstr ""
 msgid "Your new API key"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:204
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:207
 #, elixir-autogen, elixir-format
 msgid "also reacts to %{events}"
 msgstr ""
@@ -19961,7 +19961,7 @@ msgstr ""
 msgid "items marked unwatched"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:181
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:184
 #, elixir-autogen, elixir-format
 msgid "keeps its own storage"
 msgstr ""
@@ -20044,7 +20044,7 @@ msgstr ""
 msgid "playback starting"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:201
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:204
 #, elixir-autogen, elixir-format
 msgid "reacts to %{events}"
 msgstr ""
@@ -20065,7 +20065,7 @@ msgstr ""
 msgid "removed titles"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:178
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:181
 #, elixir-autogen, elixir-format
 msgid "runs on a schedule"
 msgstr ""
@@ -20085,7 +20085,7 @@ msgstr ""
 msgid "sort.field '%{value}' is invalid"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:336
+#: lib/mydia_web/live/admin_plugins_live/index.ex:340
 #, elixir-autogen, elixir-format
 msgid "store lookup failed"
 msgstr ""
@@ -20110,12 +20110,12 @@ msgstr ""
 msgid "the mapping could not be saved"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:679
+#: lib/mydia_web/live/admin_plugins_live/index.ex:727
 #, elixir-autogen, elixir-format
 msgid "the plugin could not be saved"
 msgstr ""
 
-#: lib/mydia_web/live/admin_plugins_live/index.ex:678
+#: lib/mydia_web/live/admin_plugins_live/index.ex:726
 #, elixir-autogen, elixir-format
 msgid "the plugin source was removed. Reopen the store and try again"
 msgstr ""
@@ -22684,4 +22684,19 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgctxt "event category"
 msgid "requests"
+msgstr ""
+
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:126
+#, elixir-autogen, elixir-format
+msgid "approved requests"
+msgstr ""
+
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:125
+#, elixir-autogen, elixir-format
+msgid "new requests"
+msgstr ""
+
+#: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:127
+#, elixir-autogen, elixir-format
+msgid "rejected requests"
 msgstr ""
