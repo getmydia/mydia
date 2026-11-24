@@ -309,6 +309,90 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     assert %Status{vpn: {:down, :leak_detected}} = Status.get(ctx.status)
   end
 
+  describe "a reverify that cannot reach the relay" do
+    @unreachable {:error, {:leak_check_unreachable, "socket closed"}}
+
+    setup ctx do
+      gluetun(ctx.bypass, "running", 0)
+      Map.put(ctx, :reverify_ms, 0)
+    end
+
+    test "keeps the engine running below the limit and recovers on the next pass", ctx do
+      start_vpn(
+        ctx,
+        counting_leak_check(fn
+          n when n in [2, 3] -> @unreachable
+          _ -> :ok
+        end)
+      )
+
+      assert_receive {:leak_check, 5}, 1_000
+      refute_received {:engine_stop, {:leak_check_unreachable, _}}
+      assert %Status{vpn: {:up, _}} = Status.get(ctx.status)
+    end
+
+    test "stops the engine on the third in a row", ctx do
+      start_vpn(
+        ctx,
+        counting_leak_check(fn
+          1 -> :ok
+          _ -> @unreachable
+        end)
+      )
+
+      # The gate is one process, so by the time check 4 starts, everything the
+      # polls of checks 2 and 3 sent is already in the mailbox.
+      assert_receive {:leak_check, 4}, 1_000
+      refute_received {:engine_stop, {:leak_check_unreachable, _}}
+
+      assert_receive {:engine_stop, {:leak_check_unreachable, "socket closed"}}, 1_000
+      assert %Status{vpn: {:down, {:leak_check_unreachable, _}}} = Status.get(ctx.status)
+    end
+
+    test "is not tolerated on the first check", ctx do
+      start_vpn(ctx, counting_leak_check(fn _ -> @unreachable end))
+
+      assert_receive {:leak_check, 1}, 1_000
+      assert_receive {:engine_stop, {:leak_check_unreachable, _}}, 1_000
+      refute_received {:engine_start, _}
+    end
+
+    test "is not tolerated once the tunnel address changed", ctx do
+      agent = start_state("10.2.0.2")
+      ctx = Map.put(ctx, :tunnel_ip_fun, fn _interface -> {:ok, Agent.get(agent, & &1)} end)
+
+      start_vpn(
+        ctx,
+        counting_leak_check(fn
+          1 ->
+            Agent.update(agent, fn _ -> "10.2.0.9" end)
+            :ok
+
+          _ ->
+            @unreachable
+        end)
+      )
+
+      assert_receive {:leak_check, 2}, 1_000
+      assert_receive {:engine_stop, {:leak_check_unreachable, _}}, 1_000
+    end
+
+    test "does not soften a leak found on reverify", ctx do
+      start_vpn(
+        ctx,
+        counting_leak_check(fn
+          1 -> :ok
+          2 -> @unreachable
+          _ -> {:error, :leak_detected}
+        end)
+      )
+
+      assert_receive {:leak_check, 3}, 1_000
+      assert_receive {:engine_stop, :leak_detected}, 1_000
+      refute_received {:engine_stop, {:leak_check_unreachable, _}}
+    end
+  end
+
   test "an unreadable public address stops the engine without a leak check", ctx do
     Bypass.stub(ctx.bypass, "GET", "/v1/vpn/status", fn conn ->
       Plug.Conn.resp(conn, 200, ~s({"status":"running"}))

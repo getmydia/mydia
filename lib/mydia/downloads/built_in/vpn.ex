@@ -22,6 +22,11 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   # check.
   @reverify_ms 60_000
 
+  # A reverify that cannot reach the relay proves nothing either way, so the
+  # engine keeps running until this many in a row fail to reach it (about 30s
+  # at the 10s poll). See `unreachable/5`.
+  @unreachable_limit 3
+
   # How long a fresh Vpn waits for the root loop to apply the settings file
   # before reporting `:vpn_apply_timeout`. It keeps polling afterwards.
   @apply_timeout_ms 30_000
@@ -57,6 +62,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
           fn -> read_loop_status(dir) end
         end),
       verified: nil,
+      unreachable: 0,
       last_vpn: :connecting,
       last_port: nil
     }
@@ -197,11 +203,41 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
 
       _ ->
         case state.leak_check.(ip) do
-          :ok -> start_engine(req, ip, tunnel_ip, %{state | verified: {ip, tunnel_ip, now}})
-          {:error, reason} -> down(state, reason)
+          :ok ->
+            start_engine(req, ip, tunnel_ip, %{
+              state
+              | verified: {ip, tunnel_ip, now},
+                unreachable: 0
+            })
+
+          {:error, {:leak_check_unreachable, _} = reason} ->
+            unreachable(req, ip, tunnel_ip, reason, state)
+
+          {:error, reason} ->
+            down(state, reason)
         end
     end
   end
+
+  # Only a reverify is tolerated: gluetun reports running, and the public and
+  # tunnel addresses are the ones the last passed check saw. The engine is bound
+  # to the tunnel and gluetun's firewall drops its traffic if the tunnel goes,
+  # so a relay that does not answer is not evidence of a leak. `verified` keeps
+  # its old timestamp, so the next poll checks again. A first check, a changed
+  # address, or the limit reached fails closed.
+  defp unreachable(req, ip, tunnel_ip, {_, message}, %{verified: {ip, tunnel_ip, _}} = state)
+       when state.unreachable + 1 < @unreachable_limit do
+    count = state.unreachable + 1
+
+    Logger.warning(
+      "VPN leak check could not reach the relay (#{count} of #{@unreachable_limit}), " <>
+        "torrents keep running: #{message}"
+    )
+
+    start_engine(req, ip, tunnel_ip, %{state | unreachable: count})
+  end
+
+  defp unreachable(_req, _ip, _tunnel_ip, reason, state), do: down(state, reason)
 
   defp start_engine(req, ip, tunnel_ip, state) do
     state = put_vpn(state, {:up, %{provider: state.config.vpn_provider, public_ip: ip}})
@@ -257,7 +293,7 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   defp down(state, reason) do
     state = put_vpn(state, {:down, reason})
     call_engine(state, {:stop, reason})
-    %{state | verified: nil, last_port: nil}
+    %{state | verified: nil, unreachable: 0, last_port: nil}
   end
 
   # An engine that does not answer must not crash the gate: the next poll
