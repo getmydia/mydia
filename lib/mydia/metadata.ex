@@ -325,6 +325,10 @@ defmodule Mydia.Metadata do
   24 hours matches `fetch_collection_cached/3`. TMDB recommendations shift over
   weeks, and the relay caches upstream as well.
 
+  One relay response carries both of TMDB's pools and is cached whole, so the
+  `similar` pool costs no further request. `:pool` picks which one is returned:
+  `:recommendations` (the default) or `:similar`.
+
   ## Examples
 
       iex> config = Mydia.Metadata.default_relay_config()
@@ -340,13 +344,18 @@ defmodule Mydia.Metadata do
     media_type = Keyword.get(opts, :media_type, :movie)
     language = Keyword.get(opts, :language, config_language(config))
 
+    pool = Keyword.get(opts, :pool, :recommendations)
+
     cache_key = "recommendations:metadata_relay:#{id}:#{media_type}:#{language}"
 
-    Cache.fetch(
-      cache_key,
-      fn -> Relay.fetch_recommendations(config, to_string(id), opts) end,
-      ttl: :timer.hours(24)
-    )
+    case Cache.fetch(
+           cache_key,
+           fn -> Relay.fetch_recommendations(config, to_string(id), opts) end,
+           ttl: :timer.hours(24)
+         ) do
+      {:ok, %{^pool => results}} -> {:ok, results}
+      {:error, _} = error -> error
+    end
   end
 
   def fetch_recommendations_by_ref_cached(%{type: type}, {:tmdb, _id}, _opts)

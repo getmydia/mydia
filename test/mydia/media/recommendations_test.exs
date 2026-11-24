@@ -400,4 +400,89 @@ defmodule Mydia.Media.RecommendationsTest do
       assert Recommendations.for_ref({:tmdb, source}, :movie, scope) == :none
     end
   end
+
+  describe "backfilling from similar titles (#1507)" do
+    @pg %RemoteSignals{content_rating: "PG", age: 8, category: "movie"}
+    @r %RemoteSignals{content_rating: "R", age: 17, category: "movie"}
+
+    # Raw TMDB entries whose signals are pre-warmed, so filtering needs no relay.
+    defp entries(prefix, count, signals) do
+      for n <- 1..count//1 do
+        id = unique_provider_id()
+        warm_remote_signals({:tmdb, id}, :movie, signals)
+        %{"id" => id, "title" => "#{prefix} #{n}", "vote_average" => 6.0, "vote_count" => 100}
+      end
+    end
+
+    defp age_limited, do: Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+
+    test "a rail the restriction left short is topped up from similar titles" do
+      source = unique_provider_id()
+      recommended = entries("Kept", 2, @pg) ++ entries("Dropped", 10, @r)
+      similar = entries("Similar", 15, @pg)
+
+      warm_recommendations_cache(source, :movie, recommended, similar: similar)
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, age_limited())
+      assert length(rail) == 12
+      assert titles(Enum.take(rail, 2)) |> Enum.all?(&String.starts_with?(&1, "Kept"))
+      assert rail |> Enum.drop(2) |> titles() |> Enum.all?(&String.starts_with?(&1, "Similar"))
+    end
+
+    test "similar titles are filtered for the scope too" do
+      source = unique_provider_id()
+      recommended = entries("Kept", 1, @pg) ++ entries("Dropped", 1, @r)
+      similar = entries("Similar Blocked", 3, @r) ++ entries("Similar Allowed", 2, @pg)
+
+      warm_recommendations_cache(source, :movie, recommended, similar: similar)
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, age_limited())
+      assert titles(rail) == ["Kept 1", "Similar Allowed 1", "Similar Allowed 2"]
+    end
+
+    test "a title in both pools appears once" do
+      source = unique_provider_id()
+      [kept] = entries("Kept", 1, @pg)
+      recommended = [kept | entries("Dropped", 1, @r)]
+
+      warm_recommendations_cache(source, :movie, recommended, similar: [kept])
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, age_limited())
+      assert titles(rail) == ["Kept 1"]
+    end
+
+    test "a fully blocked recommendation list still renders from similar titles" do
+      source = unique_provider_id()
+
+      warm_recommendations_cache(source, :movie, entries("Dropped", 3, @r),
+        similar: entries("Similar", 2, @pg)
+      )
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, age_limited())
+      assert titles(rail) == ["Similar 1", "Similar 2"]
+    end
+
+    test "a rail the restriction did not shorten ignores similar titles" do
+      source = unique_provider_id()
+
+      warm_recommendations_cache(source, :movie, entries("Kept", 3, @pg),
+        similar: entries("Similar", 3, @pg)
+      )
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, age_limited())
+      assert titles(rail) == ["Kept 1", "Kept 2", "Kept 3"]
+    end
+
+    test "an unrestricted viewer never sees similar titles" do
+      source = unique_provider_id()
+      scope = Scope.for_user(user_fixture())
+
+      warm_recommendations_cache(source, :movie, entries("Kept", 2, @pg),
+        similar: entries("Similar", 3, @pg)
+      )
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, scope)
+      assert titles(rail) == ["Kept 1", "Kept 2"]
+    end
+  end
 end

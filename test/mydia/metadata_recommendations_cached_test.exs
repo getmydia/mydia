@@ -84,6 +84,39 @@ defmodule Mydia.MetadataRecommendationsCachedTest do
              )
   end
 
+  test "the similar pool is served from the same request as the recommendations", %{
+    bypass: bypass,
+    config: config,
+    tmdb_id: tmdb_id
+  } do
+    body =
+      tmdb_id
+      |> recommendations_body("Recommended Title")
+      |> Map.put("similar", %{
+        "page" => 1,
+        "results" => [%{"id" => 202, "title" => "Similar Title", "release_date" => "2019-01-01"}]
+      })
+
+    Bypass.expect_once(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+      json(conn, 200, body)
+    end)
+
+    ref = {:tmdb, String.to_integer(tmdb_id)}
+
+    assert {:ok, [recommended]} =
+             Metadata.fetch_recommendations_by_ref_cached(config, ref, media_type: :movie)
+
+    # Bypass.expect_once would fail on a second request.
+    assert {:ok, [similar]} =
+             Metadata.fetch_recommendations_by_ref_cached(config, ref,
+               media_type: :movie,
+               pool: :similar
+             )
+
+    assert recommended.title == "Recommended Title"
+    assert similar.title == "Similar Title"
+  end
+
   test "keys the cache by language", %{bypass: bypass, config: config, tmdb_id: tmdb_id} do
     Bypass.expect(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
       conn = Plug.Conn.fetch_query_params(conn)
