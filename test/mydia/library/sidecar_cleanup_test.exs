@@ -82,6 +82,7 @@ defmodule Mydia.Library.SidecarCleanupTest do
         relative_path: "elsewhere.mkv"
       })
 
+    touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.mkv"))
     path = touch(root, season_rel("old.name.S01E01.en.srt"))
     other = touch(root, season_rel("old.name.S01E02.en.srt"))
 
@@ -127,6 +128,7 @@ defmodule Mydia.Library.SidecarCleanupTest do
   end
 
   test "run re-checks: a video added after preview protects its sidecars", %{lp: lp, root: root} do
+    touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.mkv"))
     touch(root, season_rel("old.name.S01E01.nfo"))
     touch(root, season_rel("old.name.S01E01-thumb.jpg"))
 
@@ -143,7 +145,7 @@ defmodule Mydia.Library.SidecarCleanupTest do
     nfo = touch(root, season_rel("old.name.S01E01.nfo"), "nfo-body")
     {:ok, %{folders: [{_dir, paths}]}} = SidecarCleanup.preview(lp)
 
-    assert {:ok, %{moved: 1, kept: 0, pruned_dirs: 0, container: container}} =
+    assert {:ok, %{moved: 1, kept: 0, container: container}} =
              SidecarCleanup.run(lp, paths)
 
     refute File.exists?(nfo)
@@ -155,6 +157,7 @@ defmodule Mydia.Library.SidecarCleanupTest do
   end
 
   test "run only touches paths passed in, even if other orphans exist", %{lp: lp, root: root} do
+    touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.mkv"))
     a = touch(root, season_rel("a.name.S01E01.nfo"))
     b = touch(root, season_rel("b.name.S01E02.nfo"))
 
@@ -163,29 +166,42 @@ defmodule Mydia.Library.SidecarCleanupTest do
     assert File.exists?(b)
   end
 
-  test "pruning removes an emptied season folder but not the show folder or root",
-       %{lp: lp, root: root} do
-    touch(root, Path.join(@show, "tvshow.nfo"))
-    nfo = touch(root, Path.join([@show, "Season 9", "old.name.nfo"]))
+  test "a Subs folder beside a movie's video is not an orphan", %{lp: lp, root: root} do
+    touch(root, "Paper Comet (2019)/Paper Comet.mkv")
+    touch(root, "Paper Comet (2019)/Subs/English.srt")
 
-    assert {:ok, %{moved: 1, pruned_dirs: 1}} = SidecarCleanup.run(lp, [nfo])
-    refute File.exists?(Path.dirname(nfo))
-    assert File.dir?(Path.join(root, @show))
+    assert listed(lp) == []
   end
 
-  test "pruning stops at the show folder even when it is emptied, and keeps the root",
-       %{lp: lp, root: root} do
-    nfo = touch(root, Path.join([@show, "Season 9", "old.name.nfo"]))
+  test "an iso, strm or VIDEO_TS file protects its sidecars", %{lp: lp, root: root} do
+    touch(root, "Disc/Other.mkv")
+    touch(root, "Disc/Film.iso")
+    touch(root, "Disc/Film.nfo")
+    touch(root, "Disc/Film-thumb.jpg")
+    touch(root, "Disc/Stream.strm")
+    touch(root, "Disc/Stream.nfo")
+    touch(root, "Disc/VIDEO_TS.IFO")
+    touch(root, "Disc/VIDEO_TS.nfo")
 
-    assert {:ok, %{moved: 1, pruned_dirs: 1}} = SidecarCleanup.run(lp, [nfo])
-    assert File.dir?(Path.join(root, @show))
+    assert listed(lp) == []
+  end
 
-    loose = touch(root, "stray.nfo")
-    assert {:ok, %{moved: 1, pruned_dirs: 0}} = SidecarCleanup.run(lp, [loose])
-    assert File.dir?(root)
+  test "roots are compared case-insensitively", %{lp: lp, root: root} do
+    touch(root, season_rel("Glass Harbor.mkv"))
+    touch(root, season_rel("glass harbor.en.srt"))
+
+    assert listed(lp) == []
+  end
+
+  test "a directory without a video yields no orphans", %{lp: lp, root: root} do
+    nfo = touch(root, "Loose/old.name.nfo")
+
+    assert listed(lp) == []
+    refute SidecarCleanup.orphan?(nfo, lp)
   end
 
   test "TrashStore.audit reports the container as orphaned", %{lp: lp, root: root} do
+    touch(root, season_rel("Quiet Orchard - S01E01 - Pilot.mkv"))
     nfo = touch(root, season_rel("old.name.S01E01.nfo"))
     {:ok, %{container: container}} = SidecarCleanup.run(lp, [nfo])
 

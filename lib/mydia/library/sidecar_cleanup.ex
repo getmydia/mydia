@@ -16,7 +16,8 @@ defmodule Mydia.Library.SidecarCleanup do
 
     * is not item or season metadata (`tvshow.nfo`, `poster.*`, ...),
     * has a sidecar shape (`Sidecars.sidecar_form?/1`),
-    * is not claimed by any video file in the same directory, and
+    * sits in a directory holding a video file, and no regular non-sidecar file
+      there (video, `.iso`, `.strm`, `VIDEO_TS.IFO`, ...) claims it by name, and
     * is not a tracked `Subtitle` row.
 
   `run/2` re-checks `orphan?/2` for every path it is given, so a video added
@@ -27,7 +28,7 @@ defmodule Mydia.Library.SidecarCleanup do
 
   require Logger
 
-  alias Mydia.Library.{PathAnchor, Scanner, TrashStore}
+  alias Mydia.Library.{Scanner, TrashStore}
   alias Mydia.Library.LibraryMove.Sidecars
   alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
@@ -93,7 +94,6 @@ defmodule Mydia.Library.SidecarCleanup do
            %{
              moved: non_neg_integer(),
              kept: non_neg_integer(),
-             pruned_dirs: non_neg_integer(),
              container: String.t() | nil
            }}
           | {:error, error()}
@@ -121,7 +121,6 @@ defmodule Mydia.Library.SidecarCleanup do
        %{
          moved: length(moved),
          kept: length(results) - length(moved),
-         pruned_dirs: moved |> Enum.map(&prune(&1, root)) |> Enum.sum(),
          container: if(moved == [], do: nil, else: container)
        }}
     end
@@ -205,22 +204,43 @@ defmodule Mydia.Library.SidecarCleanup do
   end
 
   # The orphans among `candidates` (basenames) of one directory listing.
+  #
+  # A directory is only eligible when it holds a regular file with a video
+  # extension, so `Movie (2019)/Subs/English.srt` is never touched. Within an
+  # eligible directory any regular non-sidecar file (`.iso`, `.strm`,
+  # `VIDEO_TS.IFO`, ...) claims the sidecars named after it.
   defp orphans_in(dir, entries, candidates, root, trash) do
-    videos = Enum.filter(entries, &video?/1)
+    files = Enum.filter(entries, &regular?(Path.join(dir, &1)))
 
-    paths =
-      for name <- candidates,
-          name in entries,
-          not denied?(name),
-          Sidecars.sidecar_form?(name),
-          not Enum.any?(videos, &Sidecars.sidecar_name?(name, &1)),
-          path = Path.join(dir, name),
-          inside_library?(path, root, trash),
-          match?({:ok, %File.Stat{type: :regular}}, File.lstat(path)),
-          do: path
+    if Enum.any?(files, &video?/1) do
+      claimants = for name <- files, not Sidecars.sidecar_form?(name), do: Path.rootname(name)
 
-    tracked = tracked_subtitles(paths)
-    Enum.reject(paths, &MapSet.member?(tracked, &1))
+      paths =
+        for name <- candidates,
+            name in files,
+            not denied?(name),
+            Sidecars.sidecar_form?(name),
+            not Enum.any?(claimants, &claims?(&1, name)),
+            path = Path.join(dir, name),
+            inside_library?(path, root, trash),
+            do: path
+
+      tracked = tracked_subtitles(paths)
+      Enum.reject(paths, &MapSet.member?(tracked, &1))
+    else
+      []
+    end
+  end
+
+  defp regular?(path), do: match?({:ok, %File.Stat{type: :regular}}, File.lstat(path))
+
+  # Whether a file with root `claimant_root` claims `sidecar`: dot form
+  # (`<root>.<anything>`) or `<root>-thumb.<ext>`, case-insensitively.
+  defp claims?(claimant_root, sidecar) do
+    root = String.downcase(claimant_root)
+    lower = String.downcase(sidecar)
+
+    String.starts_with?(lower, root <> ".") or Path.rootname(lower) == root <> "-thumb"
   end
 
   defp tracked_subtitles([]), do: MapSet.new()
@@ -310,32 +330,6 @@ defmodule Mydia.Library.SidecarCleanup do
       {:error, _} = error ->
         _ = File.rm(destination)
         error
-    end
-  end
-
-  # Removes the directories a moved file left empty, climbing until the item
-  # folder (the anchor), the library root, or a non-empty directory. The
-  # anchor itself and everything above it are never removed.
-  defp prune(old_path, root) do
-    anchor =
-      case PathAnchor.anchor_for(old_path, root).anchor_path do
-        "" -> root
-        rel -> Path.join(root, rel)
-      end
-
-    old_path |> Path.dirname() |> prune_up(anchor, root, 0)
-  end
-
-  defp prune_up(dir, anchor, root, count) do
-    cond do
-      dir in [anchor, root] or not under?(dir, anchor) ->
-        count
-
-      File.ls(dir) == {:ok, []} and File.rmdir(dir) == :ok ->
-        prune_up(Path.dirname(dir), anchor, root, count + 1)
-
-      true ->
-        count
     end
   end
 end

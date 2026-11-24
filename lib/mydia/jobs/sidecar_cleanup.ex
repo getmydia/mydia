@@ -59,7 +59,6 @@ defmodule Mydia.Jobs.SidecarCleanup do
           library_path_id: library_path_id,
           moved: 0,
           kept: 0,
-          pruned_dirs: 0,
           error: reason
         })
 

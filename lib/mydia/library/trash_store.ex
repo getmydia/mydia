@@ -633,7 +633,11 @@ defmodule Mydia.Library.TrashStore do
   @spec audit() :: %{retained: [map()], orphaned: [map()]}
   def audit do
     containers = Enum.flat_map(roots(), &containers_in/1)
-    ids = Enum.map(containers, & &1.id)
+
+    # Only UUID-named containers can belong to a media file. Others (the
+    # sidecar cleanup's `sidecar-cleanup-<ts>`) are never looked up: PostgreSQL
+    # raises on casting them to the `:binary_id` primary key.
+    ids = for %{id: id} <- containers, match?({:ok, _}, Ecto.UUID.cast(id)), do: id
 
     rows =
       from(f in MediaFile, where: f.id in ^ids, select: {f.id, f.trashed_at, f.metadata})

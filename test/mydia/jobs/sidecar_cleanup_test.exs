@@ -28,6 +28,7 @@ defmodule Mydia.Jobs.SidecarCleanupTest do
     Phoenix.PubSub.subscribe(Mydia.PubSub, "library_scanner")
     nfo = Path.join(root, "old.name.nfo")
     File.write!(nfo, "x")
+    File.write!(Path.join(root, "Some Film.mkv"), "x")
 
     assert :ok = perform_job(SidecarCleanup, %{"library_path_id" => lp.id, "paths" => [nfo]})
 
@@ -43,8 +44,7 @@ defmodule Mydia.Jobs.SidecarCleanupTest do
     assert {:error, :library_unavailable} =
              perform_job(SidecarCleanup, %{"library_path_id" => missing, "paths" => []})
 
-    assert_receive {:sidecar_cleanup_completed,
-                    %{moved: 0, kept: 0, pruned_dirs: 0, error: :library_unavailable}}
+    assert_receive {:sidecar_cleanup_completed, %{moved: 0, kept: 0, error: :library_unavailable}}
   end
 
   test "enqueue builds a media-queue job with the paths", %{lp: lp} do
