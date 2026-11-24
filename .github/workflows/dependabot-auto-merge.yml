@@ -115,9 +115,15 @@ jobs:
           prs=""
           weblate_prs=""
           for author in app/dependabot app/hosted-weblate; do
+            # One author's failed lookup must not drop the other's PRs.
+            list_status=0
             found="$(gh pr list --author "$author" --state open \
                        --json number,headRefOid \
-                       --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")"
+                       --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number")" || list_status=$?
+            if [ "$list_status" -ne 0 ]; then
+              echo "Could not list $author pull requests (exit $list_status); skipping them." >&2
+              continue
+            fi
             if [ -n "$found" ]; then
               prs="${prs:+$prs$'\n'}$found"
               if [ "$author" = app/hosted-weblate ]; then
