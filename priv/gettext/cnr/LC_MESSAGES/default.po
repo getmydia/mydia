@@ -9,7 +9,7 @@
 ## effect: edit them in PO (.po) files instead.
 #
 msgid ""
-msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: cnr\nContent-Transfer-Encoding: 8bit\nLast-Translator: Tony <t00n1x@users.noreply.hosted.weblate.org>\nLanguage-Team: Montenegrin <https://hosted.weblate.org/projects/mydia/default/cnr/>\nPlural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;\nPO-Revision-Date: 2026-11-18 02:35+0000\nX-Generator: Weblate 2026.12.dev0\n"
+msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: cnr\nContent-Transfer-Encoding: 8bit\nLast-Translator: Tony <t00n1x@users.noreply.hosted.weblate.org>\nLanguage-Team: Montenegrin <https://hosted.weblate.org/projects/mydia/default/cnr/>\nPlural-Forms: nplurals=3; plural=n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2;\nPO-Revision-Date: 2026-11-22 01:24+0000\nX-Generator: Weblate 2026.12.dev0\n"
 
 #: lib/mydia_web/components/admin_list_components.ex:235
 #: lib/mydia_web/components/core_components.ex:332
@@ -1102,7 +1102,7 @@ msgstr "Ne"
 #: lib/mydia_web/live/search_live/index.html.heex:83
 #, elixir-autogen, elixir-format
 msgid "None"
-msgstr "Nijedan"
+msgstr "Nijedna"
 
 #: lib/mydia_web/live/profile_live/index.html.heex:309
 #, elixir-autogen, elixir-format
@@ -5581,7 +5581,7 @@ msgstr "Status ispravnosti klijenata, indeksera, medijskih servera, duplikata i 
 #: lib/mydia_web/live/admin_system_live/components.ex:97
 #, elixir-autogen, elixir-format
 msgid "Healthy"
-msgstr "Ispravno"
+msgstr "Ispravnan"
 
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:466
 #, elixir-autogen, elixir-format
@@ -10116,7 +10116,7 @@ msgstr "Ukupno serija"
 #: lib/mydia_web/live/dashboard_live/index.html.heex:92
 #, elixir-autogen, elixir-format
 msgid "Total storage used"
-msgstr "Ukupno iskorišćeno skladište"
+msgstr "Ukupno iskorišćeno prostora"
 
 #: lib/mydia_web/live/calendar_live/index.html.heex:8
 #, elixir-autogen, elixir-format
@@ -12406,12 +12406,12 @@ msgstr "%{from} -> %{to}"
 #: lib/mydia_web/status_labels.ex:177
 #, elixir-autogen, elixir-format
 msgid "%{healthy}/%{total} healthy"
-msgstr "%{healthy}/%{total} ispravno"
+msgstr "%{healthy}/%{total} ispravna"
 
 #: lib/mydia_web/status_labels.ex:169
 #, elixir-autogen, elixir-format
 msgid "%{healthy}/%{total} healthy, %{unknown} checking"
-msgstr "%{healthy}/%{total} ispravno, %{unknown} u provjeri"
+msgstr "%{healthy}/%{total} ispravna, %{unknown} u provjeri"
 
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:147
 #, elixir-autogen, elixir-format
@@ -14611,12 +14611,12 @@ msgstr "Klijenti za preuzimanje"
 #: lib/mydia_web/live/admin_download_clients_live/connection_fields_components.ex:235
 #, elixir-autogen, elixir-format
 msgid "Download Directory"
-msgstr "Direktorijum za preuzimanja"
+msgstr "Lokacija za preuzimanja"
 
 #: lib/mydia_web/live/admin_download_clients_live/connection_fields_components.ex:57
 #, elixir-autogen, elixir-format
 msgid "Download Directory (optional)"
-msgstr "Direktorijum za preuzimanja (opcionalno)"
+msgstr "Lokacija za preuzimanja (opcionalno)"
 
 #: lib/mydia_web/live/admin_settings_live/language_components.ex:20
 #, elixir-autogen, elixir-format
@@ -19424,7 +19424,7 @@ msgstr "Opozivanje..."
 #: lib/mydia_web/live/admin_system_live/components.ex:98
 #, elixir-autogen, elixir-format
 msgid "Unhealthy"
-msgstr "Neispravno"
+msgstr "Neispravan"
 
 #: lib/mydia_web/live/admin_indexers_live/cardigann_engine_events.ex:83
 #, elixir-autogen, elixir-format
@@ -20537,13 +20537,13 @@ msgstr "Onemogućeno"
 #, elixir-autogen, elixir-format
 msgctxt "health status"
 msgid "Healthy"
-msgstr "Ispravno"
+msgstr "Ispravan"
 
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:303
 #, elixir-autogen, elixir-format
 msgctxt "health status"
 msgid "Unhealthy"
-msgstr "Neispravno"
+msgstr "Neispravan"
 
 #: lib/mydia_web/live/admin_media_servers_live/components.ex:304
 #, elixir-autogen, elixir-format
