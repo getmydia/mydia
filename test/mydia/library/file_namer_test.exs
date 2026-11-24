@@ -89,6 +89,54 @@ defmodule Mydia.Library.FileNamerTest do
     end
   end
 
+  describe "release group extraction" do
+    @quality %{
+      resolution: "1080p",
+      source: "BluRay",
+      codec: "x264",
+      audio: nil,
+      hdr_format: nil,
+      proper: false,
+      repack: false
+    }
+
+    test "keeps a group that carries a tracker tag" do
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 1, title: "Pilot"},
+          @quality,
+          "Invented.Show.S01E01.1080p.BluRay.x264-ROVERS[rarbg].mkv"
+        )
+
+      assert String.ends_with?(result, "-ROVERS[rarbg].mkv")
+    end
+
+    test "a canonical episode name has no group and renames to itself" do
+      media_item = %{title: "Invented Show", year: 2020}
+      episode = %{season_number: 1, episode_number: 1, title: "Pilot"}
+
+      first = FileNamer.generate_episode_filename(media_item, episode, @quality, "x.mkv")
+      second = FileNamer.generate_episode_filename(media_item, episode, @quality, first)
+
+      assert second == first
+    end
+
+    test "a bracketed canonical name with no title is stable" do
+      name = "Invented Show (2020) - S01E01 - Title [WEBDL-1080p][x264].mkv"
+
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 1, title: nil},
+          @quality,
+          name
+        )
+
+      refute result =~ "Title [WEBDL-1080p][x264]-"
+    end
+  end
+
   describe "generate_episode_filename/4" do
     test "generates TRaSH-compatible filename for TV episode" do
       media_item = %{title: "Breaking Bad", year: 2008}

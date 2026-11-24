@@ -15,6 +15,8 @@ defmodule Mydia.Library.BulkRename do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
   alias Mydia.Library.{FileMove, FileRenamer, MediaFile}
   alias Mydia.Library.Structs.{BulkRenamePreview, RenamePreview}
   alias Mydia.Repo
@@ -91,8 +93,16 @@ defmodule Mydia.Library.BulkRename do
 
       true ->
         case FileRenamer.rename_file(file, preview.proposed_path) do
-          {:ok, _} -> Map.update!(acc, :renamed, &(&1 + 1))
-          {:error, _} -> Map.update!(acc, :errors, &(&1 + 1))
+          {:ok, _} ->
+            Map.update!(acc, :renamed, &(&1 + 1))
+
+          {:error, reason} ->
+            Logger.warning("Library rename failed for file",
+              file_id: preview.file_id,
+              reason: inspect(reason)
+            )
+
+            Map.update!(acc, :errors, &(&1 + 1))
         end
     end
   end
@@ -149,17 +159,13 @@ defmodule Mydia.Library.BulkRename do
     end)
   end
 
-  defp check_available(%LibraryPath{path: "s3://" <> _ = path}) do
-    with {:ok, source} <- Storage.at(path),
-         {:ok, _} <- Storage.stat(source) do
+  defp check_available(%LibraryPath{path: path} = library_path) when is_binary(path) do
+    with {:ok, location} <- Storage.location(library_path),
+         :ok <- Storage.validate(location) do
       :ok
     else
       _ -> {:error, :library_unavailable}
     end
-  end
-
-  defp check_available(%LibraryPath{path: path}) when is_binary(path) do
-    if File.dir?(path), do: :ok, else: {:error, :library_unavailable}
   end
 
   defp check_available(_), do: {:error, :library_unavailable}

@@ -226,7 +226,9 @@ defmodule Mydia.Library.FileNamer do
           # Remove common extensions that might be included
           |> String.replace(~r/\.(mkv|mp4|avi)$/i, "")
 
-        if group =~ ~r/[\s\[\]]/, do: nil, else: group
+        # One trailing tracker tag ("GROUP[rarbg]") is part of a real group and
+        # is kept as before; anything else with whitespace or brackets is not.
+        if String.replace(group, ~r/\[[^\]]*\]$/, "") =~ ~r/[\s\[\]]/, do: nil, else: group
 
       _ ->
         nil
