@@ -19,6 +19,7 @@ import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_controls/touch_transport.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
+import 'package:player/presentation/widgets/video_controls/video_progress_bar.dart';
 
 Widget _host(Widget child) => MaterialApp(
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -1317,6 +1318,30 @@ void main() {
           tester.state(find.byType(VolumeCluster, skipOffstage: false)),
           same(before),
         );
+      });
+
+      testWidgets('a drag that spans a compact crossing still ends the seek', (
+        tester,
+      ) async {
+        await pump(tester, touch: true);
+        bool seeking() => tester
+            .widget<ChromeVisibility>(find.byType(ChromeVisibility))
+            .isSeeking;
+
+        final bar = find.byType(VideoProgressBar);
+        final gesture = await tester.startGesture(tester.getCenter(bar));
+        await gesture.moveBy(const Offset(40, 0));
+        await tester.pump();
+        expect(seeking(), isTrue);
+
+        tester.view.physicalSize = phone;
+        await tester.pump();
+        expect(find.byType(CompactChromeBottomBar), findsOneWidget);
+
+        await gesture.moveBy(const Offset(20, 0));
+        await gesture.up();
+        await tester.pump();
+        expect(seeking(), isFalse);
       });
 
       testWidgets('compact touch insets the top bar by 8 px', (tester) async {

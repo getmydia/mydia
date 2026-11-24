@@ -864,9 +864,13 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
   /// none, so the touch tier can still tell whether the chrome is up.
   ChromeVisibilityController? _ownVisibility;
 
-  /// Keeps the volume cluster's `State` (its pre-mute volume) when a resize
-  /// swaps [ChromeBottomBar] for [CompactChromeBottomBar] and back.
+  /// Keep the volume cluster's `State` (its pre-mute volume) and the
+  /// scrubber's (an in-flight drag) when a resize swaps [ChromeBottomBar] for
+  /// [CompactChromeBottomBar] and back. Without the scrubber's, a drag
+  /// spanning the swap never reports its end and `_seeking` holds the chrome
+  /// up.
   final _volumeKey = GlobalKey();
+  final _scrubberKey = GlobalKey();
 
   ChromeVisibilityController get _visibility =>
       widget.chromeVisibility ??
@@ -964,6 +968,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       gap: metrics.secondaryGap,
     );
     final Widget scrubber = _Scrubber(
+      key: _scrubberKey,
       player: widget.player,
       timeline: widget.timeline,
       onSeekToReal: widget.onSeekToReal,
@@ -1387,6 +1392,7 @@ class _Scrubber extends StatelessWidget {
   final VoidCallback onPlayPause;
 
   const _Scrubber({
+    super.key,
     required this.player,
     required this.timeline,
     required this.onSeekToReal,
