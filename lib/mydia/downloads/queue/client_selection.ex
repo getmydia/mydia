@@ -133,6 +133,20 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   @spec select_and_add_to_client(SearchResult.t(), keyword()) ::
           {:ok, map(), String.t(), atom() | nil, WantedFiles.t() | nil} | {:error, term()}
   def select_and_add_to_client(search_result, opts) do
+    with {:ok, config, client_id, type, selection, _created?} <-
+           add_to_client(search_result, opts),
+         do: {:ok, config, client_id, type, selection}
+  end
+
+  @doc false
+  # `select_and_add_to_client/2`, plus whether the add created the torrent:
+  # false when the client already held it, since an add of a known hash
+  # returns the existing torrent as a success. Only a created torrent may be
+  # undone (see `undo_add/3`).
+  @spec add_to_client(SearchResult.t(), keyword()) ::
+          {:ok, map(), String.t(), atom() | nil, WantedFiles.t() | nil, boolean()}
+          | {:error, term()}
+  def add_to_client(search_result, opts) do
     download_type = Keyword.get(opts, :download_type)
 
     # First, prepare the torrent/nzb input (download file if needed)
@@ -169,37 +183,59 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       # Now select the appropriate client based on the final type
       with {:ok, client_config} <- select_download_client(opts_with_type),
            {:ok, adapter} <- get_adapter_for_client(client_config) do
-        # Extract the actual torrent input (without the type)
-        torrent_input =
-          case torrent_input_result do
-            {:file, body, _type} -> {:file, body}
-            other -> other
-          end
-
-        {selection, peers, listed} =
-          select_files(
-            adapter,
-            config_to_map(client_config),
-            torrent_input,
-            final_download_type,
-            search_result,
-            opts_with_type
-          )
-
-        add_opts =
+        add_with_client(
+          adapter,
+          client_config,
+          torrent_input_result,
+          final_download_type,
+          search_result,
           opts_with_type
-          |> Keyword.put(:only_files, add_only_files(selection, listed))
-          |> Keyword.put(:initial_peers, peers)
-
-        with :ok <- check_space(client_config, selection, search_result, opts_with_type),
-             {:ok, client_id} <-
-               add_torrent_to_client_with_input(adapter, client_config, torrent_input, add_opts) do
-          # Best effort; the removal guard applies whatever the client says.
-          terms = TrackerRules.for_result(search_result)
-          SeedingLimits.push(adapter, config_to_map(client_config), client_id, terms)
-          {:ok, client_config, client_id, final_download_type, selection}
-        end
+        )
       end
+    end
+  end
+
+  # The add itself, once the client is chosen: pick the wanted files, guard
+  # the disk, note whether the client already held the torrent, then add.
+  defp add_with_client(
+         adapter,
+         client_config,
+         torrent_input_result,
+         final_download_type,
+         search_result,
+         opts_with_type
+       ) do
+    # Extract the actual torrent input (without the type)
+    torrent_input =
+      case torrent_input_result do
+        {:file, body, _type} -> {:file, body}
+        other -> other
+      end
+
+    {selection, peers, listed} =
+      select_files(
+        adapter,
+        config_to_map(client_config),
+        torrent_input,
+        final_download_type,
+        search_result,
+        opts_with_type
+      )
+
+    add_opts =
+      opts_with_type
+      |> Keyword.put(:only_files, add_only_files(selection, listed))
+      |> Keyword.put(:initial_peers, peers)
+
+    with :ok <- check_space(client_config, selection, search_result, opts_with_type),
+         before_add = presence(adapter, client_config, torrent_input_result),
+         {:ok, client_id} <-
+           add_torrent_to_client_with_input(adapter, client_config, torrent_input, add_opts) do
+      created? = created?(before_add, client_id)
+      # Best effort; the removal guard applies whatever the client says.
+      terms = TrackerRules.for_result(search_result)
+      SeedingLimits.push(adapter, config_to_map(client_config), client_id, terms)
+      {:ok, client_config, client_id, final_download_type, selection, created?}
     end
   end
 
@@ -228,6 +264,47 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       {nil, nil, []}
     end
   end
+
+  # What the client held before the add, so `created?/2` can tell an add that
+  # created a torrent from one that returned a torrent already there (an add
+  # of a known hash succeeds with the existing id). An NZB always creates a
+  # job. `{:absent, hash}` only on an explicit not-found for the info hash;
+  # anything else, including a hash that cannot be read or a client that
+  # cannot be asked, is `:unknown`, and an unknown add is never undone.
+  defp presence(_adapter, _client_config, {:file, _body, :nzb}), do: :new_job
+
+  defp presence(adapter, client_config, input) do
+    config = config_to_map(client_config)
+
+    # Clients disagree on the hash's case (rTorrent keys by upper-case and
+    # finds nothing under lower-case), so absence needs both forms not found.
+    with hash when is_binary(hash) <- TorrentFetch.prepared_info_hash(input),
+         true <- absent?(Client.get_status(adapter, config, hash)),
+         true <- absent?(Client.get_status(adapter, config, String.upcase(hash))) do
+      {:absent, hash}
+    else
+      _unknown -> :unknown
+    end
+  rescue
+    _error -> :unknown
+  catch
+    :exit, _reason -> :unknown
+  end
+
+  # The lookup is by info hash, so it says nothing about a client that keys
+  # torrents by its own id (a debrid provider's job id): the add created the
+  # torrent only when the client answered with that same hash.
+  defp created?(:new_job, _client_id), do: true
+
+  defp created?({:absent, hash}, client_id) when is_binary(client_id),
+    do: String.downcase(client_id) == hash
+
+  defp created?(_presence, _client_id), do: false
+
+  # Only an explicit not-found proves absence; a status that failed any other
+  # way (refused, timed out, server error) leaves it unknown.
+  defp absent?({:error, %Client.Error{type: :not_found}}), do: true
+  defp absent?(_status), do: false
 
   # A selection that keeps every file leaves `only_files` nil, but the add
   # still names every listed file: rqbit keeps an older, narrower selection on
@@ -595,6 +672,68 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       {^field, {_msg, opts}} -> Keyword.get(opts, :constraint) == :unique
       _ -> false
     end)
+  end
+
+  @doc false
+  # A grab adds the torrent before it saves the row that tracks it. When the
+  # save fails, most often because the item or the row was deleted mid-grab,
+  # nothing else will ever remove that torrent: the delete only cancels the
+  # torrents its rows name. So the add is undone here, data included, since
+  # the torrent is seconds old and nobody wants it.
+  #
+  # Only a torrent the add created goes (`created?`, from `add_to_client/2`):
+  # one the client already held is someone else's, tracked or not. Ownership is
+  # also read again here, for a row that claimed the torrent since the add. A
+  # grab saving it in the instant between that read and the client call can
+  # still lose it; closing that would take a lock around the client.
+  # Best effort: a client that refuses or exits is logged and the grab's error
+  # stands.
+  @spec undo_add(map(), String.t(), boolean()) :: :ok
+  def undo_add(_client_config, _client_id, false = _created?), do: :ok
+
+  def undo_add(client_config, client_id, true = _created?) do
+    if tracked?(client_config.name, client_id),
+      do: :ok,
+      else: remove_untracked(client_config, client_id)
+  end
+
+  defp tracked?(client_name, client_id) do
+    Download
+    |> where([d], d.download_client == ^client_name and d.download_client_id == ^client_id)
+    |> Repo.exists?()
+  end
+
+  defp remove_untracked(client_config, client_id) do
+    with {:ok, adapter} <- get_adapter_for_client(client_config),
+         :ok <-
+           Client.remove_download(adapter, config_to_map(client_config), client_id,
+             delete_files: true
+           ) do
+      Logger.info("Removed a torrent whose download record could not be saved",
+        client: client_config.name,
+        client_id: client_id
+      )
+    else
+      error ->
+        Logger.warning("Could not remove an untracked torrent after a failed grab",
+          client: client_config.name,
+          client_id: client_id,
+          reason: inspect(error)
+        )
+    end
+
+    :ok
+  catch
+    # An adapter can exit (a debrid fetcher whose supervisor is down); the
+    # grab's own error must still stand.
+    :exit, reason ->
+      Logger.warning("Could not remove an untracked torrent after a failed grab",
+        client: client_config.name,
+        client_id: client_id,
+        reason: inspect({:exit, reason})
+      )
+
+      :ok
   end
 
   defp find_stale_download(client_name, client_id) do

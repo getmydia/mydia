@@ -71,15 +71,17 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
     opts = Keyword.put(opts, :download_type, download_type)
 
     with :ok <- Duplicates.check_for_duplicate_download(search_result, opts),
-         {:ok, client_config, client_id, detected_type, selection} <-
-           ClientSelection.select_and_add_to_client(search_result, opts),
+         :ok <- ensure_targets_exist(opts),
+         {:ok, client_config, client_id, detected_type, selection, created?} <-
+           ClientSelection.add_to_client(search_result, opts),
          {:ok, download} <-
-           ClientSelection.create_download_record_with_retry(
-             search_result,
+           search_result
+           |> ClientSelection.create_download_record_with_retry(
              client_config,
              client_id,
              Keyword.put(opts, :wanted_files, selection)
-           ) do
+           )
+           |> undo_add_on_error(client_config, client_id, created?) do
       # Use detected type as fallback if protocol wasn't set
       final_type = download_type || detected_type
 
@@ -104,6 +106,33 @@ defmodule Mydia.Downloads.Queue.Lifecycle do
         Logger.warning("Failed to initiate download: #{inspect(reason)}")
         error
     end
+  end
+
+  # A search job holds its item in memory for its whole run, so it keeps
+  # grabbing after the operator deletes the item. Checked before the add: the
+  # row would fail its foreign key anyway, but only after the torrent is in the
+  # client. A delete that lands after this check is undone by undo_add_on_error.
+  defp ensure_targets_exist(opts) do
+    targets = [
+      {Mydia.Media.MediaItem, Keyword.get(opts, :media_item_id)},
+      {Episode, Keyword.get(opts, :episode_id)}
+    ]
+
+    if Enum.all?(targets, fn {schema, id} ->
+         is_nil(id) or Repo.exists?(where(schema, id: ^id))
+       end),
+       do: :ok,
+       else: {:error, :media_item_deleted}
+  end
+
+  # The torrent is already in the client when its row fails to save; see
+  # `ClientSelection.undo_add/3`.
+  defp undo_add_on_error({:ok, _download} = ok, _client_config, _client_id, _created?),
+    do: ok
+
+  defp undo_add_on_error({:error, _reason} = error, client_config, client_id, created?) do
+    ClientSelection.undo_add(client_config, client_id, created?)
+    error
   end
 
   def cancel_download(%Download{} = download, opts \\ []) do

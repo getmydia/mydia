@@ -21,6 +21,9 @@ defmodule Mydia.Downloads.Queue.DiskGuardGrabTest do
     bypass = Bypass.open()
     test_pid = self()
 
+    # The grab first asks whether rqbit already holds the hash; it does not.
+    Bypass.stub(bypass, "GET", "/torrents/:id", &Plug.Conn.resp(&1, 404, ""))
+
     Bypass.stub(bypass, "POST", "/torrents", fn conn ->
       conn = Plug.Conn.fetch_query_params(conn)
 
