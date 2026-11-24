@@ -163,7 +163,14 @@ validates.
 ## Dependabot merges through a gate, not GitHub's auto-merge
 
 Weblate's translation PRs (author `app/hosted-weblate`, branch
-`weblate-mydia-default`) go through the same gate and merge the same way.
+`weblate-mydia-default`) go through the same gate and merge the same way, with
+one extra condition: every changed file must be an ARB under
+`player/lib/l10n/` or a `.po` under `priv/gettext/`. Translations come from a
+public platform and merge unreviewed, which is accepted because they are display
+text whose keys and placeholders CI checks. A Weblate PR that also carries code
+(a maintainer's locale wiring, say) waits for a human. Every merge passes
+`--match-head-commit` with the SHA that woke the gate, so a push landing while
+the gate polls is refused rather than merged unchecked.
 
 `dependabot-auto-merge.yml` no longer calls `gh pr merge --auto`. That waited on
 **required** checks only, with no flag to widen it, so PR #613 merged 2026-08-29
@@ -230,21 +237,22 @@ counts toward the verdict. What it can cause is a stuck PR. If the omitted
 workflow is the last to finish, every listed one has already fired, the gate has
 already logged `WAIT`, and nothing wakes it again. The PR sits green and open
 until someone re-runs a listed workflow. Keep the list complete, and when a
-green dependabot PR is not merging, check whether a workflow it runs is absent
-from it.
+green dependabot or Weblate PR is not merging, check whether a workflow it runs
+is absent from it.
 
-The trigger also filters on `branches: ['dependabot/**', 'weblate-mydia-default']`, the triggering run's
-head branch. Unfiltered, every listed workflow on every branch woke the gate,
-nearly half of all Actions runs, only for it to find no Dependabot pull request.
-The fixup's push and the gate's own re-runs are on Dependabot branches, so they
-still wake it.
+The trigger also filters on the triggering run's head branch:
+`branches: ['dependabot/**', 'weblate-mydia-default']`. Unfiltered, every listed
+workflow on every branch woke the gate, nearly half of all Actions runs, only for
+it to find no Dependabot or Weblate pull request. The fixup's push and the gate's
+own re-runs land on those same branches, so they still wake it. Dropping the
+Weblate entry would leave a retried Weblate PR open with no comment.
 
 ### It is edge-triggered, so a green backlog sits
 
 The gate only evaluates a PR when one of those workflows *completes*. A PR that
 was already green before the gate existed has no event to fire for it and stays
 open indefinitely. Re-running any one of its workflows is enough to trigger a
-verdict. New dependabot PRs are unaffected.
+verdict. New dependabot and Weblate PRs are unaffected.
 
 ### Every fallible call in the loop is guarded
 

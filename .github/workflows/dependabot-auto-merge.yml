@@ -127,6 +127,24 @@ jobs:
 
           marker='<!-- dependabot-gate -->'
 
+          is_weblate() {
+            local ref status=0
+            ref="$(gh pr view "$1" --json headRefName --jq .headRefName)" || status=$?
+            [ "$status" -eq 0 ] && [ "$ref" = "weblate-mydia-default" ]
+          }
+
+          # Weblate content comes from a public translation platform and
+          # merges with no human review: accepted on purpose, because it is
+          # display text whose keys and placeholders CI checks. What it may
+          # never do unreviewed is touch anything but the catalogs.
+          weblate_paths_only() {
+            local files status=0
+            files="$(gh pr view "$1" --json files --jq '.files[].path')" || status=$?
+            [ "$status" -eq 0 ] || return 1
+            [ -n "$files" ] || return 1
+            ! printf '%s\n' "$files" | grep -Ev '^(player/lib/l10n/app_[A-Za-z_]+\.arb|priv/gettext/[A-Za-z_]+/LC_MESSAGES/[a-z_]+\.po)$' > /dev/null
+          }
+
           # mergeStateStatus is computed lazily and returns UNKNOWN until GitHub
           # catches up. Poll rather than treating UNKNOWN as an answer either way.
           merge_state() {
@@ -243,11 +261,9 @@ jobs:
                   retry_sentence="Re-run them if you believe they are flaky, or fix the incompatibility."
                 fi
                 # A Weblate branch must not be fixed by a commit on it (see
-                # player/docs/l10n.md): the fix belongs on Weblate or master.
-                head_status=0
-                head_ref="$(gh pr view "$pr" --json headRefName --jq .headRefName)" || head_status=$?
-                if [ "$head_status" -eq 0 ] && [ "$head_ref" = "weblate-mydia-default" ]; then
-                  retry_sentence="$retry_sentence For a Weblate pull request, fix it on Weblate or with a separate pull request to master, never with a commit on this branch; see player/docs/l10n.md."
+                # player/docs/l10n.md): the fix belongs on Weblate.
+                if is_weblate "$pr"; then
+                  retry_sentence="$retry_sentence This is a Weblate pull request: never fix it with a commit on this branch. A translation of a key the template no longer has is removed by the \"Cleanup translation files\" add-on on Weblate; see player/docs/l10n.md."
                 fi
                 comment_status=0
                 upsert_comment "$pr" "$marker
@@ -263,14 +279,21 @@ jobs:
                 fi
                 ;;
               MERGE)
+                if is_weblate "$pr" && ! weblate_paths_only "$pr"; then
+                  echo "  Weblate PR #$pr changes files outside the translation catalogs. Not merging." >&2
+                  continue
+                fi
                 state="$(merge_state "$pr")"
                 case "$state" in
                   CLEAN|HAS_HOOKS)
                     # --merge is the only strategy this repository allows: both
                     # allow_squash_merge and allow_rebase_merge are false, and
                     # the other forms fail outright.
+                    # Pinned to the SHA that woke the gate: Weblate rebases
+                    # and force-pushes, and a push landing during the
+                    # mergeStateStatus poll must be refused, not merged.
                     merge_status=0
-                    gh pr merge --merge "$pr" || merge_status=$?
+                    gh pr merge --merge --match-head-commit "$HEAD_SHA" "$pr" || merge_status=$?
                     if [ "$merge_status" -ne 0 ]; then
                       echo "  gh pr merge failed (exit $merge_status). Leaving PR #$pr open." >&2
                     else
