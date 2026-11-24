@@ -160,6 +160,62 @@ defmodule Mydia.Library.BulkRenameTest do
     end
   end
 
+  describe "rows that change after planning" do
+    # Runs with two groups and calls `change` on whichever file the first group
+    # did not touch, between the two groups.
+    defp run_changing_second(ctx, change) do
+      files = [movie_file(ctx, "paper.comet.junk.mkv"), episode_file(ctx, "lk.s01e01.mkv")]
+
+      on_progress = fn
+        {1, 2} ->
+          [pending] = Enum.filter(files, &File.exists?(Path.join(ctx.root, &1.relative_path)))
+          send(self(), {:pending, pending})
+          change.(pending)
+
+        _ ->
+          :ok
+      end
+
+      result = BulkRename.run(ctx.lp, on_progress: on_progress)
+      assert_received {:pending, pending}
+      {result, pending}
+    end
+
+    test "a file trashed meanwhile is skipped", ctx do
+      {result, pending} =
+        run_changing_second(ctx, fn file ->
+          Mydia.Repo.update!(Ecto.Changeset.change(file, trashed_at: DateTime.utc_now(:second)))
+        end)
+
+      assert {:ok, %{renamed: 1, unchanged: 1, errors: 0}} = result
+      assert File.exists?(Path.join(ctx.root, pending.relative_path))
+    end
+
+    test "a file moved to another library meanwhile is skipped", ctx do
+      other = library_path_fixture(%{path: Path.join(ctx.root, "other"), type: "mixed"})
+
+      {result, pending} =
+        run_changing_second(ctx, fn file ->
+          Mydia.Repo.update!(Ecto.Changeset.change(file, library_path_id: other.id))
+        end)
+
+      assert {:ok, %{renamed: 1, unchanged: 1}} = result
+      assert File.exists?(Path.join(ctx.root, pending.relative_path))
+    end
+
+    test "a file renamed meanwhile is left at its new name", ctx do
+      {result, pending} =
+        run_changing_second(ctx, fn file ->
+          File.rename!(Path.join(ctx.root, file.relative_path), Path.join(ctx.root, "moved.mkv"))
+          Mydia.Repo.update!(Ecto.Changeset.change(file, relative_path: "moved.mkv"))
+        end)
+
+      assert {:ok, %{renamed: 1, unchanged: 1}} = result
+      assert Mydia.Library.get_media_file!(pending.id).relative_path == "moved.mkv"
+      assert File.exists?(Path.join(ctx.root, "moved.mkv"))
+    end
+  end
+
   test "run reports progress once per media item", ctx do
     movie_file(ctx, "paper.comet.junk.mkv")
     episode_file(ctx, "lk.s01e01.mkv")

@@ -225,3 +225,13 @@ All fixtures use invented titles.
   names (`Show - S01E01 - Pilot WEBDL-1080p`, `Film (2020) Bluray-1080p`) do
   not gain a `-1080p` or `-Pilot` suffix. An empty episode title is treated
   as no title.
+- `Mydia.Jobs.LibraryRename` broadcasts completion with
+  `error: :library_unavailable` for a deleted library path instead of
+  raising, so the page's spinner clears.
+- `BulkRename.run/2` re-reads each media item's rows just before renaming
+  them. A file whose row vanished, or whose preview no longer matches the
+  plan, is skipped and counted unchanged; conflicts still come from the
+  up-front plan.
+- `Mydia.Jobs.SidecarCleanup` refuses with `:busy` (zero counts) while a
+  `LibraryRename` of the same library or a `LibraryMove` into or out of it is
+  executing; the page flashes that the cleanup was skipped.

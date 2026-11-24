@@ -6,7 +6,9 @@ defmodule Mydia.Library.BulkRename do
   Files are grouped by owning media item (a movie's `media_item_id`, or the
   episode's `media_item_id`); files with neither form one "unowned" group whose
   previews never change. Previews are always re-derived here, so `run/2` never
-  acts on a stale preview.
+  acts on a stale preview, and each group's rows are re-read just before it is
+  renamed: a file whose row vanished or whose preview changed since planning is
+  skipped and counted unchanged.
 
   Changed previews that cannot be applied are conflicts and are skipped:
   `:target_exists` when the proposed path is already on disk, and
@@ -74,13 +76,35 @@ defmodule Mydia.Library.BulkRename do
         |> Enum.with_index(1)
         |> Enum.reduce(%{renamed: 0, unchanged: 0, conflicts: 0, errors: 0}, fn {group, done},
                                                                                 acc ->
-          acc = Enum.reduce(group, acc, &apply_one(&1, &2, conflicted))
+          acc = group |> refresh(library_path) |> Enum.reduce(acc, &apply_one(&1, &2, conflicted))
           on_progress.({done, total})
           acc
         end)
 
       {:ok, counts}
     end
+  end
+
+  # The plan is minutes old by the time a late group runs, so each group's
+  # rows are re-read just before renaming it. A file whose row vanished (gone,
+  # trashed, moved to another library) or whose preview no longer matches the
+  # plan is skipped: its new name was never checked against the run's
+  # conflicts. Conflicts themselves still come from the up-front plan.
+  defp refresh(group, %LibraryPath{id: library_path_id}) do
+    ids = for {_file, preview} <- group, preview.changed?, do: preview.file_id
+
+    fresh =
+      from(mf in MediaFile.versions(),
+        where: mf.id in ^ids and mf.library_path_id == ^library_path_id,
+        preload: [:library_path, :episode]
+      )
+      |> Repo.all()
+      |> Map.new(&{&1.id, &1})
+
+    Enum.map(group, fn
+      {_file, %RenamePreview{changed?: false}} = entry -> entry
+      {_file, preview} -> {Map.get(fresh, preview.file_id), preview}
+    end)
   end
 
   defp apply_one({file, preview}, acc, conflicted) do
@@ -90,6 +114,13 @@ defmodule Mydia.Library.BulkRename do
 
       MapSet.member?(conflicted, preview.file_id) ->
         Map.update!(acc, :conflicts, &(&1 + 1))
+
+      stale?(file, preview) ->
+        Logger.info("Library rename skipped a file that changed since planning",
+          file_id: preview.file_id
+        )
+
+        Map.update!(acc, :unchanged, &(&1 + 1))
 
       true ->
         case FileRenamer.rename_file(file, preview.proposed_path) do
@@ -105,6 +136,13 @@ defmodule Mydia.Library.BulkRename do
             Map.update!(acc, :errors, &(&1 + 1))
         end
     end
+  end
+
+  defp stale?(nil, _preview), do: true
+
+  defp stale?(file, preview) do
+    fresh = FileRenamer.generate_rename_preview(file)
+    fresh.current_path != preview.current_path or fresh.proposed_path != preview.proposed_path
   end
 
   # Returns {groups, previews, conflicts}. Each group is a list of
