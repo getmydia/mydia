@@ -214,4 +214,10 @@ All fixtures use invented titles.
 - `TrashStore.audit/0` classifies non-UUID containers (like
   `sidecar-cleanup-<ts>`) as orphaned without querying them.
 - `FileNamer` no longer reads a canonical name's bracketed tail as a release
-  group, so a name such as `-GROUP[tracker]` is kept whole.
+  group, so a name such as `-GROUP[tracker]` is kept whole. It takes a group
+  only after a scene-style hyphen (after `]` or `)`, in a name without
+  whitespace before it, or after a quality word in a spaced scene name) and
+  never a quality, source or resolution word, so Sonarr and Radarr default
+  names (`Show - S01E01 - Pilot WEBDL-1080p`, `Film (2020) Bluray-1080p`) do
+  not gain a `-1080p` or `-Pilot` suffix. An empty episode title is treated
+  as no title.

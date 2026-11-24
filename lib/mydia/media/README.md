@@ -665,7 +665,13 @@ the same path). Folders are not reorganized.
 rename them with the video. A sidecar whose destination is taken stays in place
 and never fails the video's rename; a listing error fails before the video moves.
 `FileNamer` keeps a `-GROUP[tracker]` tail whole rather than reading the
-bracket as a release group.
+bracket as a release group. It takes a release group only from a scene-style
+hyphen: after `]` or `)`, in a name with no whitespace before it, or after a
+quality word in a spaced scene name (`BluRay x264-GROUP`). The tail must not
+itself be a quality, source or resolution word. So Sonarr and Radarr default
+names (`Show - S01E01 - Pilot WEBDL-1080p`, `Film (2020) Bluray-1080p`) and
+formatted names (`Show (2020) - S01E01 - Pilot`) get no group, rather than a
+`-1080p` or `-Pilot` suffix written on every rename.
 
 **Clean up orphaned sidecars** (`Mydia.Library.SidecarCleanup`, job
 `Mydia.Jobs.SidecarCleanup`, local libraries only) moves sidecars that earlier

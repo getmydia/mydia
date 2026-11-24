@@ -128,6 +128,38 @@ defmodule Mydia.Library.BulkRenameTest do
     assert {:ok, %{renamed: 0, unchanged: 1}} = BulkRename.run(ctx.lp)
   end
 
+  describe "Sonarr and Radarr default names" do
+    test "get no bogus group suffix and stay stable on a second run", ctx do
+      ep_file = episode_file(ctx, "The Lantern Keepers - S01E01 - Pilot WEBDL-1080p.mkv")
+      movie = movie_file(ctx, "Paper Comet (2019) Bluray-1080p.mkv")
+
+      assert {:ok, %{sample: sample}} = BulkRename.preview(ctx.lp)
+      names = Map.new(sample, &{&1.file_id, Path.basename(&1.proposed_path)})
+
+      assert names[ep_file.id] =~ ~r/^The Lantern Keepers \(2021\) - S01E01 - [^-]*\.mkv$/
+      assert names[movie.id] =~ ~r/^Paper Comet \(2019\)[^-]*\.mkv$/
+
+      assert {:ok, %{renamed: 2, errors: 0}} = BulkRename.run(ctx.lp)
+      assert {:ok, %{renamed: 0, unchanged: 2}} = BulkRename.run(ctx.lp)
+    end
+
+    test "a canonical name with no quality fields gets no suffix", ctx do
+      file = episode_file(ctx, "The Lantern Keepers (2021) - S01E01 - Pilot.mkv")
+
+      assert {:ok, %{sample: [preview]}} = BulkRename.preview(ctx.lp)
+      assert preview.file_id == file.id
+      refute Path.basename(preview.proposed_path) =~ "-Pilot"
+    end
+
+    test "a scene name keeps its group and is idempotent", ctx do
+      file = movie_file(ctx, "Paper.Comet.2019.1080p.BluRay.x264-GROUP.mkv")
+
+      assert {:ok, %{renamed: 1}} = BulkRename.run(ctx.lp)
+      assert Mydia.Library.get_media_file!(file.id).relative_path =~ ~r/-GROUP\.mkv$/
+      assert {:ok, %{renamed: 0, unchanged: 1}} = BulkRename.run(ctx.lp)
+    end
+  end
+
   test "run reports progress once per media item", ctx do
     movie_file(ctx, "paper.comet.junk.mkv")
     episode_file(ctx, "lk.s01e01.mkv")

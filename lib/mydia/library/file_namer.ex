@@ -21,6 +21,8 @@ defmodule Mydia.Library.FileNamer do
   Example: `Show Title (2020) - S01E01 - Episode Title [WEB-1080p][DTS 5.1][HDR10][x264]-RlsGrp`
   """
 
+  alias Mydia.Library.ReleaseParser.ReleaseGroup
+
   @doc """
   Generates a filename for a movie.
 
@@ -100,7 +102,7 @@ defmodule Mydia.Library.FileNamer do
       sanitize_title(media_item.title),
       if(media_item.year, do: "(#{media_item.year})", else: nil),
       "- S#{season}E#{ep_num} -",
-      episode.title && sanitize_title(episode.title),
+      episode_title(episode.title),
       build_quality_tag(quality_info),
       build_audio_tag(quality_info.audio),
       build_hdr_tag(quality_info),
@@ -151,6 +153,16 @@ defmodule Mydia.Library.FileNamer do
   end
 
   ## Private Functions
+
+  # A blank title is no title: an empty part would leave a double space.
+  defp episode_title(title) when is_binary(title) do
+    case sanitize_title(title) do
+      "" -> nil
+      sanitized -> sanitized
+    end
+  end
+
+  defp episode_title(_), do: nil
 
   defp build_quality_tag(%{
          source: source,
@@ -210,28 +222,55 @@ defmodule Mydia.Library.FileNamer do
     "#{base}-#{group}"
   end
 
+  # The tail after the last "-": a group with no whitespace or brackets, then
+  # at most one tracker tag, glued ("ROVERS[rarbg]", kept as part of the group)
+  # or spaced ("ROVERS [eztv]", dropped).
+  @group_tail ~r/^(?<group>[^\[\]\s]+)(?<tag>\s*\[[^\[\]]*\])?$/
+  @resolution ~r/^\d{3,4}[pi]$/i
+  # Hyphenated markers whose second half would otherwise read as a group.
+  @dashed_markers ~w(web-dl web-rip blu-ray dts-hd dts-x dts-es)
+
+  # Release group is usually after the last hyphen
+  # Example: "Movie.1080p.BluRay.x264-GROUP" -> "GROUP"
+  #
+  # Sonarr and Radarr default names ("Show - S01E01 - Pilot WEBDL-1080p",
+  # "Film (2020) Bluray-1080p") and already formatted names
+  # ("Show (2020) - S01E01 - Pilot") also have a hyphen, and reading their tail
+  # as a group writes a bogus suffix on every rename. So the tail must look
+  # like a group and the hyphen must sit where a scene name puts it.
   defp extract_release_group(filename) do
-    # Release group is usually after the last hyphen
-    # Example: "Movie.1080p.BluRay.x264-GROUP" -> "GROUP"
-    #
-    # A tail with whitespace or brackets is not a group: it is the rest of an
-    # already formatted name ("Show - S01E01 - [1080p] [h264]"), and treating it
-    # as one makes every rename of a canonical file append a fresh suffix.
-    case String.split(filename, "-") do
-      parts when length(parts) > 1 ->
-        group =
-          parts
-          |> List.last()
-          |> String.trim()
-          # Remove common extensions that might be included
-          |> String.replace(~r/\.(mkv|mp4|avi)$/i, "")
+    with [before, tail] <- split_last_dash(filename),
+         tail = tail |> String.trim() |> String.replace(~r/\.(mkv|mp4|avi)$/i, ""),
+         %{"group" => group, "tag" => tag} <- Regex.named_captures(@group_tail, tail),
+         true <- group_position?(before, group) do
+      if String.starts_with?(tag, "["), do: group <> tag, else: group
+    else
+      _ -> nil
+    end
+  end
 
-        # One trailing tracker tag ("GROUP[rarbg]") is part of a real group and
-        # is kept as before; anything else with whitespace or brackets is not.
-        if String.replace(group, ~r/\[[^\]]*\]$/, "") =~ ~r/[\s\[\]]/, do: nil, else: group
+  defp split_last_dash(name) do
+    case String.split(name, "-") do
+      [_] -> nil
+      parts -> [parts |> Enum.drop(-1) |> Enum.join("-"), List.last(parts)]
+    end
+  end
 
-      _ ->
-        nil
+  defp group_position?(before, group) do
+    last_word = before |> String.split(~r/[\s.]/) |> List.last()
+
+    cond do
+      ReleaseGroup.not_a_group?(group) or Regex.match?(@resolution, group) -> false
+      String.downcase("#{last_word}-#{group}") in @dashed_markers -> false
+      # A spaced hyphen separates title parts: "Show (2020) - S01E01 - Pilot".
+      String.match?(before, ~r/\s$/) -> false
+      # Directly after a formatted tag or year: "[x264]-GROUP", "(2020)-GROUP".
+      String.ends_with?(before, ["]", ")"]) -> true
+      # A dotted scene name: "Movie.2020.1080p.BluRay.x264-GROUP".
+      not String.match?(before, ~r/\s/) -> true
+      # A scene name with spaces for dots: "Movie 2020 1080p BluRay x264-GROUP".
+      # A plain word before the hyphen is a hyphenated title ("Self-Made").
+      true -> ReleaseGroup.not_a_group?(last_word)
     end
   end
 end
