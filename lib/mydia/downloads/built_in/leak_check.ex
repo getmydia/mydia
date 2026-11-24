@@ -85,16 +85,25 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
   @doc false
   # BoundedCommand merges stderr into the output, so a run that succeeded on a
   # retry carries curl's diagnostics for the failed attempts (`curl: (28) ...`,
-  # `Warning: ... Will retry ...`) ahead of the body. Each diagnostic is a whole
-  # line that never starts with `{`, so the body is everything from the first
-  # line that opens a JSON object, however many lines it spans. A failed run
-  # keeps the whole output for its error message.
+  # `Warning: ... Will retry ...`) ahead of the body, and curl cannot take back
+  # a partial body (`{"ip":`) an attempt wrote to the pipe before it failed.
+  # The successful attempt's body comes last, so each line that opens a JSON
+  # object is tried as the start of the body, last first, and the first suffix
+  # that decodes wins. This keeps a body that spans several lines whole. A
+  # failed run keeps the whole output for its error message.
   def decode_curl_output(output) do
-    output
-    |> String.split("\n")
-    |> Enum.drop_while(&(not String.starts_with?(String.trim_leading(&1), "{")))
-    |> Enum.join("\n")
-    |> decode()
+    lines = String.split(output, "\n")
+
+    lines
+    |> Enum.with_index()
+    |> Enum.filter(fn {line, _i} -> String.starts_with?(String.trim_leading(line), "{") end)
+    |> Enum.reverse()
+    |> Enum.find_value({:error, "unexpected relay response"}, fn {_line, i} ->
+      case lines |> Enum.drop(i) |> Enum.join("\n") |> decode() do
+        {:ok, _ip} = ok -> ok
+        {:error, _} -> nil
+      end
+    end)
   end
 
   @doc false

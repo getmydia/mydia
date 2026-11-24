@@ -106,6 +106,15 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
       ~s(curl: \(56\) Recv failure: Connection reset by peer\n{\n  "ip": "203.0.113.9"\n}\n)
 
     assert LeakCheck.decode_curl_output(multiline) == {:ok, "203.0.113.9"}
+
+    # A failed attempt left part of its body in the pipe before curl retried.
+    fragment =
+      ~s({"ip":curl: \(56\) Recv failure: Connection reset by peer\n) <>
+        "Warning: Problem : connection reset. Will retry in 1 second. 1 retry left.\n" <>
+        ~s({\n  "ip": "203.0.113.9"\n})
+
+    assert LeakCheck.decode_curl_output(fragment) == {:ok, "203.0.113.9"}
+    assert LeakCheck.decode_curl_output(~s({"ip":)) == {:error, "unexpected relay response"}
     assert LeakCheck.decode_curl_output("") == {:error, "unexpected relay response"}
   end
 
