@@ -19,14 +19,21 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
     assert run({:ok, "198.51.100.7"}, {:ok, "198.51.100.7"}) == {:error, :leak_detected}
   end
 
-  test "a failed torrent-side request fails the check" do
-    assert run({:error, "timeout"}, {:ok, "198.51.100.7"}) ==
-             {:error, {:leak_check_failed, "timeout"}}
+  # A request that never got an answer says nothing about where traffic goes,
+  # so it is reported apart from a verdict: the gate treats the two differently.
+  test "a failed torrent-side request makes the check unreachable" do
+    assert run({:unreachable, "timeout"}, {:ok, "198.51.100.7"}) ==
+             {:error, {:leak_check_unreachable, "timeout"}}
   end
 
-  test "a failed Mydia-side request fails the check" do
-    assert run({:ok, "203.0.113.9"}, {:error, "nxdomain"}) ==
-             {:error, {:leak_check_failed, "nxdomain"}}
+  test "a failed Mydia-side request makes the check unreachable" do
+    assert run({:ok, "203.0.113.9"}, {:unreachable, "nxdomain"}) ==
+             {:error, {:leak_check_unreachable, "nxdomain"}}
+  end
+
+  test "an answer that is not an address is a failed check, not an unreachable one" do
+    assert run({:error, "unexpected relay response"}, {:ok, "198.51.100.7"}) ==
+             {:error, {:leak_check_failed, "unexpected relay response"}}
   end
 
   @invalid {:error, {:leak_check_failed, "invalid address from relay"}}
@@ -74,6 +81,78 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
              {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
   end
 
+  # An unreachable result is tolerated by Vpn, so a bad torrent answer must
+  # never be masked by Mydia's request failing afterwards.
+  test "a wrong torrent address fails the check even when Mydia's side is unreachable" do
+    assert run_expecting({:ok, "203.0.113.5"}, {:unreachable, "socket closed"}, "203.0.113.9") ==
+             {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
+  end
+
+  test "a malformed torrent address fails the check even when Mydia's side is unreachable" do
+    assert run_expecting({:ok, "garbage"}, {:unreachable, "socket closed"}, "203.0.113.9") ==
+             @invalid
+  end
+
+  # These run the real curl the container ships (as `torrent-curl`) against a
+  # raw TCP server, so curl's retry and output handling are what is tested.
+  describe "the torrent-side request" do
+    @describetag skip: is_nil(System.find_executable("curl")) && "curl not on PATH"
+
+    # Serves one canned response per connection, in order, closing each.
+    defp relay(responses) do
+      {:ok, listen} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+      {:ok, port} = :inet.port(listen)
+
+      start_supervised!(
+        {Task,
+         fn ->
+           Enum.each(responses, fn response ->
+             {:ok, socket} = :gen_tcp.accept(listen)
+             {:ok, _request} = :gen_tcp.recv(socket, 0, 5_000)
+             :ok = :gen_tcp.send(socket, response)
+             :gen_tcp.close(socket)
+           end)
+         end}
+      )
+
+      "http://127.0.0.1:#{port}"
+    end
+
+    defp http_200(body, length \\ nil) do
+      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" <>
+        "Content-Length: #{length || byte_size(body)}\r\nConnection: close\r\n\r\n" <> body
+    end
+
+    defp torrent_side(relay_url) do
+      LeakCheck.run(
+        relay_url: relay_url,
+        torrent_curl: "curl",
+        mydia_ip_fun: fn _url -> {:ok, "198.51.100.7"} end
+      )
+    end
+
+    # curl cannot take back a partial body written to a pipe, and its
+    # diagnostics share BoundedCommand's output; writing to a file it truncates
+    # before retrying leaves only the successful attempt's body.
+    test "a body cut short is retried and only the complete body is decoded" do
+      url =
+        relay([
+          http_200(~s({"ip":), 40),
+          http_200(~s({\n  "ip": "203.0.113.9"\n}\n))
+        ])
+
+      assert torrent_side(url) == :ok
+    end
+
+    test "a relay that keeps failing is unreachable, with curl's diagnostics" do
+      url =
+        relay(List.duplicate("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n", 3))
+
+      assert {:error, {:leak_check_unreachable, message}} = torrent_side(url)
+      assert message =~ "503"
+    end
+  end
+
   test "an unparseable VPN address fails closed" do
     assert run_expecting({:ok, "203.0.113.9"}, {:ok, "198.51.100.7"}, "garbage") ==
              {:error, {:leak_check_failed, "torrent traffic is not using the VPN address"}}
@@ -91,5 +170,70 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
              torrent_ip_fun: fn "https://relay.invalid/ip" -> {:ok, "203.0.113.9"} end,
              mydia_ip_fun: fn "https://relay.invalid/ip" -> {:ok, "198.51.100.7"} end
            ) == :ok
+  end
+
+  describe "the Mydia-side request" do
+    defp mydia_side(plug) do
+      LeakCheck.run(
+        relay_url: "https://relay.invalid",
+        torrent_ip_fun: fn _url -> {:ok, "203.0.113.9"} end,
+        mydia_req_options: [plug: plug, retry_log_level: false]
+      )
+    end
+
+    defp counting_plug(responses) do
+      counter = :counters.new(1, [])
+
+      plug = fn conn ->
+        :counters.add(counter, 1, 1)
+        responses.(:counters.get(counter, 1), conn)
+      end
+
+      {plug, counter}
+    end
+
+    defp ok_ip(conn), do: Req.Test.json(conn, %{"ip" => "198.51.100.7"})
+
+    # Cloudflare closes idle keep-alive connections; a pooled one can be
+    # handed out just as it closes. One such request must not fail the check.
+    test "a closed connection is retried" do
+      {plug, counter} =
+        counting_plug(fn
+          1, conn -> Req.Test.transport_error(conn, :closed)
+          _, conn -> ok_ip(conn)
+        end)
+
+      assert mydia_side(plug) == :ok
+      assert :counters.get(counter, 1) == 2
+    end
+
+    test "a 5xx from the relay is retried" do
+      {plug, _counter} =
+        counting_plug(fn
+          1, conn -> Plug.Conn.send_resp(conn, 502, "bad gateway")
+          _, conn -> ok_ip(conn)
+        end)
+
+      assert mydia_side(plug) == :ok
+    end
+
+    test "a 200 whose body does not decode is a failed check, not retried" do
+      {plug, counter} =
+        counting_plug(fn _, conn ->
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(200, "{")
+        end)
+
+      assert {:error, {:leak_check_failed, _}} = mydia_side(plug)
+      assert :counters.get(counter, 1) == 1
+    end
+
+    test "a relay that never answers is unreachable after three attempts" do
+      {plug, counter} = counting_plug(fn _, conn -> Req.Test.transport_error(conn, :closed) end)
+
+      assert {:error, {:leak_check_unreachable, "socket closed"}} = mydia_side(plug)
+      assert :counters.get(counter, 1) == 3
+    end
   end
 end

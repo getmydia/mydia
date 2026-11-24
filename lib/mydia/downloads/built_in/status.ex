@@ -143,6 +143,10 @@ defmodule Mydia.Downloads.BuiltIn.Status do
     do:
       "Could not confirm torrent traffic goes through the VPN (#{message}). Torrents are stopped."
 
+  def describe({:leak_check_unreachable, message}),
+    do:
+      "Could not reach the relay to confirm torrent traffic goes through the VPN (#{message}). Torrents are stopped until it answers."
+
   def describe({:port_forward_failed, message}),
     do:
       "Port forwarding failed (#{message}). Torrents keep running on the last port; seeding is limited to outgoing connections."

@@ -110,6 +110,7 @@ defmodule Mydia.Downloads.BuiltIn.StatusTest do
         :vpn_unreachable,
         :leak_detected,
         {:leak_check_failed, "timeout"},
+        {:leak_check_unreachable, "socket closed"},
         {:port_forward_failed, "no port"},
         {:engine_exit, 101},
         :engine_starting,

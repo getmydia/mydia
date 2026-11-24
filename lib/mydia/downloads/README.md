@@ -255,6 +255,19 @@ down or a failed leak check returns `{:error, reason}` with a named reason
 instead of a connection error to loopback, so a grab fails with the cause and
 `ClientHealth` shows it. Unmanaged rqbit configs skip the guard.
 
+**Unanswered leak checks.** `Vpn` re-runs `LeakCheck` every 60 seconds, which
+is roughly 1,440 pairs of requests to the relay a day, so ordinary network
+noise has to be tolerated. Each request retries transient failures (Req for
+Mydia's side, `curl --retry-all-errors` for the torrent side). A request that
+still gets no answer is `{:leak_check_unreachable, _}`, which is different from
+`{:leak_check_failed, _}` and `:leak_detected`, the results where an answer
+came back and failed the check. On a reverify (gluetun running, same public
+and tunnel addresses as the last pass) the engine keeps running through two
+unreachable checks in a row and stops on the third. A first check, a changed
+address or a failed answer stops it at once. Before this rule, one
+`socket closed` from a pooled connection the relay's CDN had dropped stopped
+rqbit, and production logged 161 such stops in a day.
+
 **State.** The engine's and the VPN's state, the listen port and the config
 warnings live in `BuiltIn.Status`, which broadcasts every change for the admin
 panel.
