@@ -1384,6 +1384,199 @@ defmodule Mydia.MediaRequestsTest do
     |> Repo.insert!()
   end
 
+  describe "events" do
+    setup do
+      user = create_user()
+      admin = create_user(%{role: "admin"})
+      %{user: user, admin: admin}
+    end
+
+    # create_request/3 refuses a second pending request for the same title, so
+    # a sibling has to be inserted directly.
+    defp insert_pending_duplicate(request, requester) do
+      %MediaRequest{}
+      |> MediaRequest.create_changeset(%{
+        media_type: request.media_type,
+        title: request.title,
+        tmdb_id: request.tmdb_id,
+        requester_id: requester.id
+      })
+      |> Repo.insert!()
+    end
+
+    defp events_of(type), do: Events.list_events(type: type)
+
+    test "create_request/3 records one created event", %{user: user} do
+      {:ok, request} =
+        MediaRequests.create_request(Scope.unrestricted(), %{
+          media_type: "movie",
+          title: "Lanterns of Vesper",
+          tmdb_id: 880_001,
+          requester_id: user.id
+        })
+
+      assert [event] = events_of("media_request.created")
+      assert event.resource_id == request.id
+      assert event.metadata["requester"] == (user.display_name || user.username)
+    end
+
+    test "a duplicate request records no event", %{user: user} do
+      attrs = %{
+        media_type: "movie",
+        title: "Lanterns of Vesper",
+        tmdb_id: 880_002,
+        requester_id: user.id
+      }
+
+      {:ok, _} = MediaRequests.create_request(Scope.unrestricted(), attrs)
+
+      assert {:error, :duplicate_request} =
+               MediaRequests.create_request(Scope.unrestricted(), attrs)
+
+      assert length(events_of("media_request.created")) == 1
+    end
+
+    test "approve_request/4 records one approved event for the admin", %{
+      user: user,
+      admin: admin
+    } do
+      request = create_request(user)
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, request.tmdb_id, request.title, "/stub.jpg")
+
+      assert {:ok, _} =
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
+
+      assert [event] = events_of("media_request.approved")
+      assert event.resource_id == request.id
+      assert event.actor_id == admin.id
+      assert event.metadata["approved_by"] == (admin.display_name || admin.username)
+      assert event.metadata["auto"] == false
+    end
+
+    test "linking to an existing item also records auto events for siblings", %{
+      user: user,
+      admin: admin
+    } do
+      request = create_request(user)
+      other = create_user()
+
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, request.tmdb_id, request.title, "/stub.jpg")
+
+      {:ok, _existing} =
+        Media.create_media_item(Scope.unrestricted(), %{
+          type: "movie",
+          title: "Existing",
+          year: 2023,
+          tmdb_id: request.tmdb_id
+        })
+
+      # Adding the item auto-approved everything pending; start from a clean
+      # slate with the request and a sibling pending again.
+      Repo.delete_all(Mydia.Events.Event)
+      Repo.update_all(MediaRequest, set: [status: "pending", media_item_id: nil])
+      sibling = insert_pending_duplicate(request, other)
+
+      assert {:ok, _} =
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 request,
+                 %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
+
+      events = events_of("media_request.approved")
+      assert Enum.any?(events, &(&1.resource_id == request.id and &1.metadata["auto"] == false))
+
+      assert [auto] = Enum.filter(events, &(&1.metadata["auto"] == true))
+      assert auto.resource_id == sibling.id
+    end
+
+    test "a failed approval records no approved event", %{user: user, admin: admin} do
+      request = create_request(user)
+      bypass = Bypass.open()
+
+      Bypass.stub(
+        bypass,
+        "GET",
+        "/tmdb/movies/#{request.tmdb_id}",
+        &Plug.Conn.resp(&1, 500, "{}")
+      )
+
+      MediaRequests.approve_request(
+        Scope.unrestricted(),
+        request,
+        %{approved_by_id: admin.id},
+        config: relay_config(bypass)
+      )
+
+      assert events_of("media_request.approved") == []
+    end
+
+    test "reject_request/2 records a rejected event; invalid attrs record none", %{
+      user: user,
+      admin: admin
+    } do
+      request = create_request(user)
+
+      assert {:error, _} = MediaRequests.reject_request(request, %{approved_by_id: admin.id})
+      assert events_of("media_request.rejected") == []
+
+      assert {:ok, _} =
+               MediaRequests.reject_request(request, %{
+                 approved_by_id: admin.id,
+                 rejection_reason: "Not available"
+               })
+
+      assert [event] = events_of("media_request.rejected")
+      assert event.resource_id == request.id
+      assert event.metadata["rejection_reason"] == "Not available"
+    end
+
+    test "auto_approve_matching_requests/2 records a system event per request", %{user: user} do
+      first = create_request(user, %{tmdb_id: 880_010, title: "A"})
+      insert_pending_duplicate(first, create_user())
+      item = create_media_item(%{type: "movie", tmdb_id: 880_010, title: "A"})
+
+      assert {:ok, [_, _]} = MediaRequests.auto_approve_matching_requests(item)
+
+      events = events_of("media_request.approved")
+      assert length(events) == 2
+      assert Enum.all?(events, &(&1.actor_type == :system))
+    end
+
+    test "cancel_request/2 records no request events", %{user: user} do
+      request = create_request(user)
+      events_before = length(Events.list_events(category: "requests"))
+      MediaRequests.cancel_request(Scope.for_user(user), request)
+      assert length(Events.list_events(category: "requests")) == events_before
+    end
+
+    test "a deleted requester is omitted but the event is still recorded", %{admin: admin} do
+      user = create_user()
+      request = create_request(user)
+      # requester_id is ON DELETE RESTRICT, so a vanished requester can only be
+      # simulated: point the struct at an id with no user row. The id is not
+      # written back because the update changes no requester field.
+      request = %{request | requester_id: Ecto.UUID.generate(), requester: nil}
+
+      assert {:ok, _} =
+               MediaRequests.reject_request(request, %{
+                 approved_by_id: admin.id,
+                 rejection_reason: "Nope"
+               })
+
+      assert [event] = events_of("media_request.rejected")
+      refute Map.has_key?(event.metadata, "requester")
+    end
+  end
+
   describe "cancel_request/2" do
     setup do
       guest = Mydia.AccountsFixtures.user_fixture(%{role: "guest"})
