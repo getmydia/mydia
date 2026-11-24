@@ -107,10 +107,23 @@ jobs:
         run: |
           APP="${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.app"
 
-          codesign --deep --force --options runtime \
-            --entitlements "${{ env.PLAYER_PATH }}/macos/Runner/Release.entitlements" \
-            --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" \
-            "$APP"
+          # The secure timestamp comes from Apple's timestamp server. When it
+          # doesn't answer, codesign fails with "A timestamp was expected but
+          # was not found" on whichever subcomponent it was signing. That is
+          # transient, so retry with backoff instead of failing the build.
+          attempt=1
+          until codesign --deep --force --options runtime --timestamp \
+              --entitlements "${{ env.PLAYER_PATH }}/macos/Runner/Release.entitlements" \
+              --sign "${{ secrets.MACOS_SIGNING_IDENTITY }}" \
+              "$APP"; do
+            if [ "$attempt" -ge 4 ]; then
+              echo "::error::codesign failed after $attempt attempts."
+              exit 1
+            fi
+            echo "::warning::codesign attempt $attempt failed; retrying in $((attempt * 15))s."
+            sleep $((attempt * 15))
+            attempt=$((attempt + 1))
+          done
 
           ENTITLEMENTS=$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)
           echo "$ENTITLEMENTS"
