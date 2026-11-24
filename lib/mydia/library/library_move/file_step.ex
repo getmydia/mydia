@@ -8,17 +8,13 @@ defmodule Mydia.Library.LibraryMove.FileStep do
   `{:error, reason}`. `transient?/1` says which errors Oban should retry.
   """
 
-  import Ecto.Query, only: [from: 2]
   require Logger
 
   alias Mydia.Library.FileMove
-  alias Mydia.Library.FileOrganizer
   alias Mydia.Library.LibraryMove.Move
   alias Mydia.Library.LibraryMove.Sidecars
   alias Mydia.Library.MediaFile
-  alias Mydia.Repo
   alias Mydia.Settings.LibraryPath
-  alias Mydia.Subtitles.Subtitle
 
   @permanent [
     :conflict,
@@ -112,7 +108,7 @@ defmodule Mydia.Library.LibraryMove.FileStep do
   defp delete_source(source, dest, media_file_id, target, sidecars) do
     case FileMove.cleanup_source(source, dest) do
       :ok ->
-        {:moved, move_sidecars(sidecars, source, dest, media_file_id, target)}
+        {:moved, Sidecars.move_all(sidecars, source, dest, media_file_id, target.path)}
 
       {:error, reason} ->
         Logger.warning("Library move could not delete a source",
@@ -122,49 +118,6 @@ defmodule Mydia.Library.LibraryMove.FileStep do
 
         {{:error, {:cleanup_failed, reason}}, []}
     end
-  end
-
-  # Best effort: a sidecar that cannot move never fails its video. A row is
-  # rewritten before its file moves and put back when the file stays, so a
-  # crash in between leaves the row ahead of a file that is still listed at
-  # the source, and the retry's sweep moves that file to where the row
-  # already points. A row is never pointed at a file this move did not place.
-  defp move_sidecars(sidecars, source, dest, media_file_id, target) do
-    Enum.reject(sidecars, fn sidecar ->
-      move_sidecar(sidecar, Sidecars.dest_for(sidecar, source, dest), media_file_id, target)
-    end)
-  end
-
-  defp move_sidecar(sidecar, dest, media_file_id, target) do
-    if FileMove.exists?(dest) do
-      Logger.warning("Library move left a sidecar behind: destination exists", sidecar: sidecar)
-      false
-    else
-      rewrite_subtitle_rows(media_file_id, sidecar, dest)
-      place_sidecar(sidecar, dest, media_file_id, target)
-    end
-  end
-
-  defp place_sidecar(sidecar, dest, media_file_id, target) do
-    case FileOrganizer.place_file(sidecar, dest,
-           use_hardlinks: true,
-           remove_source_after_hardlink: true,
-           fallback: :move,
-           confine_to: target.path
-         ) do
-      {:ok, _} ->
-        true
-
-      {:error, reason} ->
-        Logger.warning("Sidecar move failed", sidecar: sidecar, reason: inspect(reason))
-        rewrite_subtitle_rows(media_file_id, dest, sidecar)
-        false
-    end
-  end
-
-  defp rewrite_subtitle_rows(media_file_id, from_path, to_path) do
-    from(s in Subtitle, where: s.media_file_id == ^media_file_id and s.file_path == ^from_path)
-    |> Repo.update_all(set: [file_path: to_path])
   end
 
   @doc false

@@ -173,4 +173,22 @@ defmodule Mydia.Library.TrashAuditTest do
     assert %{swept: 0, skipped: 1} = TrashStore.sweep([entry])
     assert File.exists?(container)
   end
+
+  @tag :tmp_dir
+  test "container bytes include nested directories and skip symlinked directories", ctx do
+    container = Path.join(ctx.trash_root, "sidecar-cleanup-nested")
+    File.mkdir_p!(Path.join(container, "Show/Season 1"))
+    File.write!(Path.join(container, "flat.nfo"), "abc")
+    File.write!(Path.join(container, "Show/Season 1/x.nfo"), "12345")
+
+    outside = Path.join(ctx.root, "outside-dir")
+    File.mkdir_p!(outside)
+    File.write!(Path.join(outside, "big.bin"), String.duplicate("z", 100))
+    File.ln_s!(outside, Path.join(container, "linked"))
+    backdate(container)
+
+    assert %{orphaned: [entry]} = TrashStore.audit()
+    assert entry.path == container
+    assert entry.bytes == 8
+  end
 end

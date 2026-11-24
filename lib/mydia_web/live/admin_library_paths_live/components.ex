@@ -12,6 +12,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   attr :library_paths, :list, required: true
   attr :reorganizing_library_ids, :any, default: MapSet.new()
   attr :reclassifying_library_ids, :any, default: MapSet.new()
+  attr :renaming_library_ids, :any, default: MapSet.new()
+  attr :rename_progress, :map, default: %{}
+  attr :cleaning_library_ids, :any, default: MapSet.new()
 
   def library_paths_tab(assigns) do
     ~H"""
@@ -22,6 +25,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
           library_path={library_path}
           is_reorganizing={MapSet.member?(@reorganizing_library_ids, library_path.id)}
           is_reclassifying={MapSet.member?(@reclassifying_library_ids, library_path.id)}
+          is_renaming={MapSet.member?(@renaming_library_ids, library_path.id)}
+          rename_progress={Map.get(@rename_progress, library_path.id)}
+          is_cleaning={MapSet.member?(@cleaning_library_ids, library_path.id)}
         />
       </:row>
       <:empty>
@@ -72,6 +78,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   attr :library_path, :map, required: true
   attr :is_reorganizing, :boolean, default: false
   attr :is_reclassifying, :boolean, default: false
+  attr :is_renaming, :boolean, default: false
+  attr :rename_progress, :any, default: nil
+  attr :is_cleaning, :boolean, default: false
 
   defp library_path_row(assigns) do
     assigns =
@@ -138,6 +147,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
             library_path={@library_path}
             is_reorganizing={@is_reorganizing}
             is_reclassifying={@is_reclassifying}
+            is_renaming={@is_renaming}
+            rename_progress={@rename_progress}
+            is_cleaning={@is_cleaning}
           />
           <.row_actions>
             <.row_action
@@ -175,6 +187,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   attr :library_path, :map, required: true
   attr :is_reorganizing, :boolean, default: false
   attr :is_reclassifying, :boolean, default: false
+  attr :is_renaming, :boolean, default: false
+  attr :rename_progress, :any, default: nil
+  attr :is_cleaning, :boolean, default: false
 
   defp maintenance_menu(assigns) do
     ~H"""
@@ -188,6 +203,23 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
         <div class="btn btn-sm btn-ghost gap-1 no-animation">
           <span class="loading loading-spinner loading-xs"></span>
           <span class="hidden sm:inline">{gettext("Reclassifying...")}</span>
+        </div>
+      <% @is_renaming -> %>
+        <div id={"renaming-#{@library_path.id}"} class="btn btn-sm btn-ghost gap-1 no-animation">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span class="hidden sm:inline">
+            <%= case @rename_progress do %>
+              <% {done, total} -> %>
+                {gettext("Renaming %{done}/%{total}", done: done, total: total)}
+              <% _ -> %>
+                {gettext("Renaming...")}
+            <% end %>
+          </span>
+        </div>
+      <% @is_cleaning -> %>
+        <div id={"cleaning-#{@library_path.id}"} class="btn btn-sm btn-ghost gap-1 no-animation">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span class="hidden sm:inline">{gettext("Cleaning up")}</span>
         </div>
       <% true -> %>
         <div class="dropdown dropdown-end">
@@ -241,6 +273,29 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
                 </span>
               </li>
             <% end %>
+            <li class="menu-title pt-2">
+              <span>{gettext("Maintenance")}</span>
+            </li>
+            <li>
+              <button
+                id={"rename-files-#{@library_path.id}"}
+                phx-click="preview_bulk_rename"
+                phx-value-id={@library_path.id}
+                onclick="document.activeElement && document.activeElement.blur()"
+              >
+                <.icon name="hero-pencil-square" class="w-4 h-4" /> {gettext("Rename files")}
+              </button>
+            </li>
+            <li :if={not String.starts_with?(@library_path.path, "s3://")}>
+              <button
+                id={"cleanup-sidecars-#{@library_path.id}"}
+                phx-click="preview_sidecar_cleanup"
+                phx-value-id={@library_path.id}
+                onclick="document.activeElement && document.activeElement.blur()"
+              >
+                <.icon name="hero-trash" class="w-4 h-4" /> {gettext("Clean up orphaned sidecars")}
+              </button>
+            </li>
           </ul>
         </div>
     <% end %>

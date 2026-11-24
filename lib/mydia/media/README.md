@@ -647,3 +647,60 @@ provider's own answer.
   Only files returned by `list_library_poster_candidates/1` are readable. It
   looks only in the folders of untrashed files (`MediaFile.active/0`), whatever
   the caller preloaded, so the picker and the thumbnail route agree.
+
+## Library-wide rename and sidecar cleanup
+
+Library Paths has two row actions, both previewed before they act.
+
+**Rename files** (`Mydia.Library.BulkRename`, job `Mydia.Jobs.LibraryRename`)
+applies the naming template to every file of the library, ignoring
+`auto_rename`. The preview is re-derived on every run, never trusted from the
+modal. A changed name that cannot be applied is a conflict and is skipped:
+`:target_exists` (already on disk) or `:duplicate_target` (two files propose
+the same path). Folders are not reorganized.
+
+**Sidecars travel with their video.** `LibraryMove.Sidecars` knows two forms:
+`<video-root>.<anything><ext>` for a subtitle extension, `.nfo` or `.edl`, and
+`<video-root>-thumb.jpg` / `-thumb.png`. Both `FileRenamer` and `LibraryMove`
+rename them with the video. A sidecar whose destination is taken stays in place
+and never fails the video's rename; a listing error fails before the video moves.
+`FileNamer` keeps a `-GROUP[tracker]` tail whole rather than reading the
+bracket as a release group. It takes a release group only from a scene-style
+hyphen: after `]` or `)`, in a name with no whitespace before it, or after a
+quality word in a spaced scene name (`BluRay x264-GROUP`). The tail must not
+itself be a quality, source or resolution word. So Sonarr and Radarr default
+names (`Show - S01E01 - Pilot WEBDL-1080p`, `Film (2020) Bluray-1080p`) and
+formatted names (`Show (2020) - S01E01 - Pilot`) get no group, rather than a
+`-1080p` or `-Pilot` suffix written on every rename.
+
+**Clean up orphaned sidecars** (`Mydia.Library.SidecarCleanup`, job
+`Mydia.Jobs.SidecarCleanup`, local libraries only) moves sidecars that earlier
+renames left behind. A file is orphaned only when all of these hold:
+
+- it has a sidecar form and is not item or season metadata (`tvshow.nfo`,
+  `poster.*`, `season01-poster.jpg`, ...);
+- its directory holds a file with a scanner video extension (a symlink to one
+  counts), and no non-directory, non-sidecar-form entry there claims it.
+  Claiming means the sidecar's name starts with that entry's root,
+  case-insensitively, so `.iso`, `.strm`, `VIDEO_TS.IFO` and a symlinked
+  version protect their sidecars too;
+- it is a regular file itself (a symlinked sidecar is never moved);
+- it is not a tracked `Subtitle` row.
+
+Directories with no video, and folders such as `Subs/`, are never touched.
+Checking the disk rather than `media_files` means a video the scanner has not
+seen yet still protects its sidecars. `run/2` re-checks every path (one listing
+per directory), so a video added after the preview protects its sidecars again.
+There is no directory pruning: under this rule an orphan's directory always
+still holds a video. The job refuses with `:busy` while a `LibraryRename` of the
+same library, or a `LibraryMove` into or out of it, is executing, since a
+rename carries sidecars mid-flight.
+
+**Where cleaned files go, and how to restore.** Each run moves files to
+`<trash root>/sidecar-cleanup-<library id>-<UTC timestamp>/<path relative to
+the library>` (`TrashStore.root_for_library/1`, the same filesystem, so a
+rename; the library id keeps libraries that share a trash root apart). There is no
+restore flow: move the files back by hand, the preview and the completion
+message say where they went. The container has no `media_files` row, and
+`TrashStore.audit/0` classifies non-UUID containers as orphaned without querying
+them, so the Trash page can sweep it.

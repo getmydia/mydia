@@ -9,6 +9,7 @@ defmodule Mydia.Library.FileRenamer do
   import Ecto.Query, warn: false
 
   alias Mydia.Library.Structs.{Quality, RenamePreview}
+  alias Mydia.Library.LibraryMove.Sidecars
   alias Mydia.Library.{FileNamer, MediaFile}
   alias Mydia.Media.MediaItem
   alias Mydia.Repo
@@ -124,6 +125,12 @@ defmodule Mydia.Library.FileRenamer do
   @doc """
   Renames a media file on the filesystem and updates the database.
 
+  The video's sidecars (subtitles, `.nfo`, `.edl`, `-thumb` images) move with
+  it, best effort: one that cannot move stays behind and is logged, and never
+  fails the rename. They are listed before the video moves, so a folder that
+  cannot be listed returns `{:error, {:sidecars_unlisted, reason}}` with the
+  video untouched.
+
   Returns `{:ok, updated_file}` on success, or `{:error, reason}` on failure.
   """
   def rename_file(%MediaFile{} = file, new_path) when is_binary(new_path) do
@@ -131,13 +138,28 @@ defmodule Mydia.Library.FileRenamer do
     file = Repo.preload(file, :library_path)
 
     cond do
-      Storage.s3?(file) != Storage.s3?(new_path) -> {:error, :cross_storage_rename}
-      Storage.s3?(file) -> rename_object(file, new_path)
-      true -> do_rename_file(file, new_path)
+      Storage.s3?(file) != Storage.s3?(new_path) ->
+        {:error, :cross_storage_rename}
+
+      MediaFile.storage_path(file) == new_path ->
+        # Nothing to move, so nothing to list.
+        rename_with_sidecars(file, new_path, [])
+
+      true ->
+        case Sidecars.for(file) do
+          {:ok, sidecars} -> rename_with_sidecars(file, new_path, sidecars)
+          {:error, reason} -> {:error, {:sidecars_unlisted, reason}}
+        end
     end
   end
 
-  defp rename_object(file, new_path) do
+  defp rename_with_sidecars(file, new_path, sidecars) do
+    if Storage.s3?(file),
+      do: rename_object(file, new_path, sidecars),
+      else: do_rename_file(file, new_path, sidecars)
+  end
+
+  defp rename_object(file, new_path, sidecars) do
     current_path = MediaFile.storage_path(file)
 
     with {:ok, from} <- Storage.at(current_path),
@@ -145,7 +167,7 @@ defmodule Mydia.Library.FileRenamer do
          :ok <- present(from),
          :ok <- if(current_path == new_path, do: :same, else: absent(to)),
          :ok <- Storage.move(from, to) do
-      commit_rename(file, current_path, new_path, fn -> Storage.move(to, from) end)
+      commit_rename(file, current_path, new_path, sidecars, fn -> Storage.move(to, from) end)
     else
       :same -> {:ok, file}
       {:error, _} = error -> error
@@ -168,7 +190,7 @@ defmodule Mydia.Library.FileRenamer do
     end
   end
 
-  defp commit_rename(file, current_path, new_path, rollback) do
+  defp commit_rename(file, current_path, new_path, sidecars, rollback) do
     new_relative_path = Path.relative_to(new_path, file.library_path.path)
 
     # Update the database with the new relative path
@@ -180,6 +202,8 @@ defmodule Mydia.Library.FileRenamer do
           new_path: new_path,
           new_relative_path: new_relative_path
         )
+
+        move_sidecars(file, sidecars, current_path, new_path)
 
         {:ok, updated_file}
 
@@ -206,7 +230,22 @@ defmodule Mydia.Library.FileRenamer do
     end
   end
 
-  defp do_rename_file(%MediaFile{} = file, new_path) do
+  defp move_sidecars(_file, [], _current_path, _new_path), do: :ok
+
+  defp move_sidecars(file, sidecars, current_path, new_path) do
+    case Sidecars.move_all(sidecars, current_path, new_path, file.id, file.library_path.path) do
+      [] ->
+        :ok
+
+      left_behind ->
+        Logger.warning("Rename left sidecars behind",
+          file_id: file.id,
+          left_behind: left_behind
+        )
+    end
+  end
+
+  defp do_rename_file(%MediaFile{} = file, new_path, sidecars) do
     current_path = MediaFile.absolute_path(file)
 
     cond do
@@ -230,7 +269,7 @@ defmodule Mydia.Library.FileRenamer do
 
         case File.rename(current_path, new_path) do
           :ok ->
-            commit_rename(file, current_path, new_path, fn ->
+            commit_rename(file, current_path, new_path, sidecars, fn ->
               File.rename(new_path, current_path)
             end)
 

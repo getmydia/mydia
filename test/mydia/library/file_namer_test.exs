@@ -89,6 +89,168 @@ defmodule Mydia.Library.FileNamerTest do
     end
   end
 
+  describe "release group extraction" do
+    @quality %{
+      resolution: "1080p",
+      source: "BluRay",
+      codec: "x264",
+      audio: nil,
+      hdr_format: nil,
+      proper: false,
+      repack: false
+    }
+
+    test "keeps a group that carries a tracker tag" do
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 1, title: "Pilot"},
+          @quality,
+          "Invented.Show.S01E01.1080p.BluRay.x264-ROVERS[rarbg].mkv"
+        )
+
+      assert String.ends_with?(result, "-ROVERS[rarbg].mkv")
+    end
+
+    test "a canonical episode name has no group and renames to itself" do
+      media_item = %{title: "Invented Show", year: 2020}
+      episode = %{season_number: 1, episode_number: 1, title: "Pilot"}
+
+      first = FileNamer.generate_episode_filename(media_item, episode, @quality, "x.mkv")
+      second = FileNamer.generate_episode_filename(media_item, episode, @quality, first)
+
+      assert second == first
+    end
+
+    test "a bracketed canonical name with no title is stable" do
+      name = "Invented Show (2020) - S01E01 - Title [WEBDL-1080p][x264].mkv"
+
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 1, title: nil},
+          @quality,
+          name
+        )
+
+      refute result =~ "Title [WEBDL-1080p][x264]-"
+    end
+
+    test "a Sonarr default episode name has no group" do
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 1, title: "Pilot"},
+          @quality,
+          "Invented Show - S01E01 - Pilot WEBDL-1080p.mkv"
+        )
+
+      assert result == "Invented Show (2020) - S01E01 - Pilot [BluRay-1080p] [x264].mkv"
+    end
+
+    test "a Radarr default movie name has no group" do
+      result =
+        FileNamer.generate_movie_filename(
+          %{title: "Quiet Orchard", year: 2020},
+          @quality,
+          "Quiet Orchard (2020) Bluray-1080p.mkv"
+        )
+
+      assert result == "Quiet Orchard (2020) [BluRay-1080p] [x264].mkv"
+    end
+
+    test "a canonical name without quality fields has no group" do
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 1, title: "Pilot"},
+          @quality,
+          "Invented Show (2020) - S01E01 - Pilot.mkv"
+        )
+
+      assert result == "Invented Show (2020) - S01E01 - Pilot [BluRay-1080p] [x264].mkv"
+    end
+
+    test "a hyphenated episode title is not a group" do
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 2, title: "Self-Made"},
+          @quality,
+          "Invented Show (2020) - S01E02 - Self-Made.mkv"
+        )
+
+      assert result == "Invented Show (2020) - S01E02 - Self-Made [BluRay-1080p] [x264].mkv"
+    end
+
+    test "a quality or resolution tail is not a group" do
+      for original <- [
+            "Quiet.Orchard.2020.BluRay-1080p.mkv",
+            "Quiet.Orchard.2020.x264-1080i.mkv",
+            "Quiet.Orchard.2020.1080p-WEBDL.mkv",
+            "Quiet.Orchard.2020.1080p.BluRay.x264-PROPER.mkv",
+            "Quiet.Orchard.2020.1080p.WEB-DL.mkv"
+          ] do
+        result =
+          FileNamer.generate_movie_filename(
+            %{title: "Quiet Orchard", year: 2020},
+            @quality,
+            original
+          )
+
+        assert result == "Quiet Orchard (2020) [BluRay-1080p] [x264].mkv", original
+      end
+    end
+
+    test "scene names keep their group" do
+      for {original, group} <- [
+            {"Quiet.Orchard.2020.1080p.BluRay.x264-GROUP.mkv", "GROUP"},
+            {"Quiet.Orchard.2020.1080p.WEB-DL.DDP5.1.H.264-FLUX.mkv", "FLUX"},
+            {"Quiet Orchard 2020 1080p BluRay x264-SPACED.mkv", "SPACED"},
+            {"Quiet.Orchard.2020.1080p.BluRay.x264-ROVERS [eztv].mkv", "ROVERS"}
+          ] do
+        result =
+          FileNamer.generate_movie_filename(
+            %{title: "Quiet Orchard", year: 2020},
+            @quality,
+            original
+          )
+
+        assert result == "Quiet Orchard (2020) [BluRay-1080p] [x264]-#{group}.mkv", original
+      end
+    end
+
+    test "renaming a canonical name with a group is idempotent" do
+      media_item = %{title: "Quiet Orchard", year: 2020}
+
+      first =
+        FileNamer.generate_movie_filename(
+          media_item,
+          @quality,
+          "Quiet.Orchard.2020.1080p.BluRay.x264-GROUP.mkv"
+        )
+
+      assert FileNamer.generate_movie_filename(media_item, @quality, first) == first
+
+      no_quality = %{@quality | source: nil, resolution: nil, codec: nil}
+      bare = FileNamer.generate_movie_filename(media_item, no_quality, first)
+      assert bare == "Quiet Orchard (2020)-GROUP.mkv"
+      assert FileNamer.generate_movie_filename(media_item, no_quality, bare) == bare
+    end
+
+    test "an empty episode title leaves no double space" do
+      result =
+        FileNamer.generate_episode_filename(
+          %{title: "Invented Show", year: 2020},
+          %{season_number: 1, episode_number: 1, title: ""},
+          @quality,
+          "x.mkv"
+        )
+
+      assert result == "Invented Show (2020) - S01E01 - [BluRay-1080p] [x264].mkv"
+    end
+  end
+
   describe "generate_episode_filename/4" do
     test "generates TRaSH-compatible filename for TV episode" do
       media_item = %{title: "Breaking Bad", year: 2008}

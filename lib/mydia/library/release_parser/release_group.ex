@@ -238,6 +238,15 @@ defmodule Mydia.Library.ReleaseParser.ReleaseGroup do
   @contains_resolution_re ~r/\b(?:360p|480p|540p|576p|720p|1080p|1440p|2160p|4320p|4K|8K|UHD)\b/i
   @episode_marker_in_group_re ~r/^(?:S\d{1,3}E\d{1,4}|E\d{1,4})(?:[-\s.]?E?\d{1,4})*/i
 
+  @doc """
+  Whether `word` can never be a release group: a quality, source, codec or
+  audio marker (`1080p`, `WEBDL`, `x264`, `Proper`), a channel layout, or a
+  single character. `Mydia.Library.FileNamer` uses it to keep the tail of
+  `Pilot WEBDL-1080p` from being read as a group.
+  """
+  @spec not_a_group?(String.t()) :: boolean()
+  def not_a_group?(word) when is_binary(word), do: sanitize_release_group(word) == nil
+
   defp sanitize_release_group(group) do
     cond do
       String.downcase(group) in @quality_marker_words ->

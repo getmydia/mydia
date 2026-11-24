@@ -389,10 +389,13 @@ defmodule Mydia.Library.TrashStore do
   `MYDIA_TRASH_DIR` says.
   """
   @spec root_for(MediaFile.t()) :: String.t() | nil
-  def root_for(%MediaFile{library_path: %{path: "s3://" <> _ = path}}),
-    do: Path.join(path, @dir_name)
+  def root_for(%MediaFile{library_path: library_path}), do: root_for_library(library_path)
 
-  def root_for(%MediaFile{library_path: %{path: path}}) when is_binary(path) do
+  @doc "The trash root of a library path, for callers with no media file."
+  @spec root_for_library(Mydia.Settings.LibraryPath.t() | map()) :: String.t() | nil
+  def root_for_library(%{path: "s3://" <> _ = path}), do: Path.join(path, @dir_name)
+
+  def root_for_library(%{path: path}) when is_binary(path) do
     case Application.get_env(:mydia, :trash_dir) do
       configured when is_binary(configured) and configured != "" ->
         configured
@@ -402,7 +405,7 @@ defmodule Mydia.Library.TrashStore do
     end
   end
 
-  def root_for(%MediaFile{}), do: nil
+  def root_for_library(_), do: nil
 
   # Sibling of the library path when that is actually usable, otherwise inside
   # the library path.
@@ -626,7 +629,8 @@ defmodule Mydia.Library.TrashStore do
   @spec audit() :: %{retained: [map()], orphaned: [map()]}
   def audit do
     containers = Enum.flat_map(roots(), &containers_in/1)
-    ids = Enum.map(containers, & &1.id)
+    # Non-UUID containers (`sidecar-cleanup-*`) are never looked up: Postgres raises on them.
+    ids = for %{id: id} <- containers, match?({:ok, _}, Ecto.UUID.cast(id)), do: id
 
     rows =
       from(f in MediaFile, where: f.id in ^ids, select: {f.id, f.trashed_at, f.metadata})
@@ -734,21 +738,19 @@ defmodule Mydia.Library.TrashStore do
     end
   end
 
+  # Regular-file bytes under `path`, nested directories included; symlinks are not followed.
   defp bytes_in(path) do
     case File.ls(path) do
-      {:ok, entries} ->
-        entries
-        |> Enum.map(&Path.join(path, &1))
-        |> Enum.map(fn entry ->
-          case File.stat(entry) do
-            {:ok, %{size: size, type: :regular}} -> size
-            _ -> 0
-          end
-        end)
-        |> Enum.sum()
+      {:ok, entries} -> entries |> Enum.map(&entry_bytes(Path.join(path, &1))) |> Enum.sum()
+      _ -> 0
+    end
+  end
 
-      _ ->
-        0
+  defp entry_bytes(entry) do
+    case File.lstat(entry) do
+      {:ok, %{type: :directory}} -> bytes_in(entry)
+      {:ok, %{type: :regular, size: size}} -> size
+      _ -> 0
     end
   end
 
