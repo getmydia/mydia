@@ -101,6 +101,11 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheckTest do
 
     assert LeakCheck.decode_curl_output(output) == {:ok, "203.0.113.9"}
     assert LeakCheck.decode_curl_output(~s({"ip":"203.0.113.9"}\n)) == {:ok, "203.0.113.9"}
+
+    multiline =
+      ~s(curl: \(56\) Recv failure: Connection reset by peer\n{\n  "ip": "203.0.113.9"\n}\n)
+
+    assert LeakCheck.decode_curl_output(multiline) == {:ok, "203.0.113.9"}
     assert LeakCheck.decode_curl_output("") == {:error, "unexpected relay response"}
   end
 

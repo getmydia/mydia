@@ -85,13 +85,15 @@ defmodule Mydia.Downloads.BuiltIn.LeakCheck do
   @doc false
   # BoundedCommand merges stderr into the output, so a run that succeeded on a
   # retry carries curl's diagnostics for the failed attempts (`curl: (28) ...`,
-  # `Warning: ... Will retry ...`) ahead of the body. Each diagnostic ends in a
-  # newline, so the body is the last line. A failed run keeps the whole output
-  # for its error message.
+  # `Warning: ... Will retry ...`) ahead of the body. Each diagnostic is a whole
+  # line that never starts with `{`, so the body is everything from the first
+  # line that opens a JSON object, however many lines it spans. A failed run
+  # keeps the whole output for its error message.
   def decode_curl_output(output) do
     output
-    |> String.split("\n", trim: true)
-    |> List.last("")
+    |> String.split("\n")
+    |> Enum.drop_while(&(not String.starts_with?(String.trim_leading(&1), "{")))
+    |> Enum.join("\n")
     |> decode()
   end
 
