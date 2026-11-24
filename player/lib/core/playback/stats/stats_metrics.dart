@@ -112,6 +112,7 @@ class StatsMetrics {
         topInset -
         ChromeMetrics.resolve(
           width: viewport.width,
+          height: viewport.height,
           touchPrimary: touchPrimary,
         ).cornerInsetBottom;
 

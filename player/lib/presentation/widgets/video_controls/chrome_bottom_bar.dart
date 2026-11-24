@@ -34,8 +34,17 @@ class ChromeMetrics {
   final double secondaryGap;
 
   /// Horizontal padding on both sides of the bar: 24 from
-  /// [Breakpoints.mobile] up, 16 below.
+  /// [Breakpoints.mobile] up, 16 below, 12 when [compactTouch].
   final double horizontalPadding;
+
+  /// A touch phone, in either orientation: touch input and a shortest side
+  /// under [Breakpoints.mobile].
+  ///
+  /// A landscape phone is ~350 px tall, so the full bar (timecodes, scrubber
+  /// and a control row) put lifted subtitles mid-screen. This tier draws
+  /// [CompactChromeBottomBar] instead, a single scrubber row, and moves the
+  /// track buttons to the top bar.
+  final bool compactTouch;
 
   const ChromeMetrics({
     required this.showVolume,
@@ -45,7 +54,13 @@ class ChromeMetrics {
     required this.showAlwaysOnTop,
     required this.secondaryGap,
     required this.horizontalPadding,
+    this.compactTouch = false,
   });
+
+  /// Whether a viewport of [size] with this input is [compactTouch]. Shared
+  /// with the parts of the chrome that do not hold a [ChromeMetrics].
+  static bool isCompactTouch(Size size, {required bool touchPrimary}) =>
+      touchPrimary && size.shortestSide < Breakpoints.mobile;
 
   /// Right inset for a corner overlay. Constant across tiers.
   static const double cornerInsetRight = 24.0;
@@ -54,7 +69,10 @@ class ChromeMetrics {
   static const double cornerGap = 12.0;
 
   /// The bar's rendered height, derived from the bar's own layout constants.
-  double get barHeight => ChromeBottomBar.heightFor(touchTargets: touchTargets);
+  double get barHeight => ChromeBottomBar.heightFor(
+    touchTargets: touchTargets,
+    compactTouch: compactTouch,
+  );
 
   /// Bottom inset for a corner overlay so it always clears the bar.
   double get cornerInsetBottom => barHeight + cornerGap;
@@ -75,17 +93,31 @@ class ChromeMetrics {
     );
   }
 
-  /// Resolve metrics for a viewport [width] and the viewer's input type,
-  /// using the breakpoints in `core/layout/breakpoints.dart`
-  /// (mobile < 600, tablet 600-899, desktop >= 900).
+  /// Resolve metrics for a [width] x [height] viewport and the viewer's input
+  /// type, using the breakpoints in `core/layout/breakpoints.dart`
+  /// (mobile < 600, tablet 600-899, desktop >= 900). Width picks the tier;
+  /// the shortest side picks [compactTouch].
   factory ChromeMetrics.resolve({
     required double width,
+    required double height,
     required bool touchPrimary,
   }) {
     final compactTransport = width < Breakpoints.mobile;
     final touchTargets = touchPrimary || width < Breakpoints.mobile;
     final horizontalPadding = width >= Breakpoints.mobile ? 24.0 : 16.0;
 
+    if (isCompactTouch(Size(width, height), touchPrimary: touchPrimary)) {
+      return ChromeMetrics(
+        showVolume: false,
+        touchTargets: true,
+        compactTransport: compactTransport,
+        showQuality: true,
+        showAlwaysOnTop: false,
+        secondaryGap: 0,
+        horizontalPadding: 12,
+        compactTouch: true,
+      );
+    }
     if (width >= Breakpoints.tablet) {
       return ChromeMetrics(
         showVolume: true,
@@ -122,7 +154,7 @@ class ChromeMetrics {
   /// Fine-pointer shorthand for [resolve], for assertions about width alone.
   @visibleForTesting
   factory ChromeMetrics.forWidth(double width) =>
-      ChromeMetrics.resolve(width: width, touchPrimary: false);
+      ChromeMetrics.resolve(width: width, height: 1080, touchPrimary: false);
 }
 
 /// The full-width playback bottom bar.
@@ -201,14 +233,19 @@ class ChromeBottomBar extends StatelessWidget {
   /// Key on the pill wrapping [secondary].
   static const Key secondaryPillKey = Key('osd-secondary-pill');
 
-  /// The bar's rendered height: the sum of the layout constants above.
-  static double heightFor({required bool touchTargets}) =>
-      verticalPadding * 2 +
-      timecodeHeight +
-      timecodeGap +
-      (touchTargets ? _scrubberTouchHeight : _scrubberFineHeight) +
-      rowGap +
-      controlRowHeight;
+  /// The bar's rendered height: the sum of the layout constants above, or
+  /// with [compactTouch] [CompactChromeBottomBar]'s single row.
+  static double heightFor({
+    required bool touchTargets,
+    bool compactTouch = false,
+  }) => compactTouch
+      ? CompactChromeBottomBar.height
+      : verticalPadding * 2 +
+            timecodeHeight +
+            timecodeGap +
+            (touchTargets ? _scrubberTouchHeight : _scrubberFineHeight) +
+            rowGap +
+            controlRowHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -284,4 +321,75 @@ class ChromeBottomBar extends StatelessWidget {
       child: child,
     );
   }
+}
+
+/// The bottom bar on a touch phone ([ChromeMetrics.compactTouch]): one row,
+/// elapsed, the scrubber, then remaining.
+///
+/// No control row: a phone has hardware volume, its transport floats in the
+/// centre, and `PlaybackChrome` hands the track buttons to the top bar. That
+/// takes the bar from ~148 px to [height], so lifted subtitles sit near the
+/// bottom of a landscape phone rather than mid-screen.
+class CompactChromeBottomBar extends StatelessWidget {
+  final ChromeMetrics metrics;
+
+  /// Elapsed timecode, left of the scrubber.
+  final Widget elapsed;
+
+  /// Remaining timecode, right of the scrubber.
+  final Widget remaining;
+
+  /// Scrubber, taking the width between the timecodes.
+  final Widget scrubber;
+
+  /// Volume control, kept mounted but never shown.
+  ///
+  /// A phone has no volume control on screen, but a split-screen resize can
+  /// cross into this bar and back. Pass the same keyed widget that
+  /// [ChromeBottomBar.volume] gets, so its `State` (the pre-mute volume)
+  /// moves here and back instead of being rebuilt.
+  final Widget? volume;
+
+  const CompactChromeBottomBar({
+    super.key,
+    required this.metrics,
+    required this.elapsed,
+    required this.remaining,
+    required this.scrubber,
+    this.volume,
+  });
+
+  /// Vertical padding above and below the row.
+  static const double verticalPadding = 6;
+
+  /// The row's height: the touch scrubber's hit area.
+  static const double rowHeight = 44;
+
+  /// Gap between a timecode and the scrubber.
+  static const double timecodeGap = 12;
+
+  /// The bar's rendered height.
+  static const double height = verticalPadding * 2 + rowHeight;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.symmetric(
+      horizontal: metrics.horizontalPadding,
+      vertical: verticalPadding,
+    ),
+    child: SizedBox(
+      height: rowHeight,
+      child: Row(
+        children: [
+          elapsed,
+          const SizedBox(width: timecodeGap),
+          Expanded(child: scrubber),
+          const SizedBox(width: timecodeGap),
+          remaining,
+          if (volume case final volume?)
+            Visibility(visible: false, maintainState: true, child: volume),
+        ],
+      ),
+    ),
+  );
 }

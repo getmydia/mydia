@@ -478,6 +478,7 @@ void main() {
       addTearDown(tester.view.reset);
       final metrics = ChromeMetrics.resolve(
         width: size.width,
+        height: size.height,
         touchPrimary: true,
       );
 

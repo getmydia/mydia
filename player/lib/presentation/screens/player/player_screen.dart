@@ -6412,6 +6412,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final chromeMetrics = ChromeMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
+      height: MediaQuery.sizeOf(context).height,
       touchPrimary: InputCapabilities.touchPrimary,
     );
 

@@ -33,6 +33,7 @@ class ChromeSubtitleLift extends StatefulWidget {
     required this.lift,
     required this.referenceBox,
     required this.child,
+    this.gap = ChromeSubtitleLift.defaultGap,
   });
 
   /// Null leaves subtitles alone entirely.
@@ -44,8 +45,15 @@ class ChromeSubtitleLift extends StatefulWidget {
 
   final Widget child;
 
-  /// Space between the subtitle and the panel's top edge.
-  static const double gap = 12;
+  /// Space between the subtitle and the bar's top edge.
+  final double gap;
+
+  /// [gap] everywhere but a touch phone.
+  static const double defaultGap = 12;
+
+  /// [gap] on a touch phone, whose short landscape screen has no room to
+  /// spare.
+  static const double compactGap = 8;
 
   @override
   State<ChromeSubtitleLift> createState() => _ChromeSubtitleLiftState();
@@ -75,6 +83,7 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
   @override
   void didUpdateWidget(ChromeSubtitleLift oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.gap != widget.gap) _scheduleSync();
     if (oldWidget.lift != widget.lift) {
       final oldLift = oldWidget.lift;
       if (oldLift != null) _resetToRest(oldLift);
@@ -126,7 +135,7 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
     }
     return math.max(
       kSubtitleRestPadding,
-      reference.size.height - rect.top + ChromeSubtitleLift.gap,
+      reference.size.height - rect.top + widget.gap,
     );
   }
 

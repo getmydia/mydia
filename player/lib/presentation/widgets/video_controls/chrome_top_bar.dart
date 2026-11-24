@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/player/video_scaling.dart';
@@ -128,6 +130,14 @@ class ChromeTopBar extends StatelessWidget {
   /// The mode in effect, which picks the pill's glyph.
   final VideoScaling scaling;
 
+  /// Controls drawn in their own pill just before the actions pill. On a
+  /// touch phone this is the track buttons (subtitles, audio, quality),
+  /// moved up from the bottom bar so the bar can be a single row.
+  final Widget? trailing;
+
+  /// Whether to use [compactGap] between the groups, on a touch phone.
+  final bool compact;
+
   const ChromeTopBar({
     super.key,
     this.title,
@@ -137,6 +147,8 @@ class ChromeTopBar extends StatelessWidget {
     this.onCastTap,
     this.onScalingTap,
     this.scaling = VideoScaling.fit,
+    this.trailing,
+    this.compact = false,
   });
 
   static const Key backKey = Key('chrome-back');
@@ -147,8 +159,14 @@ class ChromeTopBar extends StatelessWidget {
   /// The single pill holding the scaling and cast controls.
   static const Key actionsPillKey = Key('osd-top-actions');
 
-  /// Gap between back, title and the actions pill.
+  /// The pill holding [trailing].
+  static const Key trailingPillKey = Key('osd-top-trailing');
+
+  /// Gap between back, title and the pills.
   static const double gap = 12.0;
+
+  /// [gap] when [compact].
+  static const double compactGap = 8.0;
 
   @override
   Widget build(BuildContext context) {
@@ -156,6 +174,49 @@ class ChromeTopBar extends StatelessWidget {
     final cast = castAction;
     final l10n = context.l10n;
     const side = GlassPill.defaultHeight;
+    final gap = compact ? compactGap : ChromeTopBar.gap;
+    final trailing = this.trailing;
+    final pills = <Widget>[
+      if (trailing != null) ...[
+        SizedBox(
+          height: side,
+          child: GlassSurface.osdPill(
+            key: trailingPillKey,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Center(widthFactor: 1, child: trailing),
+            ),
+          ),
+        ),
+      ],
+      if (onScalingTap != null || cast != null) ...[
+        if (trailing != null) SizedBox(width: gap),
+        SizedBox(
+          height: side,
+          child: GlassSurface.osdPill(
+            key: actionsPillKey,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onScalingTap != null)
+                    ControlButton(
+                      key: scalingKey,
+                      icon: scalingIcon(scaling),
+                      size: side,
+                      iconSize: 19,
+                      tooltip: scalingTooltip(l10n, scaling),
+                      onTap: onScalingTap,
+                    ),
+                  if (cast != null) _castButton(cast, side),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ];
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -178,51 +239,51 @@ class ChromeTopBar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: gap),
+          SizedBox(width: gap),
         ],
+        // The pills take their natural width and the title the rest. Below
+        // ~300 px, where the pills alone would not fit, they scale down
+        // rather than overflow, as the bottom bar's pill does.
         Expanded(
-          child: titleText == null
-              ? const SizedBox.shrink()
-              : Text(
-                  titleText,
-                  key: titleKey,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.start,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xD9FFFFFF), // white @ 0.85
-                  ),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                Expanded(
+                  child: titleText == null
+                      ? const SizedBox.shrink()
+                      : Text(
+                          titleText,
+                          key: titleKey,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.start,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xD9FFFFFF), // white @ 0.85
+                          ),
+                        ),
                 ),
-        ),
-        if (onScalingTap != null || cast != null) ...[
-          const SizedBox(width: gap),
-          SizedBox(
-            height: side,
-            child: GlassSurface.osdPill(
-              key: actionsPillKey,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (onScalingTap != null)
-                      ControlButton(
-                        key: scalingKey,
-                        icon: scalingIcon(scaling),
-                        size: side,
-                        iconSize: 19,
-                        tooltip: scalingTooltip(l10n, scaling),
-                        onTap: onScalingTap,
+                if (pills.isNotEmpty) ...[
+                  SizedBox(width: gap),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: math.max(0, constraints.maxWidth - gap),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: pills,
                       ),
-                    if (cast != null) _castButton(cast, side),
-                  ],
-                ),
-              ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-        ],
+        ),
       ],
     );
   }

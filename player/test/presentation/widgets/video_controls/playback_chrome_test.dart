@@ -19,6 +19,7 @@ import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_controls/touch_transport.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
+import 'package:player/presentation/widgets/video_controls/video_progress_bar.dart';
 
 Widget _host(Widget child) => MaterialApp(
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -1121,7 +1122,7 @@ void main() {
       final panelTop = tester.getTopLeft(find.byType(ChromeSubtitleLift)).dy;
       expect(
         lift.bottoms.last,
-        closeTo(900 - panelTop + ChromeSubtitleLift.gap, 0.5),
+        closeTo(900 - panelTop + ChromeSubtitleLift.defaultGap, 0.5),
       );
 
       visibility.hide();
@@ -1152,6 +1153,37 @@ void main() {
       final subtitleBottom = 720 - lift.bottoms.last;
       final bar = tester.getRect(find.byType(ChromeBottomBar));
       expect(subtitleBottom, lessThanOrEqualTo(bar.top));
+    });
+
+    testWidgets('on a touch phone captions sit just above the compact bar', (
+      tester,
+    ) async {
+      InputCapabilities.debugTouchPrimaryOverride = true;
+      addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+      tester.view.physicalSize = const Size(760, 350);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final lift = _RecordingSubtitleLift();
+      await tester.pumpWidget(
+        _host(
+          PlaybackChrome(
+            player: player,
+            timeline: StreamTimeline.zero,
+            onSeekToReal: (_) async {},
+            subtitleLift: lift,
+          ),
+        ),
+      );
+      // The touch transport's buffering spinner can animate forever.
+      await tester.pump(const Duration(seconds: 1));
+
+      final bar = tester.getRect(find.byType(CompactChromeBottomBar));
+      expect(350 - lift.bottoms.last, lessThanOrEqualTo(bar.top));
+      expect(
+        lift.bottoms.last,
+        closeTo(56 + ChromeSubtitleLift.compactGap, 0.5),
+      );
     });
   });
 
@@ -1219,6 +1251,102 @@ void main() {
           ),
           findsOneWidget,
         );
+      });
+
+      // A landscape phone: shortest side under Breakpoints.mobile.
+      const phone = Size(760, 350);
+
+      testWidgets('compact touch moves the track buttons to the top bar and '
+          'drops the control row', (tester) async {
+        await pump(tester, touch: true, size: phone);
+
+        expect(find.byType(ChromeBottomBar), findsNothing);
+        expect(find.byType(CompactChromeBottomBar), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(ChromeTopBar),
+            matching: find.byType(SecondaryCluster),
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(VolumeCluster), findsNothing);
+        expect(find.byType(TouchTransport), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(CompactChromeBottomBar)).height,
+          closeTo(56, 0.5),
+        );
+      });
+
+      testWidgets('a touch tablet keeps the track buttons in the bottom bar', (
+        tester,
+      ) async {
+        await pump(tester, touch: true);
+
+        expect(find.byType(CompactChromeBottomBar), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(ChromeBottomBar),
+            matching: find.byType(SecondaryCluster),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(ChromeTopBar),
+            matching: find.byType(SecondaryCluster),
+          ),
+          findsNothing,
+        );
+      });
+
+      testWidgets('the volume cluster keeps its state across a compact '
+          'crossing', (tester) async {
+        await pump(tester, touch: true);
+        final before = tester.state(
+          find.byType(VolumeCluster, skipOffstage: false),
+        );
+
+        // A split-screen resize takes the shortest side under 600 px.
+        tester.view.physicalSize = phone;
+        await tester.pump();
+        expect(find.byType(CompactChromeBottomBar), findsOneWidget);
+        expect(find.byType(VolumeCluster), findsNothing);
+
+        tester.view.physicalSize = const Size(1280, 720);
+        await tester.pump();
+        expect(
+          tester.state(find.byType(VolumeCluster, skipOffstage: false)),
+          same(before),
+        );
+      });
+
+      testWidgets('a drag that spans a compact crossing still ends the seek', (
+        tester,
+      ) async {
+        await pump(tester, touch: true);
+        bool seeking() => tester
+            .widget<ChromeVisibility>(find.byType(ChromeVisibility))
+            .isSeeking;
+
+        final bar = find.byType(VideoProgressBar);
+        final gesture = await tester.startGesture(tester.getCenter(bar));
+        await gesture.moveBy(const Offset(40, 0));
+        await tester.pump();
+        expect(seeking(), isTrue);
+
+        tester.view.physicalSize = phone;
+        await tester.pump();
+        expect(find.byType(CompactChromeBottomBar), findsOneWidget);
+
+        await gesture.moveBy(const Offset(20, 0));
+        await gesture.up();
+        await tester.pump();
+        expect(seeking(), isFalse);
+      });
+
+      testWidgets('compact touch insets the top bar by 8 px', (tester) async {
+        await pump(tester, touch: true, size: phone);
+        expect(tester.getTopLeft(find.byType(ChromeTopBar)).dy, 8);
       });
 
       testWidgets('scrim fades with the chrome', (tester) async {
@@ -1429,7 +1557,7 @@ void main() {
           );
 
           final transport = tester.getRect(find.byType(TouchTransport));
-          final bottomBar = tester.getRect(find.byType(ChromeBottomBar));
+          final bottomBar = tester.getRect(find.byType(CompactChromeBottomBar));
           final topBar = tester.getRect(find.byType(ChromeTopBar));
           expect(transport.overlaps(bottomBar), isFalse);
           expect(transport.overlaps(topBar), isFalse);
