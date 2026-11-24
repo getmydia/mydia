@@ -662,7 +662,7 @@ defmodule Mydia.Plugins.ManifestTest do
     test "an events field parses and is exposed on the descriptor" do
       assert {:ok, manifest} = Manifest.parse(events_map(%{"default" => ["download.completed"]}))
 
-      assert Manifest.event_selection_field(manifest.settings_schema) ==
+      assert Manifest.EventField.field(manifest.settings_schema) ==
                %{key: "events", default: ["download.completed"]}
 
       assert %Plugin{event_selection: %{key: "events"}} = Plugin.from_manifest(manifest)
@@ -670,7 +670,7 @@ defmodule Mydia.Plugins.ManifestTest do
 
     test "no events field yields nil" do
       assert {:ok, manifest} = Manifest.parse(valid_map())
-      assert Manifest.event_selection_field(manifest.settings_schema) == nil
+      assert Manifest.EventField.field(manifest.settings_schema) == nil
       assert Plugin.from_manifest(manifest).event_selection == nil
     end
 

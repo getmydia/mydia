@@ -8,7 +8,8 @@ defmodule Mydia.Plugins.EventSelection do
   such a field receives everything it subscribed to.
   """
 
-  alias Mydia.Plugins.{Manifest, Plugin}
+  alias Mydia.Plugins.Manifest.EventField
+  alias Mydia.Plugins.Plugin
 
   @doc "The events an instance with these settings receives."
   @spec selected(Plugin.t(), map()) :: [String.t()]
@@ -38,7 +39,7 @@ defmodule Mydia.Plugins.EventSelection do
   """
   @spec seed(map(), map()) :: map()
   def seed(manifest, settings) do
-    with %{key: key} <- Manifest.event_selection_field(Map.get(manifest, "settings_schema", [])),
+    with %{key: key} <- EventField.field(Map.get(manifest, "settings_schema", [])),
          false <- Map.has_key?(settings, key) do
       Map.put(settings, key, get_in(manifest, ["capabilities", "events:subscribe"]) || [])
     else

@@ -652,7 +652,7 @@ defmodule Mydia.PluginsTest do
 
     test "synthetic request events carry request-shaped data" do
       payload =
-        "media_request.created" |> Plugins.synthetic_event() |> Plugins.build_payload()
+        "media_request.created" |> Mydia.Plugins.TestEvent.build() |> Plugins.build_payload()
 
       assert payload["event"] == "media_request.created"
       assert payload["resource_type"] == "media_request"

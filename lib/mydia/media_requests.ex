@@ -16,7 +16,7 @@ defmodule Mydia.MediaRequests do
 
   alias Mydia.Accounts.Authorization
   alias Mydia.Accounts.Scope
-  alias Mydia.Events
+  alias Mydia.Events.MediaRequests, as: RequestEvents
   alias Mydia.Repo
   alias Mydia.Media
   alias Mydia.Media.Add
@@ -82,7 +82,7 @@ defmodule Mydia.MediaRequests do
          :ok <- check_duplicate_request(changeset),
          {:ok, request} <- Repo.insert(changeset) do
       request = Repo.preload(request, [:requester])
-      Events.media_request_created(request)
+      RequestEvents.created(request)
       {:ok, request}
     end
   end
@@ -243,7 +243,7 @@ defmodule Mydia.MediaRequests do
         )
 
         updated_request = Repo.preload(updated_request, [:requester, :approved_by], force: true)
-        Events.media_request_approved(updated_request, approved_by: updated_request.approved_by)
+        RequestEvents.approved(updated_request, approved_by: updated_request.approved_by)
 
         if not created? do
           auto_approve_matching_requests(
@@ -308,7 +308,7 @@ defmodule Mydia.MediaRequests do
         )
 
         updated_request = Repo.preload(updated_request, [:requester, :approved_by], force: true)
-        Events.media_request_rejected(updated_request, rejected_by: updated_request.approved_by)
+        RequestEvents.rejected(updated_request, rejected_by: updated_request.approved_by)
 
         {:ok, updated_request}
 
@@ -481,7 +481,7 @@ defmodule Mydia.MediaRequests do
 
         approved_list
         |> Repo.preload(:requester)
-        |> Enum.each(&Events.media_request_approved(&1, auto: true))
+        |> Enum.each(&RequestEvents.approved(&1, auto: true))
 
         {:ok, approved_list}
 

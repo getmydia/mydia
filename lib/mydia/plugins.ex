@@ -51,6 +51,7 @@ defmodule Mydia.Plugins do
   alias Mydia.Plugins.Registry
   alias Mydia.Plugins.Shelves
   alias Mydia.Plugins.Sources
+  alias Mydia.Plugins.TestEvent
   alias Mydia.Settings
 
   @doc "Lists all registered plugin descriptors."
@@ -354,7 +355,7 @@ defmodule Mydia.Plugins do
          %Instance{} = instance <- test_instance(plugin) do
       payload =
         event_type
-        |> synthetic_event()
+        |> TestEvent.build()
         |> build_payload()
         |> Map.put("config", Instances.config_for(instance))
 
@@ -386,47 +387,6 @@ defmodule Mydia.Plugins do
     do: List.first(Instances.list_enabled(plugin.slug))
 
   defp test_instance(%Plugin{} = plugin), do: Instances.default_instance(plugin.slug)
-
-  @doc false
-  def synthetic_event("media_request." <> _ = event_type) do
-    %{
-      type: event_type,
-      category: "requests",
-      severity: :info,
-      actor_type: :system,
-      actor_id: "plugin_test",
-      resource_type: "media_request",
-      resource_id: Ecto.UUID.generate(),
-      metadata: %{
-        "title" => "Test Movie",
-        "year" => 2026,
-        "media_type" => "movie",
-        "requester" => "Test User",
-        "requester_notes" => "Sent from the Test button",
-        "approved_by" => "Admin",
-        "rejection_reason" => "Test rejection",
-        "test" => true
-      }
-    }
-  end
-
-  def synthetic_event(event_type) do
-    %{
-      type: event_type,
-      category: "media",
-      severity: :info,
-      actor_type: :system,
-      actor_id: "plugin_test",
-      resource_type: "media_item",
-      resource_id: Ecto.UUID.generate(),
-      metadata: %{
-        "title" => "Test Movie",
-        "media_type" => "movie",
-        "year" => 2026,
-        "test" => true
-      }
-    }
-  end
 
   @doc """
   Rehydrates installed plugins into the runtime registry post-boot.

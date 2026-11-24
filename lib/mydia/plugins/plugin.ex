@@ -92,7 +92,7 @@ defmodule Mydia.Plugins.Plugin do
       connection: manifest.connection,
       page: manifest.page,
       shelves: manifest.shelves,
-      event_selection: Manifest.event_selection_field(manifest.settings_schema)
+      event_selection: Manifest.EventField.field(manifest.settings_schema)
     }
   end
 
