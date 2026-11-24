@@ -114,4 +114,40 @@ defmodule MydiaWeb.Schema.SubtitleSettingsTest do
 
     assert %{"data" => %{"subtitleTrackSettings" => []}} = json_response(conn, 200)
   end
+
+  # A correction applies to every viewer, so writing one takes a role that can
+  # update media. Reading stays open to any role that can see the file.
+  for role <- ["readonly", "guest"] do
+    test "setSubtitleOffset is refused for a #{role} account", %{media_file: media_file} do
+      user = Mydia.AccountsFixtures.user_fixture(%{role: unquote(role)})
+
+      conn =
+        build_conn()
+        |> log_in_user(user)
+        |> post("/api/graphql", %{
+          "query" => @mutation,
+          "variables" => %{"mediaFileId" => media_file.id, "trackRef" => "3", "offsetMs" => 900}
+        })
+
+      assert %{"errors" => [%{"message" => message} | _]} = json_response(conn, 200)
+      assert message =~ "permission"
+      assert TrackSettings.offset_ms(media_file.id, "3") == 0
+    end
+
+    test "subtitleTrackSettings still reads for a #{role} account", %{media_file: media_file} do
+      {:ok, _} = TrackSettings.set_offset(media_file.id, "3", 250)
+      user = Mydia.AccountsFixtures.user_fixture(%{role: unquote(role)})
+
+      conn =
+        build_conn()
+        |> log_in_user(user)
+        |> post("/api/graphql", %{
+          "query" => @query,
+          "variables" => %{"mediaFileId" => media_file.id}
+        })
+
+      assert %{"data" => %{"subtitleTrackSettings" => [%{"offsetMs" => 250}]}} =
+               json_response(conn, 200)
+    end
+  end
 end
