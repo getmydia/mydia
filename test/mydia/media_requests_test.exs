@@ -1558,6 +1558,41 @@ defmodule Mydia.MediaRequestsTest do
       assert length(Events.list_events(category: "requests")) == events_before
     end
 
+    test "approve and reject attribute the admin when the request has approved_by preloaded",
+         %{user: user, admin: admin} do
+      preloaded = fn id ->
+        MediaRequests.get_request!(id, preload: [:requester, :approved_by])
+      end
+
+      approve_me = create_request(user)
+      bypass = Bypass.open()
+      stub_tmdb_movie(bypass, approve_me.tmdb_id, approve_me.title, "/stub.jpg")
+
+      assert {:ok, _} =
+               MediaRequests.approve_request(
+                 Scope.unrestricted(),
+                 preloaded.(approve_me.id),
+                 %{approved_by_id: admin.id},
+                 config: relay_config(bypass)
+               )
+
+      assert [approved] = events_of("media_request.approved")
+      assert approved.actor_id == admin.id
+      assert approved.metadata["approved_by"] == (admin.display_name || admin.username)
+
+      reject_me = create_request(user)
+
+      assert {:ok, _} =
+               MediaRequests.reject_request(preloaded.(reject_me.id), %{
+                 approved_by_id: admin.id,
+                 rejection_reason: "No"
+               })
+
+      assert [rejected] = events_of("media_request.rejected")
+      assert rejected.actor_id == admin.id
+      assert rejected.metadata["approved_by"] == (admin.display_name || admin.username)
+    end
+
     test "a deleted requester is omitted but the event is still recorded", %{admin: admin} do
       user = create_user()
       request = create_request(user)

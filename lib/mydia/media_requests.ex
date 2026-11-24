@@ -242,7 +242,7 @@ defmodule Mydia.MediaRequests do
           "Request #{request.id} approved by user #{attrs[:approved_by_id]}, linked to media #{media_item.id}"
         )
 
-        updated_request = Repo.preload(updated_request, [:requester, :approved_by])
+        updated_request = Repo.preload(updated_request, [:requester, :approved_by], force: true)
         Events.media_request_approved(updated_request, approved_by: updated_request.approved_by)
 
         if not created? do
@@ -307,7 +307,7 @@ defmodule Mydia.MediaRequests do
           "Request #{request.id} rejected by user #{attrs[:approved_by_id]}: #{attrs[:rejection_reason]}"
         )
 
-        updated_request = Repo.preload(updated_request, [:requester, :approved_by])
+        updated_request = Repo.preload(updated_request, [:requester, :approved_by], force: true)
         Events.media_request_rejected(updated_request, rejected_by: updated_request.approved_by)
 
         {:ok, updated_request}
