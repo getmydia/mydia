@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/sources/playback_sequence.dart';
 import '../../widgets/video_controls/up_next_countdown.dart';
 import '../../widgets/video_controls/up_next_policy.dart';
 import 'session/playback_session_types.dart';
@@ -21,6 +22,9 @@ typedef EpisodeNavigator = Future<void> Function(
 /// The season being played, the "Up Next" prompt and its countdown, and
 /// previous/next navigation.
 ///
+/// A sequence ([setSequence]), the previous and next item of the listing a
+/// scene was opened from, takes over from the season while it is set.
+///
 /// Holds no `BuildContext` and no `ref`. Every load-generation check stays
 /// in the screen: [setSeason] is only ever handed a current answer.
 class UpNextController {
@@ -28,6 +32,7 @@ class UpNextController {
     required this.fetchSeason,
     required this.isDownloaded,
     required this.navigate,
+    required this.navigateSequence,
     required this.playingSignal,
     required this.isEpisode,
     required this.hasShow,
@@ -43,6 +48,10 @@ class UpNextController {
   /// offer.
   final Future<bool> Function(String episodeId) isDownloaded;
   final EpisodeNavigator navigate;
+
+  /// Leaves for a neighbour of the sequence. The screen saves progress and
+  /// routes.
+  final Future<void> Function(SequenceNeighbour n) navigateSequence;
   final PlayingSignal? Function() playingSignal;
   final bool Function() isEpisode;
   final bool Function() hasShow;
@@ -55,6 +64,7 @@ class UpNextController {
 
   List<PlaybackEpisode>? _seasonEpisodes;
   int? _currentIndex;
+  SequenceNeighbours? _sequence;
 
   /// The next season's episodes, fetched lazily the first time the viewer
   /// reaches the end of the current season.
@@ -90,15 +100,34 @@ class UpNextController {
   UpNextTarget? get target => _target;
   UpNextCountdown? get countdown => _countdown;
 
-  /// Whether a previous episode exists in the current season's episode list.
-  bool get hasPrevious =>
-      _seasonEpisodes != null && _currentIndex != null && _currentIndex! > 0;
+  /// Whether a sequence is set; see [setSequence].
+  bool get hasSequence => _sequence != null;
 
-  /// Whether a next episode exists in the current season's episode list.
-  bool get hasNext =>
-      _seasonEpisodes != null &&
-      _currentIndex != null &&
-      _currentIndex! < _seasonEpisodes!.length - 1;
+  /// Whether a previous item exists: in the sequence when one is set, else
+  /// in the current season's episode list.
+  bool get hasPrevious {
+    final sequence = _sequence;
+    if (sequence != null) return sequence.previous != null;
+    return _seasonEpisodes != null &&
+        _currentIndex != null &&
+        _currentIndex! > 0;
+  }
+
+  /// Whether a next item exists: in the sequence when one is set, else in
+  /// the current season's episode list.
+  bool get hasNext {
+    final sequence = _sequence;
+    if (sequence != null) return sequence.next != null;
+    return _seasonEpisodes != null &&
+        _currentIndex != null &&
+        _currentIndex! < _seasonEpisodes!.length - 1;
+  }
+
+  /// Pure; the screen wraps it in `setState`.
+  void setSequence(SequenceNeighbours neighbours) => _sequence = neighbours;
+
+  /// Pure; the screen wraps it in `setState`.
+  void clearSequence() => _sequence = null;
 
   /// Pure; the screen wraps it in `setState`.
   void setSeason(
@@ -124,10 +153,18 @@ class UpNextController {
   /// Show the "Up Next" overlay if conditions are met. Called on position
   /// ticks once [shouldOfferUpNext] says the credits have started.
   void onPositionTick() {
-    // Don't show if already showing, cancelled, or not an episode
-    if (_showing || _cancelled || !isEpisode()) {
+    if (_showing || _cancelled) return;
+
+    // A sequence has no season to cross and is never downloaded playback
+    // (download routes carry no sequence), so its next is offered as is.
+    final sequence = _sequence;
+    if (sequence != null) {
+      final next = sequence.next;
+      if (next != null) _show(UpNextTarget.scene(next));
       return;
     }
+
+    if (!isEpisode()) return;
 
     // Check if there's a next episode
     if (_seasonEpisodes == null || _currentIndex == null) {
@@ -287,6 +324,13 @@ class UpNextController {
       return;
     }
 
+    final sequence = _sequence;
+    if (sequence != null) {
+      final next = sequence.next;
+      if (next != null) unawaited(navigateSequence(next));
+      return;
+    }
+
     final target = _target;
     if (target != null) {
       unawaited(
@@ -322,6 +366,13 @@ class UpNextController {
     _countdown?.cancel();
     _playingSub?.cancel();
     _playingSub = null;
+
+    final sequence = _sequence;
+    if (sequence != null) {
+      final previous = sequence.previous;
+      if (previous != null) unawaited(navigateSequence(previous));
+      return;
+    }
 
     if (_seasonEpisodes == null || _currentIndex == null) {
       return;

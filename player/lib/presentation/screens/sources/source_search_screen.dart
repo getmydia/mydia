@@ -12,6 +12,7 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/browse_scaffold.dart';
@@ -19,6 +20,7 @@ import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
+import 'scene_sequence_links.dart';
 import 'source_error_view.dart';
 
 class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
@@ -29,6 +31,12 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
   Timer? _timer;
   int _request = 0;
   String _lastQuery = '';
+  String _resultsQuery = '';
+
+  /// The query that produced the results now shown. The box can already
+  /// hold newer text still waiting on the debounce, so a tapped result reads
+  /// its listing's query here rather than from the box.
+  String get resultsQuery => _resultsQuery;
 
   @override
   AsyncValue<List<ItemSummary>>? build() {
@@ -64,7 +72,10 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
     state = const AsyncLoading();
     try {
       final results = await searchable.search(text);
-      if (ref.mounted && request == _request) state = AsyncData(results);
+      if (ref.mounted && request == _request) {
+        _resultsQuery = text;
+        state = AsyncData(results);
+      }
     } catch (e, st) {
       if (ref.mounted && request == _request) state = AsyncError(e, st);
     }
@@ -215,16 +226,33 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
     if (items.isEmpty) {
       return Center(child: Text(context.l10n.sourcesSearchNothingFound));
     }
+    final source = ref.watch(mediaSourceProvider(widget.sourceId));
+    final query = ref
+        .read(sourceSearchProvider(widget.sourceId).notifier)
+        .resultsQuery;
     return BrowseGrid(
       landing: false,
       scrollTopPadding: 8,
       itemCount: items.length,
       itemId: (index) => items[index].ref,
-      itemBuilder: (context, index) => SourcePoster(
-        key: ValueKey('source-poster-${items[index].ref.externalId}'),
-        item: items[index],
-        onTap: () => context.push(sourceItemLocation(items[index].ref)),
-      ),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final sequence = sceneSequenceFor(
+          source,
+          item,
+          () => PlaybackSequence(
+            origin: SequenceOrigin.search,
+            position: index,
+            query: query,
+          ),
+        );
+        return SourcePoster(
+          key: ValueKey('source-poster-${item.ref.externalId}'),
+          item: item,
+          onTap: () =>
+              context.push(sourceItemLocation(item.ref, sequence: sequence)),
+        );
+      },
     );
   }
 }

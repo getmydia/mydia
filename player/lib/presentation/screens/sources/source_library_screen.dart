@@ -20,6 +20,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/palette.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../l10n/l10n.dart';
 import '../../../core/sources/source.dart' show SourceKind;
 import '../../widgets/browse_grid.dart';
@@ -33,6 +34,7 @@ import '../../widgets/glass/glass_chip.dart';
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
+import 'scene_sequence_links.dart';
 import 'source_error_view.dart';
 import 'source_listing_screen.dart' show sourceSearchActions;
 import 'source_pages.dart';
@@ -260,15 +262,25 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
     final isShows = info?.kind == LibraryKind.shows;
     final sort = info == null ? null : _sortOption(info, query);
     final descending = query.descending ?? sort?.descendingByDefault ?? false;
+    final source = ref.watch(mediaSourceProvider(library.sourceId));
     final canSaveFilter =
         info != null &&
         widget.canSaveAsFilter &&
         info.kind != LibraryKind.videos &&
-        (ref
-                .watch(mediaSourceProvider(library.sourceId))
-                ?.capabilities
-                .contains(SourceCapability.savedFilters) ??
-            false);
+        (source?.capabilities.contains(SourceCapability.savedFilters) ?? false);
+    // The order on screen, so the player can step through the same list.
+    PlaybackSequence? sequenceFor(int index, ItemSummary item) =>
+        sceneSequenceFor(
+          source,
+          item,
+          () => PlaybackSequence(
+            origin: SequenceOrigin.library,
+            position: index,
+            sortId: sort?.id ?? query.sortId,
+            descending: query.descending,
+            filterIds: query.filterIds,
+          ),
+        );
 
     return BrowseScaffold(
       icon: widget.icon ?? (isShows ? Icons.tv_rounded : Icons.movie_rounded),
@@ -372,6 +384,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
                 ? _ItemList(
                     items: value.items,
                     scrollTopPadding: scrollTopPadding,
+                    sequenceFor: sequenceFor,
                   )
                 : BrowseGrid(
                     scrollTopPadding: scrollTopPadding,
@@ -382,17 +395,19 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
                       return SourcePoster(
                         key: ValueKey('source-poster-${item.ref.externalId}'),
                         item: item,
-                        onTap: () => context.push(sourceItemLocation(item.ref)),
+                        onTap: () => context.push(
+                          sourceItemLocation(
+                            item.ref,
+                            sequence: sequenceFor(index, item),
+                          ),
+                        ),
                       );
                     },
                   ),
           ),
           AsyncError(:final error) => SourceErrorView(
             error: error,
-            account: ref
-                .watch(mediaSourceProvider(library.sourceId))
-                ?.source
-                .account,
+            account: source?.source.account,
             onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
           ),
           _ => const Center(child: CircularProgressIndicator()),
@@ -504,10 +519,15 @@ class _ChipRow extends StatelessWidget {
 }
 
 class _ItemList extends StatelessWidget {
-  const _ItemList({required this.items, required this.scrollTopPadding});
+  const _ItemList({
+    required this.items,
+    required this.scrollTopPadding,
+    required this.sequenceFor,
+  });
 
   final List<ItemSummary> items;
   final double scrollTopPadding;
+  final PlaybackSequence? Function(int index, ItemSummary item) sequenceFor;
 
   @override
   Widget build(BuildContext context) {
@@ -523,7 +543,10 @@ class _ItemList extends StatelessWidget {
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
-        final row = _ListRow(item: items[index]);
+        final row = _ListRow(
+          item: items[index],
+          sequence: sequenceFor(index, items[index]),
+        );
         // Keyed by the item, as the grid view's posters are, so coming back
         // from the chip bar returns to the row that left rather than the
         // row nearest the chip.
@@ -548,9 +571,10 @@ class _ItemList extends StatelessWidget {
 }
 
 class _ListRow extends StatelessWidget {
-  const _ListRow({required this.item});
+  const _ListRow({required this.item, this.sequence});
 
   final ItemSummary item;
+  final PlaybackSequence? sequence;
 
   @override
   Widget build(BuildContext context) {
@@ -569,7 +593,8 @@ class _ListRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => context.push(sourceItemLocation(item.ref)),
+          onTap: () =>
+              context.push(sourceItemLocation(item.ref, sequence: sequence)),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(

@@ -2,12 +2,15 @@
 /// synthetic library.
 library;
 
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../domain/models/download_option.dart';
 import '../../../domain/models/download_plan.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../domain/sources/source_error.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
@@ -24,12 +27,18 @@ class StashMediaSource extends MediaSource
         ContinueWatching,
         RecentlyAdded,
         Downloadable,
-        ProgressSync {
+        ProgressSync,
+        SceneSequence {
+  /// [seed] fixes the `random` sort for the life of this instance, so paging
+  /// and previous/next stepping see one stable shuffle. Tests inject it.
   StashMediaSource({
     required this.source,
     required this.client,
     this._onDispose,
-  });
+    int? seed,
+  }) : _seed = seed ?? Random().nextInt(1 << 31);
+
+  final int _seed;
 
   @override
   final Source source;
@@ -118,23 +127,21 @@ class StashMediaSource extends MediaSource
     BrowseQuery query, {
     Cursor? cursor,
   }) async {
-    final sort =
-        stashSortOptions.where((o) => o.id == query.sortId).firstOrNull ??
-        stashSortOptions.first;
-    final descending = query.descending ?? sort.descendingByDefault;
     final page = int.tryParse(cursor?.value ?? '') ?? 1;
-    final data = await client.query(stashFindScenes, {
-      'filter': {
-        'page': page,
-        'per_page': query.pageSize,
-        'sort': sort.id,
-        'direction': descending ? 'DESC' : 'ASC',
-      },
-      if (query.filterIds.contains('unplayed'))
-        'scene_filter': {
-          'play_count': {'value': 0, 'modifier': 'EQUALS'},
-        },
-    });
+    final data = await client.query(
+      stashFindScenes,
+      _findScenesVariables(
+        PlaybackSequence(
+          origin: SequenceOrigin.library,
+          position: 0,
+          sortId: query.sortId,
+          descending: query.descending,
+          filterIds: query.filterIds,
+        ),
+        page: page,
+        perPage: query.pageSize,
+      ),
+    );
     return _page(data, page, query.pageSize);
   }
 
@@ -153,6 +160,153 @@ class StashMediaSource extends MediaSource
     );
   }
 
+  /// The `findScenes` variables of one listing page. Every origin's filter and
+  /// sort is defined here, so a scene's neighbours come from the same query
+  /// that listed it.
+  Map<String, dynamic> _findScenesVariables(
+    PlaybackSequence seq, {
+    required int page,
+    required int perPage,
+  }) {
+    switch (seq.origin) {
+      case SequenceOrigin.library:
+        final sort =
+            stashSortOptions.where((o) => o.id == seq.sortId).firstOrNull ??
+            stashSortOptions.first;
+        final descending = seq.descending ?? sort.descendingByDefault;
+        return {
+          'filter': {
+            'page': page,
+            'per_page': perPage,
+            'sort': sort.id == 'random' ? 'random_$_seed' : sort.id,
+            'direction': descending ? 'DESC' : 'ASC',
+          },
+          if (seq.filterIds.contains('unplayed'))
+            'scene_filter': {
+              'play_count': {'value': 0, 'modifier': 'EQUALS'},
+            },
+        };
+      case SequenceOrigin.search:
+        return {
+          'filter': {'q': seq.query ?? '', 'per_page': perPage, 'page': page},
+        };
+      case SequenceOrigin.continueWatching:
+        return {
+          'filter': {
+            'page': page,
+            'per_page': perPage,
+            'sort': 'last_played_at',
+            'direction': 'DESC',
+          },
+          'scene_filter': {
+            'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
+          },
+        };
+    }
+  }
+
+  static const _searchPageSize = 40;
+  static const _shelfPageSize = 20;
+  static const _libraryPageSize = 60;
+  static const _maxScanPages = 5;
+
+  /// Only the library is paged; the other origins are one page long.
+  static int _sequencePageSize(SequenceOrigin origin) => switch (origin) {
+    SequenceOrigin.library => _libraryPageSize,
+    SequenceOrigin.search => _searchPageSize,
+    SequenceOrigin.continueWatching => _shelfPageSize,
+  };
+
+  @override
+  Future<SequenceNeighbours> neighbours(
+    ItemRef ref,
+    PlaybackSequence sequence,
+  ) async {
+    try {
+      return await _neighbours(ref, sequence);
+    } catch (e) {
+      debugPrint('[StashMediaSource] Could not resolve neighbours: $e');
+      return SequenceNeighbours.none;
+    }
+  }
+
+  Future<SequenceNeighbours> _neighbours(
+    ItemRef ref,
+    PlaybackSequence seq,
+  ) async {
+    final perPage = _sequencePageSize(seq.origin);
+    final lastPage = seq.origin == SequenceOrigin.library ? null : 1;
+    final pages = <int, List<ItemSummary>>{};
+
+    Future<List<ItemSummary>> pageItems(int page) async {
+      if (pages[page] case final cached?) return cached;
+      final data = await client.query(
+        stashFindScenes,
+        _findScenesVariables(seq, page: page, perPage: perPage),
+      );
+      return pages[page] = _page(data, page, perPage).items;
+    }
+
+    Future<ItemSummary?> itemAt(int index) async {
+      if (index < 0) return null;
+      final page = index ~/ perPage + 1;
+      if (lastPage != null && page > lastPage) return null;
+      final items = await pageItems(page);
+      final offset = index % perPage;
+      return offset < items.length ? items[offset] : null;
+    }
+
+    bool isCurrent(ItemSummary? item) =>
+        item != null && item.ref.externalId == ref.externalId;
+
+    Future<SequenceNeighbours> around(int index) async => SequenceNeighbours(
+      previous: await _neighbourAt(ref, itemAt, index - 1),
+      next: await _neighbourAt(ref, itemAt, index + 1),
+    );
+
+    final position = seq.position;
+    // Fetch the pages covering position-1 .. position+1 up front.
+    await itemAt(position - 1);
+    final here = await itemAt(position);
+    await itemAt(position + 1);
+    if (isCurrent(here)) return around(position);
+
+    int? indexIn(int page) {
+      final i = pages[page]?.indexWhere(isCurrent) ?? -1;
+      return i < 0 ? null : (page - 1) * perPage + i;
+    }
+
+    for (final page in pages.keys.toList()..sort()) {
+      if (indexIn(page) case final found?) return around(found);
+    }
+    final scanTo = lastPage ?? _maxScanPages;
+    for (var page = 1; page <= scanTo; page++) {
+      final loaded = await pageItems(page);
+      if (indexIn(page) case final found?) return around(found);
+      if (loaded.length < perPage) break;
+    }
+    // The scene left the listing: whatever now sits at its place is next.
+    return SequenceNeighbours(
+      previous: await _neighbourAt(ref, itemAt, position - 1),
+      next: await _neighbourAt(ref, itemAt, position),
+    );
+  }
+
+  Future<SequenceNeighbour?> _neighbourAt(
+    ItemRef current,
+    Future<ItemSummary?> Function(int) itemAt,
+    int index,
+  ) async {
+    final item = await itemAt(index);
+    // A scene with no file has nothing to play, and opening it would give a
+    // player with no file id; it counts as no neighbour.
+    if (item == null || item.defaultVersionId == null) return null;
+    // Pages come from separate requests, so a list that changed between them
+    // can put the current scene next to itself. Replaying it is no neighbour.
+    if (item.ref.externalId == current.externalId) return null;
+    return SequenceNeighbour(item: item, position: index);
+  }
+
   @override
   Future<ItemDetail> item(ItemRef ref) async {
     final data = await client.query(stashFindScene, {'id': ref.externalId});
@@ -165,13 +319,25 @@ class StashMediaSource extends MediaSource
   Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async =>
       const Page(items: []);
 
-  @override
-  Future<List<ItemSummary>> search(String query) async {
-    final data = await client.query(stashFindScenes, {
-      'filter': {'q': query, 'per_page': 40, 'page': 1},
-    });
-    return _page(data, 1, 40).items;
+  Future<List<ItemSummary>> _shelf(
+    SequenceOrigin origin, {
+    String? query,
+  }) async {
+    final perPage = _sequencePageSize(origin);
+    final data = await client.query(
+      stashFindScenes,
+      _findScenesVariables(
+        PlaybackSequence(origin: origin, position: 0, query: query),
+        page: 1,
+        perPage: perPage,
+      ),
+    );
+    return _page(data, 1, perPage).items;
   }
+
+  @override
+  Future<List<ItemSummary>> search(String query) =>
+      _shelf(SequenceOrigin.search, query: query);
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) => client.query(
@@ -180,32 +346,20 @@ class StashMediaSource extends MediaSource
   );
 
   @override
-  Future<List<ItemSummary>> continueWatching() async {
-    final data = await client.query(stashFindScenes, {
-      'filter': {
-        'page': 1,
-        'per_page': 20,
-        'sort': 'last_played_at',
-        'direction': 'DESC',
-      },
-      'scene_filter': {
-        'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
-      },
-    });
-    return _page(data, 1, 20).items;
-  }
+  Future<List<ItemSummary>> continueWatching() =>
+      _shelf(SequenceOrigin.continueWatching);
 
   @override
   Future<List<ItemSummary>> recentlyAdded() async {
     final data = await client.query(stashFindScenes, {
       'filter': {
         'page': 1,
-        'per_page': 20,
+        'per_page': _shelfPageSize,
         'sort': 'created_at',
         'direction': 'DESC',
       },
     });
-    return _page(data, 1, 20).items;
+    return _page(data, 1, _shelfPageSize).items;
   }
 
   @override

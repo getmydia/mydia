@@ -33,6 +33,7 @@ class FilesPlaybackSession extends SourcePlaybackSession {
     required FilesMediaSource source,
     required super.item,
     required super.fileId,
+    super.sequence,
     this._client,
     this.bridge,
   }) : _files = source,

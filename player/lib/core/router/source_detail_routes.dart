@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
+import '../../domain/sources/playback_sequence.dart';
 import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/detail/detail_links.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
@@ -23,7 +24,8 @@ ItemKind _kindParam(GoRouterState state) =>
     ItemKind.values.asNameMap()[state.pathParameters['kind']] ?? ItemKind.movie;
 
 /// `/s/:sourceId/item/:kind/:itemId`. Movies, shows, seasons and episodes
-/// redirect to their detail route; video and folder keep the generic screen.
+/// redirect to their detail route; video and folder keep the generic screen,
+/// which hands a `seq` listing on to the player.
 GoRoute sourceItemRoute() => GoRoute(
   path: '/s/:sourceId/item/:kind/:itemId',
   name: 'source_item',
@@ -32,8 +34,10 @@ GoRoute sourceItemRoute() => GoRoute(
     if (detailKindOf(kind) == null) return null;
     return detailLocation(SourceTarget(_refOf(state, kind)));
   },
-  builder: (context, state) =>
-      SourceItemScreen(item: _refOf(state, _kindParam(state))),
+  builder: (context, state) => SourceItemScreen(
+    item: _refOf(state, _kindParam(state)),
+    sequence: PlaybackSequence.fromQuery(state.uri.queryParameters),
+  ),
 );
 
 /// A collection's page. It opens item pages with `push`, so it sits in the

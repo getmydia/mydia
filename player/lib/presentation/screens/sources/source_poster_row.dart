@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../widgets/focus_emphasis.dart';
 import '../../widgets/horizontal_rail.dart';
 import '../../widgets/source_artwork.dart';
@@ -20,6 +21,7 @@ class SourcePosterRow extends StatelessWidget {
     this.titleKey,
     this.onTitleTap,
     this.posterFor,
+    this.sequenceFor,
     this.showHeading = true,
     this.itemWidth,
     this.height,
@@ -59,6 +61,11 @@ class SourcePosterRow extends StatelessWidget {
 
   /// Builds each poster. Null builds one that opens the item's screen.
   final Widget Function(BuildContext context, ItemSummary item)? posterFor;
+
+  /// The listing the default poster's item opens with, for a scene whose
+  /// source can name its neighbours (see `sceneSequenceFor`). Unused when
+  /// [posterFor] builds the posters.
+  final PlaybackSequence? Function(int index, ItemSummary item)? sequenceFor;
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +109,12 @@ class SourcePosterRow extends StatelessWidget {
                     SourcePoster(
                       key: ValueKey('source-poster-${item.ref.externalId}'),
                       item: item,
-                      onTap: () => context.push(sourceItemLocation(item.ref)),
+                      onTap: () => context.push(
+                        sourceItemLocation(
+                          item.ref,
+                          sequence: sequenceFor?.call(index, item),
+                        ),
+                      ),
                     ),
               );
             },

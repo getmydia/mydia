@@ -10,6 +10,7 @@ import '../../../core/player/best_file.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/toast/toaster.dart';
@@ -19,8 +20,14 @@ import 'detail_links.dart';
 /// Plays [item] for this screen; the session resumes from the saved position
 /// on its own. Movies, episodes and videos play their best version. A show
 /// plays its next-up episode, and opens when the source has none to offer. A
-/// season or folder has nothing to play itself, so it opens.
-Future<void> playItem(BuildContext context, WidgetRef ref, ItemRef item) async {
+/// season or folder has nothing to play itself, so it opens. [sequence] is
+/// the listing [item] was played from, handed to the player as is.
+Future<void> playItem(
+  BuildContext context,
+  WidgetRef ref,
+  ItemRef item, {
+  PlaybackSequence? sequence,
+}) async {
   final source = ref.read(mediaSourceProvider(item.sourceId));
   if (source == null) return;
   if (item.kind == ItemKind.season || item.kind == ItemKind.folder) {
@@ -66,6 +73,7 @@ Future<void> playItem(BuildContext context, WidgetRef ref, ItemRef item) async {
       detail.summary.ref,
       fileId: fileId,
       title: detail.summary.title,
+      sequence: sequence,
     ),
   );
   if (!context.mounted) return;

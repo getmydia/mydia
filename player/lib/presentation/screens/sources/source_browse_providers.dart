@@ -42,22 +42,24 @@ final sourceLibrariesProvider = StreamProvider.autoDispose
       ).stream;
     });
 
-/// The home row for [library]: its "Recently added" sort when it has one.
+/// The sort a library's home row lists it in: "Recently added" when it has
+/// one, else null (the source's default order).
+String? libraryPreviewSortId(Library library) => library.sortOptions
+    .where((o) => o.name == SortName.recentlyAdded)
+    .firstOrNull
+    ?.id;
+
+/// The home row for [library], sorted by [libraryPreviewSortId].
 final sourceLibraryPreviewProvider = StreamProvider.autoDispose
     .family<List<ItemSummary>, LibraryRef>((ref, library) async* {
       final source = requireSource(ref, library.sourceId);
       // selectAsync: a fresh libraries answer with the same sort must not
       // rebuild this row and fetch it twice.
       final sortId = await ref.watch(
-        sourceLibrariesProvider(library.sourceId).selectAsync(
-          (libraries) => libraries
-              .where((l) => l.ref == library)
-              .firstOrNull
-              ?.sortOptions
-              .where((o) => o.name == SortName.recentlyAdded)
-              .firstOrNull
-              ?.id,
-        ),
+        sourceLibrariesProvider(library.sourceId).selectAsync((libraries) {
+          final info = libraries.where((l) => l.ref == library).firstOrNull;
+          return info == null ? null : libraryPreviewSortId(info);
+        }),
       );
       if (!ref.mounted) return;
       final query = BrowseQuery(sortId: sortId, pageSize: 20);

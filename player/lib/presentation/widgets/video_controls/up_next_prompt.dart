@@ -8,9 +8,11 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../../l10n/l10n.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../artwork_image.dart';
 import '../glass_surface.dart';
 import '../shimmer_card.dart';
+import '../source_artwork.dart';
 import 'chrome_bottom_bar.dart';
 import 'chrome_top_bar.dart';
 import 'control_button.dart';
@@ -52,6 +54,9 @@ class UpNextPrompt extends StatefulWidget {
   static const Key pillKey = Key('up-next-pill');
   static const Key cardKey = Key('up-next-card');
   static const Key stillKey = Key('up-next-still');
+
+  /// The resting pill's label, which ellipsizes a long scene title.
+  static const Key pillLabelKey = Key('up-next-pill-label');
 
   /// The play control, and the dismiss control.
   ///
@@ -145,9 +150,19 @@ class _UpNextPromptState extends State<UpNextPrompt> {
         children: [
           _CountdownRing(countdown: widget.countdown),
           const SizedBox(width: 8),
-          _FocusableTap(
-            onTap: () => _setExpanded(true),
-            child: Text(widget.target.pillLabel(context.l10n)),
+          // A scene's label is its title, which can be any length: it takes
+          // only the width the other segments leave and ends in an ellipsis.
+          Flexible(
+            child: _FocusableTap(
+              onTap: () => _setExpanded(true),
+              child: Text(
+                widget.target.pillLabel(context.l10n),
+                key: UpNextPrompt.pillLabelKey,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+              ),
+            ),
           ),
           const _PillDivider(),
           _PillSegment(
@@ -184,7 +199,12 @@ class _UpNextPromptState extends State<UpNextPrompt> {
     final cardWidth = width < 600
         ? math.max(0.0, width - 32)
         : (width - 48).clamp(0.0, 320.0);
+    final scene = widget.target.scene;
     final still = widget.target.thumbnailUrl;
+    // A scene names its studio where an episode names its code.
+    final code = scene != null
+        ? scene.item.subtitle
+        : widget.target.episodeCode;
     final glassText = TextStyle(color: Colors.white.withValues(alpha: .80));
     return GestureDetector(
       key: UpNextPrompt.cardKey,
@@ -216,7 +236,10 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                 const SizedBox(height: 11),
                 Row(
                   children: [
-                    if (still != null) ...[
+                    if (scene != null && scene.item.poster != null) ...[
+                      _SceneStill(scene: scene),
+                      const SizedBox(width: 10),
+                    ] else if (still != null) ...[
                       _CardStill(url: still),
                       const SizedBox(width: 10),
                     ],
@@ -225,11 +248,13 @@ class _UpNextPromptState extends State<UpNextPrompt> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            widget.target.episodeCode,
-                            style: glassText.copyWith(fontSize: 9.5),
-                          ),
-                          const SizedBox(height: 2),
+                          if (code != null) ...[
+                            Text(
+                              code,
+                              style: glassText.copyWith(fontSize: 9.5),
+                            ),
+                            const SizedBox(height: 2),
+                          ],
                           Text(
                             widget.target.title ??
                                 context.l10n.upNextEpisodeFallback(
@@ -334,6 +359,26 @@ class _CardStill extends StatelessWidget {
         placeholder: (_) => const ShimmerCard(width: 80, height: 45),
         errorWidget: (_) =>
             ColoredBox(color: Colors.white.withValues(alpha: .06)),
+      ),
+    ),
+  );
+}
+
+/// A scene's poster, from its source, in the episode still's frame.
+class _SceneStill extends StatelessWidget {
+  const _SceneStill({required this.scene});
+  final SequenceNeighbour scene;
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    key: UpNextPrompt.stillKey,
+    borderRadius: BorderRadius.circular(6),
+    child: SizedBox(
+      width: 80,
+      height: 45,
+      child: SourceArtworkImage(
+        sourceId: scene.item.ref.sourceId,
+        art: scene.item.poster!,
+        fallback: ColoredBox(color: Colors.white.withValues(alpha: .06)),
       ),
     ),
   );

@@ -89,6 +89,7 @@ ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
     ),
     addedAt: _instant(scene['created_at']),
     lastPlayedAt: _instant(scene['last_played_at']),
+    defaultVersionId: file == null ? null : '${file['id']}',
   );
 }
 

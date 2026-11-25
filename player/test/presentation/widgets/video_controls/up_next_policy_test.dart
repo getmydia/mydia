@@ -123,6 +123,60 @@ void main() {
             'episode, unlike the old 90% heuristic',
       );
     });
+
+    group('sequence (scenes have no credits)', () {
+      bool offer(
+        Duration position,
+        Duration duration, {
+        bool sequence = true,
+      }) => shouldOfferUpNext(
+        segments: const [],
+        position: position,
+        duration: duration,
+        sequence: sequence,
+      );
+
+      test('a 30s clip is not offered halfway, only in its last 10s', () {
+        const clip = Duration(seconds: 30);
+        expect(offer(const Duration(seconds: 15), clip), isFalse);
+        expect(offer(const Duration(seconds: 27), clip), isTrue);
+      });
+
+      test('a 20 minute scene caps the window at 60s', () {
+        const scene = Duration(minutes: 20);
+        expect(offer(const Duration(minutes: 18, seconds: 30), scene), isFalse);
+        expect(offer(const Duration(minutes: 19, seconds: 1), scene), isTrue);
+      });
+
+      test('a 5s clip may offer at once: the countdown outlasts it', () {
+        expect(offer(Duration.zero, const Duration(seconds: 5)), isTrue);
+      });
+
+      test('an episode without credits keeps the 60s window', () {
+        const clip = Duration(seconds: 30);
+        expect(
+          offer(const Duration(seconds: 15), clip, sequence: false),
+          isTrue,
+        );
+      });
+    });
+
+    group('sceneUpNextWindow', () {
+      test('is 10% of the file, between the countdown and 60s', () {
+        expect(
+          sceneUpNextWindow(const Duration(seconds: 30)),
+          const Duration(seconds: 10),
+        );
+        expect(
+          sceneUpNextWindow(const Duration(minutes: 5)),
+          const Duration(seconds: 30),
+        );
+        expect(
+          sceneUpNextWindow(const Duration(minutes: 20)),
+          const Duration(seconds: 60),
+        );
+      });
+    });
   });
   group('shouldBlockAutoPlayNext', () {
     test('blocks auto countdown after the viewer dismissed up-next', () {

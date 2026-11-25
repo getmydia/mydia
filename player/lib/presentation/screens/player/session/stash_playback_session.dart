@@ -31,6 +31,7 @@ class StashPlaybackSession extends SourcePlaybackSession {
     required StashMediaSource source,
     required super.item,
     required super.fileId,
+    super.sequence,
   }) : _stash = source,
        super(source: source);
 
