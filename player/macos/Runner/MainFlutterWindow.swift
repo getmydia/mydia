@@ -95,7 +95,8 @@ class MainFlutterWindow: NSWindow, NSToolbarDelegate {
     windowPlugin = WindowPlugin(
       messenger: flutterViewController.engine.binaryMessenger, window: self)
     mpvSurface = MpvSurfacePlugin.register(
-      with: flutterViewController.registrar(forPlugin: "MpvSurfacePlugin"), window: self)
+      with: flutterViewController.registrar(forPlugin: "MpvSurfacePlugin"), window: self,
+      flutterView: flutterViewController.view)
 
     // Make the window look more native
     self.titlebarAppearsTransparent = true

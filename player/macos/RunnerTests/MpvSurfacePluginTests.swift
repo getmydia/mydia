@@ -676,4 +676,69 @@ final class MpvSurfacePluginTests: XCTestCase {
     XCTAssertTrue(view.wantsLayer)
     XCTAssertEqual(view.layer?.backgroundColor, NSColor.black.cgColor)
   }
+
+  /// Stands in for mpv's own view: it takes clicks and keyboard focus.
+  private final class GreedyView: NSView {
+    override var acceptsFirstResponder: Bool { true }
+  }
+
+  private func makeWindow(holding views: NSView...) -> NSWindow {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+      styleMask: [.titled], backing: .buffered, defer: true)
+    window.isReleasedWhenClosed = false
+    for view in views {
+      view.frame = window.contentView?.bounds ?? .zero
+      window.contentView?.addSubview(view)
+    }
+    return window
+  }
+
+  func testHostViewNeverTakesAClickEvenOverMpvsView() {
+    let view = makeView(makePlugin(api: FakeMpvApi()))
+    view.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
+    let mpv = GreedyView(frame: view.bounds)
+    view.addSubview(mpv)
+
+    XCTAssertNil(view.hitTest(NSPoint(x: 50, y: 50)))
+  }
+
+  func testPluginHandsHostViewsTheFlutterViewForFocus() {
+    let plugin = makePlugin(api: FakeMpvApi())
+    let flutter = NSView()
+    plugin.focusFallback = flutter
+
+    XCTAssertTrue(makeView(plugin).focusFallback === flutter)
+  }
+
+  func testFocusInsideTheHostReturnsToFlutterWhenItLeavesTheWindow() {
+    let view = makeView(makePlugin(api: FakeMpvApi()))
+    let mpv = GreedyView()
+    view.addSubview(mpv)
+    let flutter = GreedyView()
+    view.focusFallback = flutter
+    let window = makeWindow(holding: flutter, view)
+    defer { window.close() }
+
+    XCTAssertTrue(window.makeFirstResponder(mpv))
+    XCTAssertTrue(view.holdsFocus)
+
+    view.removeFromSuperview()
+
+    XCTAssertTrue(window.firstResponder === flutter, "focus was left on the window")
+  }
+
+  func testFocusElsewhereIsLeftAloneWhenTheHostLeaves() {
+    let view = makeView(makePlugin(api: FakeMpvApi()))
+    let flutter = GreedyView()
+    let other = GreedyView()
+    view.focusFallback = flutter
+    let window = makeWindow(holding: flutter, other, view)
+    defer { window.close() }
+
+    XCTAssertTrue(window.makeFirstResponder(other))
+    view.removeFromSuperview()
+
+    XCTAssertTrue(window.firstResponder === other)
+  }
 }
