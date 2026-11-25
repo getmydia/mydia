@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../../domain/models/media_segment.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../l10n/l10n.dart';
 
 /// Fallback trigger window, used only when no credits segment was detected
@@ -111,7 +112,21 @@ class UpNextTarget {
     required this.title,
     this.thumbnailUrl,
     this.crossesSeason = false,
-  });
+  }) : scene = null;
+
+  /// The next scene of a sequence. The episode fields are zeroed: a scene
+  /// has no season, and [scene] is what navigation and the prompt read.
+  UpNextTarget.scene(SequenceNeighbour this.scene)
+    : episodeId = '',
+      fileId = scene.item.defaultVersionId ?? '',
+      seasonNumber = 0,
+      episodeNumber = 0,
+      title = scene.item.title,
+      thumbnailUrl = null,
+      crossesSeason = false;
+
+  /// Set only for a scene target; see [UpNextTarget.scene].
+  final SequenceNeighbour? scene;
 
   final String episodeId;
   final String fileId;
@@ -134,12 +149,15 @@ class UpNextTarget {
 
   /// The resting pill's single line of text.
   String pillLabel(AppLocalizations l10n) =>
-      l10n.videoUpNextPill(eyebrow(l10n), episodeCode);
+      l10n.videoUpNextPill(eyebrow(l10n), scene != null ? title! : episodeCode);
 
   /// The title written into the player route, matching the format
   /// `UpNextController.playNext` already builds.
-  String get routeTitle =>
-      title == null ? episodeCode : '$episodeCode - $title';
+  String get routeTitle => scene != null
+      ? title!
+      : title == null
+      ? episodeCode
+      : '$episodeCode - $title';
 }
 
 UpNextTarget? _toTarget(

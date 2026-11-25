@@ -11,6 +11,7 @@ import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_track.dart';
 import '../../../../domain/models/subtitle_search_outcome.dart';
 import '../../../../domain/sources/item.dart';
+import '../../../../domain/sources/playback_sequence.dart';
 import 'playback_session_types.dart';
 
 abstract interface class PlaybackSession {
@@ -91,4 +92,13 @@ abstract interface class PlaybackSession {
     required int seasonNumber,
     required String? showId,
   });
+
+  /// The previous and next item of the listing this one was opened from.
+  /// Null when the route carried no sequence or the source cannot answer.
+  /// Never throws.
+  Future<SequenceNeighbours?> sequenceNeighbours();
+
+  /// Where the player goes to play [neighbour], keeping the sequence.
+  /// Only called with a neighbour [sequenceNeighbours] returned.
+  String sequenceLocation(SequenceNeighbour neighbour);
 }

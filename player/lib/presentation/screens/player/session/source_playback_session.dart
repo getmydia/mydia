@@ -17,6 +17,7 @@ import '../../../../domain/models/subtitle_search_outcome.dart';
 import '../../../../domain/models/subtitle_track.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/library.dart' show Cursor;
+import '../../../../domain/sources/playback_sequence.dart';
 import '../../../../domain/sources/source_error.dart';
 import '../../../../l10n/l10n.dart';
 import '../../detail/detail_links.dart';
@@ -42,6 +43,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     required this.source,
     required this.item,
     required this.fileId,
+    this.sequence,
   });
 
   final MediaSource source;
@@ -50,6 +52,10 @@ abstract class SourcePlaybackSession implements PlaybackSession {
 
   /// The version the viewer picked; the first one when it is gone.
   final String fileId;
+
+  /// The listing the item was opened from, when the route carried one. Only
+  /// a source implementing [SceneSequence] does anything with it.
+  final PlaybackSequence? sequence;
 
   Future<ItemDetail>? _detail;
 
@@ -345,4 +351,24 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     required String fileId,
     required SubtitleTrack? resolved,
   }) async {}
+
+  @override
+  Future<SequenceNeighbours?> sequenceNeighbours() async {
+    final sequence = this.sequence;
+    final sequencer = source.as<SceneSequence>();
+    if (sequence == null || sequencer == null) return null;
+    try {
+      return await sequencer.neighbours(item, sequence);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  String sequenceLocation(SequenceNeighbour neighbour) => sourcePlayerLocation(
+    neighbour.item.ref,
+    fileId: neighbour.item.defaultVersionId,
+    title: neighbour.item.title,
+    sequence: sequence!.at(neighbour.position),
+  );
 }

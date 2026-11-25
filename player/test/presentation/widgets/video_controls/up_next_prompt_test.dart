@@ -2,6 +2,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
+import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/playback_sequence.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_countdown.dart';
@@ -383,6 +386,42 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
       expect(played, 1);
+    });
+  });
+
+  group('scene target', () {
+    final scene = UpNextTarget.scene(
+      const SequenceNeighbour(
+        item: ItemSummary(
+          ref: ItemRef(
+            sourceId: SourceId('stash-1'),
+            kind: ItemKind.movie,
+            externalId: 'sc-2',
+          ),
+          title: 'Scene Beta',
+          subtitle: 'Studio Gamma',
+          defaultVersionId: 'file-sc-2',
+        ),
+        position: 4,
+      ),
+    );
+
+    testWidgets('the pill names the scene, not an episode code', (
+      tester,
+    ) async {
+      await _pump(tester, countdown: countdown, target: scene);
+      expect(find.text('Next up · Scene Beta'), findsOneWidget);
+      expect(find.textContaining('S0E0'), findsNothing);
+    });
+
+    testWidgets('the card shows the title and studio', (tester) async {
+      await _pump(tester, countdown: countdown, target: scene);
+      await _expandCard(tester);
+      expect(find.byKey(UpNextPrompt.cardKey), findsOneWidget);
+      expect(find.text('Scene Beta'), findsOneWidget);
+      expect(find.text('Studio Gamma'), findsOneWidget);
+      expect(find.textContaining('S0E0'), findsNothing);
+      expect(find.textContaining('Episode'), findsNothing);
     });
   });
 }

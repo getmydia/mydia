@@ -8,6 +8,7 @@ import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/playback_sequence.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
@@ -77,6 +78,36 @@ void main() {
     expect(bare.showId, isNull);
     expect(bare.seasonNumber, isNull);
     expect(bare.resumeSeconds, isNull);
+  });
+
+  test('reads the scene sequence from the location', () {
+    final params = SourcePlayerParams.fromUri(
+      Uri.parse(
+        '/s/x/player/v1?kind=movie&fileId=p9&seq=library&seqPos=4'
+        '&seqSort=date&seqDesc=1',
+      ),
+    );
+    expect(
+      params.sequence,
+      const PlaybackSequence(
+        origin: SequenceOrigin.library,
+        position: 4,
+        sortId: 'date',
+        descending: true,
+      ),
+    );
+    expect(params.mediaType, 'movie');
+    expect(
+      SourcePlayerParams.fromUri(
+        Uri.parse('/s/x/player/v1?fileId=p9&seq=nowhere&seqPos=4'),
+      ).sequence,
+      isNull,
+    );
+    expect(
+      SourcePlayerParams.fromUri(Uri.parse('/s/x/player/v1?fileId=p9'))
+          .sequence,
+      isNull,
+    );
   });
 
   test('reads the tracks and autoplay a remote load content carries', () {

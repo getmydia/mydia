@@ -54,6 +54,7 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
     required JellyfinMediaSource source,
     required super.item,
     required super.fileId,
+    super.sequence,
     this._profile,
   }) : _jellyfin = source,
        super(source: source);

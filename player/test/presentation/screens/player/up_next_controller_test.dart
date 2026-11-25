@@ -2,9 +2,26 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
+import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/playback_sequence.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/screens/player/up_next_controller.dart';
 import 'package:player/presentation/widgets/video_controls/up_next_countdown.dart';
+
+SequenceNeighbour _scene(String id, int position) => SequenceNeighbour(
+  item: ItemSummary(
+    ref: ItemRef(
+      sourceId: const SourceId('stash-1'),
+      kind: ItemKind.movie,
+      externalId: id,
+    ),
+    title: 'Invented Scene $id',
+    subtitle: 'Invented Studio',
+    defaultVersionId: 'file-$id',
+  ),
+  position: position,
+);
 
 PlaybackEpisode _ep(int n, {int season = 1, List<String?>? files}) =>
     PlaybackEpisode(
@@ -21,6 +38,7 @@ class _Harness {
     this.nextSeason,
     this.downloadedSource = false,
     this.playing,
+    this.episode = true,
   }) {
     controller = UpNextController(
       fetchSeason: (season) async {
@@ -31,8 +49,9 @@ class _Harness {
       navigate: (episodeId, fileId, title, {required seasonNumber}) async {
         navigations.add((episodeId, fileId, title, seasonNumber));
       },
+      navigateSequence: (n) async => sceneNavigations.add(n),
       playingSignal: () => playing,
-      isEpisode: () => true,
+      isEpisode: () => episode,
       hasShow: () => true,
       seasonNumber: () => 1,
       isDownloadedSource: () => downloadedSource,
@@ -45,7 +64,9 @@ class _Harness {
   final List<PlaybackEpisode>? nextSeason;
   final bool downloadedSource;
   final PlayingSignal? playing;
+  final bool episode;
   late final UpNextController controller;
+  final sceneNavigations = <SequenceNeighbour>[];
   final fetchedSeasons = <int>[];
   final navigations = <(String, String, String, int)>[];
   var isMounted = true;
@@ -223,5 +244,83 @@ void main() {
     h.controller.setSeason(season, currentEpisodeId: 's1e1');
     h.controller.clearSeason();
     expect(h.controller.hasNext, isFalse);
+  });
+
+  group('scene sequence', () {
+    final previous = _scene('p', 3);
+    final next = _scene('n', 5);
+
+    test('previous and next come from the sequence', () {
+      final h = _Harness(episode: false);
+      expect(h.controller.hasSequence, isFalse);
+      h.controller.setSequence(
+        SequenceNeighbours(previous: previous, next: next),
+      );
+      expect(h.controller.hasSequence, isTrue);
+      expect(h.controller.hasPrevious, isTrue);
+      expect(h.controller.hasNext, isTrue);
+
+      h.controller.playNext();
+      h.controller.playPrevious();
+      expect(h.sceneNavigations, [next, previous]);
+      expect(h.navigations, isEmpty);
+    });
+
+    test('without a next scene, nothing is offered', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(previous: previous));
+      expect(h.controller.hasNext, isFalse);
+      expect(h.controller.hasPrevious, isTrue);
+      h.controller.onPositionTick();
+      expect(h.controller.showing, isFalse);
+      h.controller.playNext();
+      expect(h.sceneNavigations, isEmpty);
+    });
+
+    test('offers the next scene for a movie-typed item', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      h.controller.onPositionTick();
+      expect(h.controller.showing, isTrue);
+      expect(h.controller.target?.scene, next);
+      expect(h.controller.target?.title, 'Invented Scene n');
+      h.controller.dispose();
+    });
+
+    test('the countdown navigates to the next scene', () {
+      fakeAsync((async) {
+        final h = _Harness(episode: false);
+        h.controller.setSequence(SequenceNeighbours(next: next));
+        h.controller.onPositionTick();
+        async.elapse(kUpNextCountdown + const Duration(seconds: 2));
+        expect(h.sceneNavigations, [next]);
+        h.controller.dispose();
+      });
+    });
+
+    test('after a cancel the countdown does not navigate, a manual next '
+        'does', () {
+      fakeAsync((async) {
+        final h = _Harness(episode: false);
+        h.controller.setSequence(SequenceNeighbours(next: next));
+        h.controller.onPositionTick();
+        h.controller.cancel();
+        async.elapse(kUpNextCountdown + const Duration(seconds: 2));
+        expect(h.sceneNavigations, isEmpty);
+        h.controller.playNext();
+        expect(h.sceneNavigations, [next]);
+        h.controller.dispose();
+      });
+    });
+
+    test('clearSequence returns to season mode', () {
+      final h = _Harness();
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      h.controller.clearSequence();
+      expect(h.controller.hasSequence, isFalse);
+      expect(h.controller.hasNext, isFalse);
+      h.controller.setSeason(season, currentEpisodeId: 's1e1');
+      expect(h.controller.hasNext, isTrue);
+    });
   });
 }

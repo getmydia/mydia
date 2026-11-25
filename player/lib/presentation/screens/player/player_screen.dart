@@ -104,6 +104,7 @@ import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
@@ -1214,13 +1215,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           null;
     },
     navigate: _navigateToEpisode,
+    navigateSequence: _navigateToSequence,
     playingSignal: () {
       final player = _player;
       return player == null
           ? null
           : (playing: player.state.playing, changes: player.stream.playing);
     },
-    isEpisode: () => widget.mediaType == 'episode',
+    isEpisode: () => widget.mediaType == 'episode' || _upNext.hasSequence,
     hasShow: () => _showId != null,
     seasonNumber: () => _seasonNumber,
     isDownloadedSource: () => _isDownloadedSource,
@@ -1750,6 +1752,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _showId = widget.showId;
     _seasonNumber = widget.seasonNumber;
     _upNext.clearSeason();
+    _upNext.clearSequence();
     _upNext.reset();
   }
 
@@ -3574,6 +3577,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Future<void> _fetchProgressAndEpisodes(int gen) {
     final isEpisode = widget.mediaType == 'episode';
     final seasonKnown = _showId != null && _seasonNumber != null;
+    // In the background like the season episodes: nothing before play needs
+    // the neighbours, and a slow listing query must not hold playback.
+    unawaited(runIsolated({'scene sequence': () => _fetchSceneSequence(gen)}));
     return runIsolated({
       'detail and subtitle preference': () async {
         await _fetchDetail(gen);
@@ -3944,6 +3950,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _publishNowPlaying();
   }
 
+  /// The previous and next item of the listing this one was opened from.
+  /// Null (no route sequence, a source that cannot answer, a failure) leaves
+  /// the season mode untouched.
+  Future<void> _fetchSceneSequence(int gen) async {
+    final neighbours = await _session.sequenceNeighbours();
+    if (neighbours == null || !_isCurrentLoad(gen)) return;
+    setState(() => _upNext.setSequence(neighbours));
+    _publishNowPlaying();
+  }
+
   void _onPlaybackProgress() {
     final player = _player;
     if (player == null || !mounted) return;
@@ -4271,6 +4287,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         showId: _showId,
       ),
     );
+  }
+
+  /// Same shape as [_navigateToEpisode], for a neighbour of the sequence.
+  Future<void> _navigateToSequence(SequenceNeighbour neighbour) async {
+    await _saveProgress();
+    if (!mounted) return;
+    context.go(_session.sequenceLocation(neighbour));
   }
 
   /// Saves the current position under this widget's own identity; see
