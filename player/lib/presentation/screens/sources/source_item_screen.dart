@@ -14,6 +14,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_request.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
@@ -27,9 +28,12 @@ import 'source_browse_providers.dart';
 import 'source_error_view.dart';
 
 class SourceItemScreen extends ConsumerWidget {
-  const SourceItemScreen({super.key, required this.item});
+  const SourceItemScreen({super.key, required this.item, this.sequence});
 
   final ItemRef item;
+
+  /// The listing this item was opened from, which Play hands the player.
+  final PlaybackSequence? sequence;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -53,7 +57,7 @@ class SourceItemScreen extends ConsumerWidget {
                 ),
                 Padding(
                   padding: const EdgeInsets.all(24),
-                  child: _Body(detail: value, item: item),
+                  child: _Body(detail: value, item: item, sequence: sequence),
                 ),
                 if (item.kind == ItemKind.folder) _Children(parent: item),
               ],
@@ -72,10 +76,11 @@ class SourceItemScreen extends ConsumerWidget {
 }
 
 class _Body extends ConsumerWidget {
-  const _Body({required this.detail, required this.item});
+  const _Body({required this.detail, required this.item, this.sequence});
 
   final ItemDetail detail;
   final ItemRef item;
+  final PlaybackSequence? sequence;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -134,6 +139,7 @@ class _Body extends ConsumerWidget {
                       detail.summary.ref,
                       fileId: version.id,
                       title: detail.summary.title,
+                      sequence: sequence,
                     ),
                   );
                   if (!context.mounted) return;

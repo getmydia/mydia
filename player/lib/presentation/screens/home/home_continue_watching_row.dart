@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/media_context_menu.dart';
@@ -18,6 +19,7 @@ import '../all_servers/all_servers_cards.dart' show allServersServerLabel;
 import '../detail/detail_links.dart';
 import '../detail/play_item.dart';
 import '../sources/continue_watching_card.dart';
+import '../sources/scene_sequence_links.dart';
 import '../sources/source_browse_providers.dart';
 import '../sources/source_poster_row.dart';
 import 'home_rows.dart';
@@ -80,16 +82,34 @@ class _HomeContinueWatchingRowState
         ),
         item: item,
         trailingLabel: _label(item),
-        onTap: () => playItem(context, ref, item.ref),
-        onContextMenu: (cardContext) => _openMenu(cardContext, item),
+        onTap: () =>
+            playItem(context, ref, item.ref, sequence: _sequence(items, item)),
+        onContextMenu: (cardContext) =>
+            _openMenu(cardContext, item, _sequence(items, item)),
       ),
     );
   }
 
+  /// The card's place in the row as shown. Merged rows interleave servers,
+  /// so the source finds the scene by id when the place does not match.
+  PlaybackSequence? _sequence(List<ItemSummary> items, ItemSummary item) =>
+      sceneSequenceFor(
+        ref.read(mediaSourceProvider(item.ref.sourceId)),
+        item,
+        () => PlaybackSequence(
+          origin: SequenceOrigin.continueWatching,
+          position: items.indexOf(item),
+        ),
+      );
+
   ContinueWatching? _capability(ItemSummary item) =>
       ref.read(mediaSourceProvider(item.ref.sourceId))?.as<ContinueWatching>();
 
-  Future<void> _openMenu(BuildContext cardContext, ItemSummary item) async {
+  Future<void> _openMenu(
+    BuildContext cardContext,
+    ItemSummary item,
+    PlaybackSequence? sequence,
+  ) async {
     final removable =
         _capability(item)?.canRemoveFromContinueWatching(item) ?? false;
     final position = popupPositionBelow(cardContext);
@@ -114,7 +134,9 @@ class _HomeContinueWatchingRowState
     if (selected == null || !cardContext.mounted) return;
     switch (selected) {
       case _Action.details:
-        await cardContext.push(sourceItemLocation(item.ref));
+        await cardContext.push(
+          sourceItemLocation(item.ref, sequence: sequence),
+        );
       case _Action.remove:
         await _remove(cardContext, item);
     }
