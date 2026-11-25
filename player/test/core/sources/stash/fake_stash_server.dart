@@ -13,6 +13,10 @@ class FakeStashServer {
   final operations = <(String, Map<String, dynamic>)>[];
   int? status;
 
+  /// Scene ids of the unfiltered listing, in order. Tests grow, shift or
+  /// shrink it.
+  List<int> sceneIds = [for (var n = 1; n <= 5; n++) n];
+
   /// When set, every GraphQL answer is this error message instead.
   String? graphqlError;
 
@@ -111,7 +115,7 @@ class FakeStashServer {
         // Scenes 4 then 2 are part-watched, most recently played first.
         var all = sceneFilter.containsKey('resume_time')
             ? [scene(4, resume: 120), scene(2, resume: 300)]
-            : [for (var n = 1; n <= 5; n++) scene(n)];
+            : [for (final n in sceneIds) scene(n)];
         if (filter['sort'] == 'created_at' && filter['direction'] == 'DESC') {
           all = all.reversed.toList();
         }

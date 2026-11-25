@@ -67,10 +67,13 @@ rails attach none: they mix sources or have no stable order. A deep link with
 no `seq` parameters plays with no previous/next.
 
 **Random sort.** `stashSortOptions`' `random` becomes Stash's seeded
-`random_<seed>` sort. The library screen picks a seed when the viewer chooses
-Random and keeps it in `sortId`, so the sequence replays the same order. This
-also stops the grid's own pages reshuffling between page loads, which happens
-today.
+`random_<seed>` sort. The seed is held per `StashMediaSource` instance (one
+random seed per instance, injectable for tests) rather than picked by the
+library screen, so the grid's pages and the sequence's stepping see one stable
+order for the whole app session. This also stops the grid's own pages
+reshuffling between page loads, which happens today. A web reload builds a new
+source and so reshuffles; a neighbour lookup then misses the scene at its
+recorded position and falls back to the id scan.
 
 ### 2. Resolving neighbours in the Stash source
 
