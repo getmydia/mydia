@@ -80,6 +80,17 @@ class AppDelegate: FlutterAppDelegate {
   /// remote-notification hook, so they are forwarded by hand.
   private var cloudKitPlugin: CloudKitPlugin?
 
+  override init() {
+    // libmpv's mac video output sets the app's Dock icon to mpv's every time
+    // it configures (`Common.setAppIcon`, from `MacCommon.config`), unless
+    // MPVBUNDLE is "true", its marker for running inside a bundle that has
+    // its own icon. This app is that bundle. mpv's other reads of it only
+    // affect the standalone mpv app and a config search path inside our
+    // Resources, which holds no mpv config. Set before any player exists.
+    setenv("MPVBUNDLE", "true", 1)
+    super.init()
+  }
+
   override func applicationDidFinishLaunching(_ notification: Notification) {
     updaterController = SPUStandardUpdaterController(
       startingUpdater: true,

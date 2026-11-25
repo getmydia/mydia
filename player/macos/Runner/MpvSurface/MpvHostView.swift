@@ -74,7 +74,37 @@ final class MpvHostView: NSView {
     return "\(metal.wantsExtendedDynamicRangeContent) \(space) \(metadata)"
   }
 
+  /// Where keyboard focus goes back to when this view or mpv's view inside
+  /// it holds it: Flutter's view. Weak, since the plugin sets it once and
+  /// the Flutter view outlives every host.
+  weak var focusFallback: NSView?
+
+  /// Never the target of a mouse event: clicks and drags over the video go
+  /// to Flutter, which draws the player's gestures and controls over it.
+  ///
+  /// mpv's own view, which it adds inside this one, overrides `mouseDown`
+  /// and accepts first responder. Without this, a click on the video went to
+  /// mpv, so double-click to fullscreen did nothing, and the click made
+  /// mpv's view the key view, so the arrow keys never reached Flutter again.
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+  /// Whether this view or one inside it is the window's first responder.
+  var holdsFocus: Bool {
+    guard let responder = window?.firstResponder as? NSView else { return false }
+    return responder === self || responder.isDescendant(of: self)
+  }
+
+  /// Gives keyboard focus back to Flutter if this view's subtree holds it.
+  func returnFocus() {
+    guard holdsFocus, let window, let target = focusFallback, target.window === window
+    else { return }
+    window.makeFirstResponder(target)
+  }
+
   override func viewWillMove(toWindow newWindow: NSWindow?) {
+    // Leaving while holding focus would leave the window itself as first
+    // responder, and Flutter would stop getting key events.
+    if newWindow == nil { returnFocus() }
     super.viewWillMove(toWindow: newWindow)
     guard newWindow == nil, let handle = attachedHandle else { return }
     attachedHandle = nil

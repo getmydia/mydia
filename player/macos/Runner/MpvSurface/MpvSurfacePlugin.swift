@@ -86,6 +86,8 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
   private var displayChannel: FlutterEventChannel?
   private var displaySink: FlutterEventSink?
   private weak var window: NSWindow?
+  /// Flutter's view, where a host view returns keyboard focus it holds.
+  weak var focusFallback: NSView?
   private var observers: [NSObjectProtocol] = []
 
   /// Reads the display info; nil falls back to the window's screen.
@@ -134,10 +136,11 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
 
   /// Registers the view factory and both channels. The caller holds the
   /// returned plugin; the channels only hold it through their handlers.
-  static func register(with registrar: FlutterPluginRegistrar, window: NSWindow)
-    -> MpvSurfacePlugin
-  {
+  static func register(
+    with registrar: FlutterPluginRegistrar, window: NSWindow, flutterView: NSView?
+  ) -> MpvSurfacePlugin {
     let plugin = MpvSurfacePlugin()
+    plugin.focusFallback = flutterView
     registrar.register(plugin, withId: viewType)
 
     let methods = FlutterMethodChannel(name: channelName, binaryMessenger: registrar.messenger)
@@ -390,6 +393,7 @@ final class MpvSurfacePlugin: NSObject, FlutterPlatformViewFactory, FlutterStrea
 
   func create(withViewIdentifier viewId: Int64, arguments args: Any?) -> NSView {
     let view = MpvHostView(frame: .zero)
+    view.focusFallback = focusFallback
     view.onLeaveWindow = { [weak self, weak view] handleValue in
       guard let self, let handle = OpaquePointer(bitPattern: handleValue) else { return }
       let hosts = self.forgetAttachment(handleValue) + [view].compactMap { $0 }

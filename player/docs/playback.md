@@ -669,6 +669,16 @@ path.
   changed. Setting the same value again does nothing; Core Animation only
   sends a change. Without it the headroom stayed at 1.2 in three runs out of
   three on an M2 Pro XDR panel; with it, it rose past 5.
+- mpv's embedded view overrides `mouseDown` and accepts first responder, so
+  `MpvHostView.hitTest` returns nil: every click over the video goes to
+  Flutter, which owns the player's gestures. Before that, a click on the
+  video reached mpv instead, double-click to fullscreen did nothing, and the
+  click made mpv's view the key view, so the arrow keys stopped reaching
+  Flutter. A host view leaving its window while it or mpv's view holds focus
+  hands it back to the Flutter view (`focusFallback`).
+- mpv sets the Dock icon to its own each time its mac output configures,
+  unless `MPVBUNDLE=true`. `AppDelegate.init` sets it before any player
+  exists.
 - Fit and fill are mpv's `panscan` (0.0 and 1.0), sent through the plugin.
 - An event channel reports the window's screen and its EDR headroom
   (`edrHeadroom`, `potentialHeadroom`) for the stats HDR row, which reads
