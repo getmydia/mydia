@@ -1445,12 +1445,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
 
     _stopVerification();
+    // The old file's neighbours must not outlive the file: until
+    // [_resetPerFileState] runs (after the save, session end and disposal) a
+    // keyboard or remote next/previous would pair them with the new session.
     if (mounted) {
       setState(() {
+        _upNext.clearSequence();
+        _upNext.clearSeason();
         _upNext.reset();
         _isLoading = true;
       });
     } else {
+      _upNext.clearSequence();
+      _upNext.clearSeason();
       _upNext.reset();
       _isLoading = true;
     }
