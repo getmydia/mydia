@@ -4292,9 +4292,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Same shape as [_navigateToEpisode], for a neighbour of the sequence.
   Future<void> _navigateToSequence(SequenceNeighbour neighbour) async {
+    // Captured before the await: a file switch during the save rebinds
+    // [_session], and the neighbour belongs to the session it came from.
+    final session = _session;
+    final generation = _loadGeneration;
     await _saveProgress();
-    if (!mounted) return;
-    context.go(_session.sequenceLocation(neighbour));
+    if (!mounted || generation != _loadGeneration) return;
+    context.go(session.sequenceLocation(neighbour));
   }
 
   /// Saves the current position under this widget's own identity; see

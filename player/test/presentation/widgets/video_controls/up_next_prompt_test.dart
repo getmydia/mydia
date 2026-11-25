@@ -414,6 +414,34 @@ void main() {
       expect(find.textContaining('S0E0'), findsNothing);
     });
 
+    testWidgets('a long scene title ellipsizes on a narrow pill', (
+      tester,
+    ) async {
+      final long = UpNextTarget.scene(
+        SequenceNeighbour(
+          item: ItemSummary(
+            ref: const ItemRef(
+              sourceId: SourceId('stash-1'),
+              kind: ItemKind.movie,
+              externalId: 'sc-3',
+            ),
+            title: 'An Invented Scene Title ' * 12,
+            defaultVersionId: 'file-sc-3',
+          ),
+          position: 5,
+        ),
+      );
+      await _pump(tester, countdown: countdown, target: long, width: 360);
+      expect(tester.takeException(), isNull);
+      final label = tester.widget<Text>(find.byKey(UpNextPrompt.pillLabelKey));
+      expect(label.maxLines, 1);
+      expect(label.overflow, TextOverflow.ellipsis);
+      expect(
+        tester.getSize(find.byKey(UpNextPrompt.pillKey)).width,
+        lessThanOrEqualTo(360),
+      );
+    });
+
     testWidgets('the card shows the title and studio', (tester) async {
       await _pump(tester, countdown: countdown, target: scene);
       await _expandCard(tester);

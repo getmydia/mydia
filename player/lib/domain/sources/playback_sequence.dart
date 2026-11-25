@@ -53,6 +53,7 @@ class PlaybackSequence {
     final position = int.tryParse(q['seqPos'] ?? '');
     if (origin == null || position == null || position < 0) return null;
     final desc = q['seqDesc'];
+    if (desc != null && desc != '0' && desc != '1') return null;
     final filter = q['seqFilter'];
     return PlaybackSequence(
       origin: origin,

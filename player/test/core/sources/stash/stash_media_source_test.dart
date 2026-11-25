@@ -430,6 +430,18 @@ void main() {
       expect(pages, [1, 2, 3, 4, 5]);
     });
 
+    test('the current scene is never its own neighbour', () async {
+      // Page 2 was fetched after a scene was added ahead of 60, so it opens
+      // with 60 again: the item at position+1 is the scene now playing.
+      final b = build(sceneIds: [...ids(60), 60, 61, 62]);
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(60),
+        lib(59),
+      );
+      expect(id(r.previous), '59');
+      expect(r.next, isNull);
+    });
+
     test('a neighbour with no file is no neighbour', () async {
       final b = build()..server.filelessIds = {2, 4};
       final r = await b.source.as<SceneSequence>()!.neighbours(ref(3), lib(2));

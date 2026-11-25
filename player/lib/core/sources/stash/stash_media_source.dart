@@ -260,8 +260,8 @@ class StashMediaSource extends MediaSource
         item != null && item.ref.externalId == ref.externalId;
 
     Future<SequenceNeighbours> around(int index) async => SequenceNeighbours(
-      previous: await _neighbourAt(itemAt, index - 1),
-      next: await _neighbourAt(itemAt, index + 1),
+      previous: await _neighbourAt(ref, itemAt, index - 1),
+      next: await _neighbourAt(ref, itemAt, index + 1),
     );
 
     final position = seq.position;
@@ -287,12 +287,13 @@ class StashMediaSource extends MediaSource
     }
     // The scene left the listing: whatever now sits at its place is next.
     return SequenceNeighbours(
-      previous: await _neighbourAt(itemAt, position - 1),
-      next: await _neighbourAt(itemAt, position),
+      previous: await _neighbourAt(ref, itemAt, position - 1),
+      next: await _neighbourAt(ref, itemAt, position),
     );
   }
 
   Future<SequenceNeighbour?> _neighbourAt(
+    ItemRef current,
     Future<ItemSummary?> Function(int) itemAt,
     int index,
   ) async {
@@ -300,6 +301,9 @@ class StashMediaSource extends MediaSource
     // A scene with no file has nothing to play, and opening it would give a
     // player with no file id; it counts as no neighbour.
     if (item == null || item.defaultVersionId == null) return null;
+    // Pages come from separate requests, so a list that changed between them
+    // can put the current scene next to itself. Replaying it is no neighbour.
+    if (item.ref.externalId == current.externalId) return null;
     return SequenceNeighbour(item: item, position: index);
   }
 

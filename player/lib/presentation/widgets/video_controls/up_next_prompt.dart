@@ -55,6 +55,9 @@ class UpNextPrompt extends StatefulWidget {
   static const Key cardKey = Key('up-next-card');
   static const Key stillKey = Key('up-next-still');
 
+  /// The resting pill's label, which ellipsizes a long scene title.
+  static const Key pillLabelKey = Key('up-next-pill-label');
+
   /// The play control, and the dismiss control.
   ///
   /// Deliberately reused across both states: only one state is mounted at a
@@ -147,9 +150,19 @@ class _UpNextPromptState extends State<UpNextPrompt> {
         children: [
           _CountdownRing(countdown: widget.countdown),
           const SizedBox(width: 8),
-          _FocusableTap(
-            onTap: () => _setExpanded(true),
-            child: Text(widget.target.pillLabel(context.l10n)),
+          // A scene's label is its title, which can be any length: it takes
+          // only the width the other segments leave and ends in an ellipsis.
+          Flexible(
+            child: _FocusableTap(
+              onTap: () => _setExpanded(true),
+              child: Text(
+                widget.target.pillLabel(context.l10n),
+                key: UpNextPrompt.pillLabelKey,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+              ),
+            ),
           ),
           const _PillDivider(),
           _PillSegment(

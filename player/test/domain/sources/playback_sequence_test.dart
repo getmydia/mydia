@@ -52,6 +52,8 @@ void main() {
       {'seq': 'library'},
       {'seq': 'library', 'seqPos': '-1'},
       {'seq': 'library', 'seqPos': 'x'},
+      {'seq': 'library', 'seqPos': '1', 'seqDesc': 'yes'},
+      {'seq': 'library', 'seqPos': '1', 'seqDesc': ''},
     ]) {
       expect(PlaybackSequence.fromQuery(q), isNull, reason: '$q');
     }
