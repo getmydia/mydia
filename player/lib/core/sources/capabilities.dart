@@ -11,6 +11,7 @@ import '../../domain/navigation/media_filter.dart';
 import '../../domain/sources/collection.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
+import '../../domain/sources/playback_sequence.dart';
 import '../../domain/sources/ranked_item.dart';
 import '../remote/remote_roster.dart';
 import 'files/media_names.dart' show TmdbCandidate;
@@ -182,4 +183,10 @@ abstract interface class RemoteTargets {
   Future<List<RemoteDevice>> devices();
 
   Future<bool> revokeDevice(String deviceId);
+}
+
+/// The scenes before and after one in the listing it was opened from. Only a
+/// source implementing this gets a [PlaybackSequence] on its routes.
+abstract interface class SceneSequence {
+  Future<SequenceNeighbours> neighbours(ItemRef ref, PlaybackSequence sequence);
 }

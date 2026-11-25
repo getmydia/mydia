@@ -4,6 +4,7 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/domain/sources/playback_sequence.dart';
 import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/presentation/screens/detail/detail_links.dart';
@@ -161,6 +162,38 @@ void main() {
         '?kind=movie&fileId=f1&title=Quill+Harbor&resume=5',
       );
       expect(sourcePlayerLocation(ref), '/s/a:o:s/player/x%2Fy%201?kind=movie');
+    });
+  });
+
+  group('playback sequence', () {
+    const videoRef = ItemRef(
+      sourceId: src,
+      kind: ItemKind.video,
+      externalId: 'v1',
+    );
+    const seq = PlaybackSequence(origin: SequenceOrigin.library, position: 4);
+
+    test('rides on the player and item routes of a video', () {
+      expect(
+        sourcePlayerLocation(videoRef, fileId: 'f', sequence: seq),
+        contains('seq=library&seqPos=4'),
+      );
+      expect(
+        sourceItemLocation(videoRef, sequence: seq),
+        contains('seq=library&seqPos=4'),
+      );
+    });
+
+    test('absent sequence leaves locations unchanged', () {
+      expect(
+        sourcePlayerLocation(videoRef, fileId: 'f'),
+        '/s/a:o:s/player/v1?kind=video&fileId=f',
+      );
+      expect(sourceItemLocation(videoRef), '/s/a:o:s/item/video/v1');
+    });
+
+    test('is ignored for kinds routed through detailLocation', () {
+      expect(sourceItemLocation(movieRef, sequence: seq), '/s/a:o:s/movie/m1');
     });
   });
 }
