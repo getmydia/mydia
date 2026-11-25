@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'item.dart';
 
 /// The listing a scene was opened from.
-enum SequenceOrigin { library, search, continueWatching, recentlyAdded }
+enum SequenceOrigin { library, search, continueWatching }
 
 @immutable
 class PlaybackSequence {

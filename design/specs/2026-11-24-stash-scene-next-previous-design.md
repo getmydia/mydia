@@ -9,8 +9,9 @@ with the Up Next countdown when one ends, as it does for episodes.
 ### Decisions taken
 
 - **Order** is the list the scene was opened from: the Scenes library with
-  its sort and filters, search results, or the source's Continue Watching or
-  Recently Added rail.
+  its sort and filters (the home library preview row, sorted by recently
+  added, is this origin too), search results, or the source's Continue
+  Watching rail.
 - **Auto-advance** reuses the episode Up Next prompt and countdown.
 - **Scope** is Stash scenes only. The plumbing is source-neutral, but only a
   source implementing `SceneSequence` turns it on. Movies and other videos
@@ -37,7 +38,7 @@ A new immutable domain type in `player/lib/domain/sources/`:
 
 | field | meaning |
 | --- | --- |
-| `origin` | `library`, `search`, `continueWatching`, `recentlyAdded` |
+| `origin` | `library`, `search`, `continueWatching` |
 | `sortId`, `descending`, `filterIds` | the library query (origin `library`) |
 | `query` | the search text (origin `search`) |
 | `position` | 0-based index of the scene in that list |
@@ -58,8 +59,10 @@ Entry points that attach one, only when the item's source implements
 - the library grid (`source_library_screen.dart`): its current
   `BrowseQuery` and the tapped card's index;
 - search results (`source_search_screen.dart`): the query and index;
-- the Continue Watching and Recently Added rails for a Stash source: the
-  origin and index.
+- the Continue Watching rail for a Stash source: the origin and index;
+- the home library preview row (recently-added sort): origin `library` with
+  that sort, and the index. Home's Recently Added rows hold no Stash scenes,
+  so there is no separate recently-added origin.
 
 The scene detail screen's Play button (`source_item_screen.dart`) forwards
 the sequence it was opened with. Merged All servers views and similar-item
@@ -89,7 +92,7 @@ abstract interface class SceneSequence {
 `SequenceNeighbour` (an `ItemSummary` plus its `position` in the list). Only `StashMediaSource` implements it.
 
 The Stash implementation rebuilds the `findScenes` variables the origin used.
-`browse`, `search`, `continueWatching`, `recentlyAdded` and `neighbours` all
+`browse`, `search`, `continueWatching` and `neighbours` all
 take them from one private builder, so the sequence cannot drift from what
 the screen showed. It fetches the page or pages covering
 `position - 1 .. position + 1` at `per_page` 60, then:
@@ -108,7 +111,9 @@ A transport failure or GraphQL error answers no neighbours: the buttons do
 not appear and playback is unaffected.
 
 `stashSummary` starts setting `defaultVersionId` from the scene's first file,
-so a neighbour's file id is known without a second query.
+so a neighbour's file id is known without a second query. A neighbour with
+no file counts as no neighbour: opening it would give a player with no file
+id.
 
 ### 3. Player wiring
 
@@ -125,15 +130,18 @@ so a neighbour's file id is known without a second query.
 existing load-generation check, like `setSeason`). `hasPrevious`, `hasNext`
 and `target` read whichever mode is active. `playNext` and `playPrevious`
 route through `sequenceLocation` on the same save-progress-then-replace path
-episodes take. The `isEpisode` gate becomes "an episode, or a sequence is
-set". The transport buttons, keyboard keys, OS media-session next/previous
+episodes take. The controller handles a set sequence before it reads the
+`isEpisode` gate, so that gate is unchanged. The transport buttons, keyboard keys, OS media-session next/previous
 and TV remote need no change.
 
 **Up Next prompt.** `UpNextTarget` gains a scene variant: the scene title,
 the studio as subtitle, the screenshot as thumbnail, and no SxEy label
 (`next_up_labels.dart`). The prompt triggers through the existing
-`shouldOfferUpNext`; Stash reports no credits segment, so the final
-`upNextFallbackWindow` applies. Countdown, dismiss and the per-file
+`shouldOfferUpNext`; Stash reports no credits segment, so the no-credits
+window applies. For a sequence that window is `sceneUpNextWindow`: 10% of
+the file, at least the countdown (10s) and at most `upNextFallbackWindow`
+(60s), so a short clip is not left mid-play by a countdown that started at
+its beginning. Episodes keep the fixed 60s. Countdown, dismiss and the per-file
 cancellation rule are reused unchanged.
 
 ## Testing

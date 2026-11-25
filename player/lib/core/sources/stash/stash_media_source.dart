@@ -202,15 +202,6 @@ class StashMediaSource extends MediaSource
             'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
           },
         };
-      case SequenceOrigin.recentlyAdded:
-        return {
-          'filter': {
-            'page': page,
-            'per_page': perPage,
-            'sort': 'created_at',
-            'direction': 'DESC',
-          },
-        };
     }
   }
 
@@ -223,8 +214,7 @@ class StashMediaSource extends MediaSource
   static int _sequencePageSize(SequenceOrigin origin) => switch (origin) {
     SequenceOrigin.library => _libraryPageSize,
     SequenceOrigin.search => _searchPageSize,
-    SequenceOrigin.continueWatching ||
-    SequenceOrigin.recentlyAdded => _shelfPageSize,
+    SequenceOrigin.continueWatching => _shelfPageSize,
   };
 
   @override
@@ -234,7 +224,8 @@ class StashMediaSource extends MediaSource
   ) async {
     try {
       return await _neighbours(ref, sequence);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[StashMediaSource] Could not resolve neighbours: $e');
       return SequenceNeighbours.none;
     }
   }
@@ -306,7 +297,10 @@ class StashMediaSource extends MediaSource
     int index,
   ) async {
     final item = await itemAt(index);
-    return item == null ? null : SequenceNeighbour(item: item, position: index);
+    // A scene with no file has nothing to play, and opening it would give a
+    // player with no file id; it counts as no neighbour.
+    if (item == null || item.defaultVersionId == null) return null;
+    return SequenceNeighbour(item: item, position: index);
   }
 
   @override
@@ -352,8 +346,17 @@ class StashMediaSource extends MediaSource
       _shelf(SequenceOrigin.continueWatching);
 
   @override
-  Future<List<ItemSummary>> recentlyAdded() =>
-      _shelf(SequenceOrigin.recentlyAdded);
+  Future<List<ItemSummary>> recentlyAdded() async {
+    final data = await client.query(stashFindScenes, {
+      'filter': {
+        'page': 1,
+        'per_page': _shelfPageSize,
+        'sort': 'created_at',
+        'direction': 'DESC',
+      },
+    });
+    return _page(data, 1, _shelfPageSize).items;
+  }
 
   @override
   bool canRemoveFromContinueWatching(ItemSummary item) => true;

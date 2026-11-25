@@ -175,6 +175,29 @@ void main() {
     });
   });
 
+  testWidgets('a tap carries the query that produced the results, not newer '
+      'text still debouncing', (tester) async {
+    final pushed = await _pump(
+      tester,
+      _ScenesSource(),
+      home: const SourceSearchScreen(sourceId: fakeSourceId),
+    );
+    final field = find.byKey(const Key('source-search-field'));
+    await tester.enterText(field, 'alpha');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    // Typed, but the debounce has not run: the grid still shows "alpha".
+    await tester.enterText(field, 'alphab');
+    await tester.pump(const Duration(milliseconds: 100));
+    // Any rebuild in the meantime (here, re-picking the kind chip) must not
+    // pick up the newer text.
+    await tester.tap(find.byKey(const Key('source-search-kind-all')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byKey(const ValueKey('source-poster-v2')));
+    await tester.pumpAndSettle();
+    expect(Uri.parse(pushed.single).queryParameters['seqQ'], 'alpha');
+  });
+
   group('item screen', () {
     const scene = _scene;
 

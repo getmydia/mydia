@@ -17,6 +17,9 @@ class FakeStashServer {
   /// shrink it.
   List<int> sceneIds = [for (var n = 1; n <= 5; n++) n];
 
+  /// Scene ids listed with no files, like a scene whose file was deleted.
+  Set<int> filelessIds = {};
+
   /// When set, every GraphQL answer is this error message instead.
   String? graphqlError;
 
@@ -31,6 +34,7 @@ class FakeStashServer {
     int n, {
     int plays = 0,
     double resume = 0,
+    bool fileless = false,
   }) => {
     'id': '$n',
     'title': n == 3 ? '' : 'Tidepool Study $n',
@@ -42,18 +46,19 @@ class FakeStashServer {
     'created_at': '2024-0$n-0${n}T10:00:00Z',
     'last_played_at': plays > 0 ? '2024-06-0${n}T20:00:00Z' : null,
     'files': [
-      {
-        'id': '9$n',
-        'path': '/media/tidepool_$n.mp4',
-        'basename': 'tidepool_$n.mp4',
-        'duration': 1200.5,
-        'video_codec': 'h264',
-        'audio_codec': 'aac',
-        'width': 1920,
-        'height': 1080,
-        'bit_rate': 6000000,
-        'format': 'mp4',
-      },
+      if (!fileless)
+        {
+          'id': '9$n',
+          'path': '/media/tidepool_$n.mp4',
+          'basename': 'tidepool_$n.mp4',
+          'duration': 1200.5,
+          'video_codec': 'h264',
+          'audio_codec': 'aac',
+          'width': 1920,
+          'height': 1080,
+          'bit_rate': 6000000,
+          'format': 'mp4',
+        },
     ],
     'paths': {
       'screenshot':
@@ -115,7 +120,10 @@ class FakeStashServer {
         // Scenes 4 then 2 are part-watched, most recently played first.
         var all = sceneFilter.containsKey('resume_time')
             ? [scene(4, resume: 120), scene(2, resume: 300)]
-            : [for (final n in sceneIds) scene(n)];
+            : [
+                for (final n in sceneIds)
+                  scene(n, fileless: filelessIds.contains(n)),
+              ];
         if (filter['sort'] == 'created_at' && filter['direction'] == 'DESC') {
           all = all.reversed.toList();
         }

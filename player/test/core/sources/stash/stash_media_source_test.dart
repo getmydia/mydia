@@ -398,6 +398,45 @@ void main() {
       expect(r.next!.position, 2);
     });
 
+    test('found only by the page scan', () async {
+      // Scene 6 sits at index 5, but the route recorded 125: the pages
+      // around 125 do not hold it, so the scan from page 1 finds it.
+      final b = build(sceneIds: ids(130));
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(6),
+        lib(125),
+      );
+      expect(id(r.previous), '5');
+      expect(r.previous!.position, 4);
+      expect(id(r.next), '7');
+      expect(r.next!.position, 6);
+    });
+
+    test('beyond the scan cap falls back to the recorded place', () async {
+      // Scene 321 sits on page 6, past the 5 pages the scan reads.
+      final b = build(sceneIds: ids(400));
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(321),
+        lib(2),
+      );
+      expect(id(r.previous), '2');
+      expect(r.previous!.position, 1);
+      expect(id(r.next), '3');
+      expect(r.next!.position, 2);
+      final pages = [
+        for (final (name, vars) in b.server.operations)
+          if (name == 'FindScenes') (vars['filter'] as Map)['page'],
+      ];
+      expect(pages, [1, 2, 3, 4, 5]);
+    });
+
+    test('a neighbour with no file is no neighbour', () async {
+      final b = build()..server.filelessIds = {2, 4};
+      final r = await b.source.as<SceneSequence>()!.neighbours(ref(3), lib(2));
+      expect(r.previous, isNull);
+      expect(r.next, isNull);
+    });
+
     test('search origin sends q and per_page 40', () async {
       final b = build();
       final r = await b.source.as<SceneSequence>()!.neighbours(

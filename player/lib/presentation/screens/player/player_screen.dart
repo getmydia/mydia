@@ -1222,7 +1222,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ? null
           : (playing: player.state.playing, changes: player.stream.playing);
     },
-    isEpisode: () => widget.mediaType == 'episode' || _upNext.hasSequence,
+    isEpisode: () => widget.mediaType == 'episode',
     hasShow: () => _showId != null,
     seasonNumber: () => _seasonNumber,
     isDownloadedSource: () => _isDownloadedSource,
@@ -3988,6 +3988,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       segments: _segmentSkipper.segments,
       position: _timeline.toReal(player.state.position),
       duration: _timeline.resolveDuration(player.state.duration),
+      sequence: _upNext.hasSequence,
     )) {
       _upNext.onPositionTick();
     }

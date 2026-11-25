@@ -392,6 +392,9 @@ URL as `seq*` parameters (built only in `detail_links.dart`), and a source
 implementing `SceneSequence` resolves the neighbours by re-running that listing
 around `seqPos`. The session asks only when the source has the capability, a
 failure means no neighbours, and an item without `seq` plays exactly as before.
+Marking a scene watched can reorder Continue Watching or a last-played sort, or
+drop it from an unplayed filter, so "previous" from the next scene may land one
+further back.
 
 Plex, Stash and Jellyfin report progress through `PeriodicProgressReporter`: every
 10 seconds, on every play and pause, and on a seek (a position jump of more

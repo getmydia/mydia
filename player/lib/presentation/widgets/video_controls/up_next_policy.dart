@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/playback_sequence.dart';
 import '../../../l10n/l10n.dart';
+import 'up_next_countdown.dart';
 
 /// Fallback trigger window, used only when no credits segment was detected
 /// for the file.
@@ -20,6 +21,20 @@ import '../../../l10n/l10n.dart';
 /// prediction window rather than none for files without detection data.
 const upNextFallbackWindow = Duration(seconds: 60);
 
+/// The no-credits window for a scene of a sequence: 10% of [duration], at
+/// least [kUpNextCountdown] and at most [upNextFallbackWindow].
+///
+/// Scenes have no credits segment, and many run under a minute, so the
+/// fixed 60s window would put the prompt up at the start of a short clip
+/// and the countdown would leave it while still playing. The lower bound
+/// keeps the countdown able to finish on a clip of any length.
+Duration sceneUpNextWindow(Duration duration) {
+  final tenth = duration * 0.1;
+  if (tenth < kUpNextCountdown) return kUpNextCountdown;
+  if (tenth > upNextFallbackWindow) return upNextFallbackWindow;
+  return tenth;
+}
+
 /// Decides whether the "Up Next" overlay should be offered at [position],
 /// given a [duration] for the file.
 ///
@@ -28,11 +43,13 @@ const upNextFallbackWindow = Duration(seconds: 60);
 /// the overlay while the episode was still mid-scene whenever the credits
 /// ran long or a cold open pushed them later than usual. Only when no
 /// credits segment was detected does [upNextFallbackWindow] before the real
-/// end stand in on its own.
+/// end stand in on its own. For a [sequence] (scenes) that window is
+/// [sceneUpNextWindow] instead.
 bool shouldOfferUpNext({
   required List<MediaSegment> segments,
   required Duration position,
   required Duration duration,
+  bool sequence = false,
 }) {
   // A single pass, comparing raw milliseconds: this runs on every position
   // tick, and `segments` rarely holds more than an intro and a credits
@@ -47,7 +64,8 @@ bool shouldOfferUpNext({
   }
   if (hasCredits) return false;
   if (duration <= Duration.zero) return false;
-  return duration - position <= upNextFallbackWindow;
+  final window = sequence ? sceneUpNextWindow(duration) : upNextFallbackWindow;
+  return duration - position <= window;
 }
 
 /// Whether an auto-countdown firing should be suppressed after the viewer

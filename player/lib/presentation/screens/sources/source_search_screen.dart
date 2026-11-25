@@ -31,6 +31,12 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
   Timer? _timer;
   int _request = 0;
   String _lastQuery = '';
+  String _resultsQuery = '';
+
+  /// The query that produced the results now shown. The box can already
+  /// hold newer text still waiting on the debounce, so a tapped result reads
+  /// its listing's query here rather than from the box.
+  String get resultsQuery => _resultsQuery;
 
   @override
   AsyncValue<List<ItemSummary>>? build() {
@@ -66,7 +72,10 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
     state = const AsyncLoading();
     try {
       final results = await searchable.search(text);
-      if (ref.mounted && request == _request) state = AsyncData(results);
+      if (ref.mounted && request == _request) {
+        _resultsQuery = text;
+        state = AsyncData(results);
+      }
     } catch (e, st) {
       if (ref.mounted && request == _request) state = AsyncError(e, st);
     }
@@ -218,7 +227,9 @@ class _SourceSearchScreenState extends ConsumerState<SourceSearchScreen> {
       return Center(child: Text(context.l10n.sourcesSearchNothingFound));
     }
     final source = ref.watch(mediaSourceProvider(widget.sourceId));
-    final query = _controller.text.trim();
+    final query = ref
+        .read(sourceSearchProvider(widget.sourceId).notifier)
+        .resultsQuery;
     return BrowseGrid(
       landing: false,
       scrollTopPadding: 8,
