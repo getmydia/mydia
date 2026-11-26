@@ -21,6 +21,9 @@ import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
 
+import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
+
 import '../../../test_utils/mac_accents.dart' show macAccents;
 import '../../../test_utils/osd_contrast.dart'
     show compositeOver, osdIconOnlyColors, osdTextColors;
@@ -426,6 +429,49 @@ void main() {
           );
         }
       });
+    }
+  });
+
+  group('OSD title on the scrim', () {
+    // The title is bare text on the scrim in every mode, so sampled and dry
+    // share one alpha: the scrim's, at the title block's top edge. There is
+    // no glass profile to credit. Rated over the grey sweep 0 to 1.
+    final sweep = [for (var i = 0; i <= 20; i++) i / 20];
+    for (final mode in const ['sampled', 'dry']) {
+      for (final tier in ChromeTitleTier.values) {
+        test('$mode, ${tier.name}: title 3:1 and kicker 4.5:1', () {
+          final titleHeight =
+              ChromeTitleBlock.heightFor(tier) + ChromeTitleBlock.gapFor(tier);
+          final alpha = ChromeScrim.alphaAt(
+            100 + titleHeight,
+            plateau: 100,
+            titleHeight: titleHeight,
+            height: tier == ChromeTitleTier.compact ? 350 : 1080,
+          );
+          for (final v in sweep) {
+            final bg = _overGrey(DepthTokens.osdTint, alpha, v, 0);
+            expect(
+              contrastRatio(
+                compositeOver(_white.withValues(alpha: 0.95), bg),
+                bg,
+              ),
+              greaterThanOrEqualTo(3.0),
+              reason: '$mode ${tier.name} title at grey $v',
+            );
+            expect(
+              contrastRatio(
+                compositeOver(
+                  _white.withValues(alpha: ChromeTitleBlock.kickerOpacity),
+                  bg,
+                ),
+                bg,
+              ),
+              greaterThanOrEqualTo(4.5),
+              reason: '$mode ${tier.name} kicker at grey $v',
+            );
+          }
+        });
+      }
     }
   });
 

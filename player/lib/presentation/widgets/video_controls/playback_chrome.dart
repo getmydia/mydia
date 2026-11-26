@@ -1060,8 +1060,12 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                   // the home indicator the bar sits above.
                   ChromeScrim(
                     bottomHeight:
-                        metrics.barHeight +
+                        metrics.barHeight -
+                        metrics.titleBlockExtent +
                         MediaQuery.paddingOf(context).bottom,
+                    titleHeight: widget.title == null
+                        ? 0
+                        : metrics.titleBlockExtent,
                   ),
                   SafeArea(
                     child: Stack(
