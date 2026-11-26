@@ -4751,8 +4751,8 @@ first-parent history (<code>scripts/on-mainline.sh</code>), the run is in branch
 shown in the run summary, and publishes nowhere master's builds do:</p>
 <ul>
 <li>Android skips the R2 dev index, so dev-track devices never see the APK. Take
-  it from the run's artifacts. The job also stays out of the
-  <code>mydia-dev-builds-index</code> lock, so it never queues a master build.</li>
+  it from the run's artifacts. Its publish job, the only one that takes the
+  <code>mydia-dev-builds-index</code> lock, is skipped, so it never queues a master build.</li>
 <li><code>flatpak-publish</code> and <code>appcast</code> are skipped; the Flatpak bundle stays an
   artifact.</li>
 <li>macOS signs and notarizes as on master, since notarization shares no
