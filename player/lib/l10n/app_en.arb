@@ -2219,6 +2219,8 @@
   "@playerFallbackDecodeTooSlow": {"description": "Toast and stats explanation when playback switched to transcoding because this device could not keep up with the video."},
   "playerFallbackBandwidth": "Switched to transcoding for your connection",
   "@playerFallbackBandwidth": {"description": "Toast and stats explanation when playback switched to transcoding because the connection was too slow for the original file."},
+  "playerEpisodeCode": "S{season}, E{episode}",
+  "@playerEpisodeCode": {"description": "Season and episode code in the playback title block, such as S2, E4. Joined with the episode name by a middle dot when both are known.", "placeholders": {"season": {"type": "int"}, "episode": {"type": "int"}}},
   "statsWhyContainerNotDirect": "Container is not playable directly",
   "@statsWhyContainerNotDirect": {"description": "Stats panel Why row: the file's container cannot be played as it is. The container is the file format wrapping the video, such as MKV."},
   "statsWhyCopyRejected": "Browser can't stream-copy this container, so the server is re-encoding",

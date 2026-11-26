@@ -44,6 +44,28 @@ void main() {
     expect(tracks.single.id, '33');
     expect(tracks.single.language, 'spa');
     expect(tracks.single.embedded, isFalse);
+    expect(detail.year, 2019);
+    expect(detail.showTitle, isNull);
+    expect(detail.episodeNumber, isNull);
+    expect(detail.episodeTitle, isNull);
+  });
+
+  test('detail names the show, episode number and episode title', () async {
+    final b = build();
+    final session = PlexPlaybackSession(
+      source: b.source,
+      item: const ItemRef(
+        sourceId: sid,
+        kind: ItemKind.episode,
+        externalId: '402',
+      ),
+      fileId: '62',
+    );
+    final detail = (await session.detail())!;
+    expect(detail.showTitle, 'Harbour Lights');
+    expect(detail.seasonNumber, 1);
+    expect(detail.episodeNumber, 2);
+    expect(detail.episodeTitle, 'Fog Bank');
   });
 
   group('receiverSubtitleIdFor', () {

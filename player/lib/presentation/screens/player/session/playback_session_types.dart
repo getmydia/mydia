@@ -80,6 +80,10 @@ class PlaybackDetail {
     this.serverSubtitleTracks,
     this.showId,
     this.seasonNumber,
+    this.showTitle,
+    this.episodeNumber,
+    this.episodeTitle,
+    this.year,
   });
 
   final int? savedPositionSeconds;
@@ -98,6 +102,18 @@ class PlaybackDetail {
 
   /// The episode's season number; null as for [showId].
   final int? seasonNumber;
+
+  /// The show's title for an episode; null as for [showId].
+  final String? showTitle;
+
+  /// The episode's number within its season; null as for [showId].
+  final int? episodeNumber;
+
+  /// The episode's own name, when the source has one.
+  final String? episodeTitle;
+
+  /// A movie's release year; null for an episode or when unknown.
+  final int? year;
 }
 
 /// A subtitle preference that was fetched. [value] null means the viewer

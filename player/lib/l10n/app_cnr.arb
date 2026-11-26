@@ -6447,5 +6447,6 @@
     "backupManage": "Uredi rezervne kopije",
     "@backupManage": {
         "description": "Row in the Backup & sync section that expands to show the devices in the backup, the recovery key, moving and deleting the backup."
-    }
+    },
+    "playerEpisodeCode": "S{season}, E{episode}"
 }

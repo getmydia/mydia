@@ -1006,5 +1006,6 @@
   "pairedDevicesRemovePeerButton": "Remover",
   "pairedDevicesConnectedToast": "Pareado com {deviceName}",
   "pairedDevicesPairingFailed": "Falha no pareamento",
-  "pairedDevicesListSection": "Dispositivos pareados"
+  "pairedDevicesListSection": "Dispositivos pareados",
+  "playerEpisodeCode": "S{season}, E{episode}"
 }
