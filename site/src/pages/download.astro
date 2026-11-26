@@ -17,6 +17,8 @@ interface Channel {
   docs?: { label: string; href: string };
   /** releases.json key whose version, size and date fill this panel. */
   feed?: string;
+  /** Names what the feed line describes when the panel offers more than one way in. */
+  feedLabel?: string;
 }
 
 interface Platform {
@@ -147,6 +149,7 @@ flatpak install mydia-beta dev.mydia.player//beta`,
         note: 'The beta Flatpak lives on its own remote and branch. If stable is installed, remove it afterwards with flatpak uninstall dev.mydia.player//stable.',
         docs: { label: 'Switching branches', href: `${linuxDocs}#beta` },
         feed: 'linux:beta',
+        feedLabel: 'Tarball',
       },
       dev: {
         options: [{ label: 'Get the dev Flatpak repo', href: '/download/flatpak?track=dev', primary: true }],
@@ -272,7 +275,7 @@ const betaDocs = `${docsBase}/beta-builds/`;
                 return (
                   <div data-track={track} class="track-panel flex-col gap-4 flex-1">
                     {channel.feed && (
-                      <p data-feed={channel.feed} class="text-xs text-base-content/50 hidden"></p>
+                      <p data-feed={channel.feed} data-feed-label={channel.feedLabel} class="text-xs text-base-content/50 hidden"></p>
                     )}
                     {track === 'stable' && platform.sizeFor && (
                       <p data-size={platform.sizeFor} class="text-xs text-base-content/50 hidden"></p>
@@ -340,7 +343,7 @@ const betaDocs = `${docsBase}/beta-builds/`;
 </Base>
 
 <script>
-  type Track = 'stable' | 'beta' | 'dev';
+  import { FEED_URL, parseFeed, resolveTrackBuild, type Track } from '../lib/release-feed';
 
   interface Target {
     href: string;
@@ -452,14 +455,6 @@ const betaDocs = `${docsBase}/beta-builds/`;
     assets?: Record<string, { size: number }>;
   }
 
-  interface FeedEntry {
-    version: string;
-    build: number;
-    size?: number;
-    published_at?: string;
-  }
-
-  type Feed = { platforms?: Record<string, Partial<Record<Track, FeedEntry>>> };
 
   // Progressive enhancement only. If either request fails the page is already
   // complete: the version lines stay hidden and every button still works.
@@ -492,23 +487,15 @@ const betaDocs = `${docsBase}/beta-builds/`;
     }
   }
 
-  // Mirrors resolveTrackBuild in src/lib/release-feed.ts, which decides where
-  // the ?track= buttons actually redirect.
-  const ORDER: Track[] = ['stable', 'beta', 'dev'];
-
+  // The same resolver the ?track= redirects use, so the version shown is the
+  // version the button downloads.
   async function showPreReleases() {
-    const feed: Feed = await (await fetch('https://updates.mydia.dev/releases.json')).json();
+    const feed = parseFeed(await (await fetch(FEED_URL)).text());
+    if (!feed) return;
 
     for (const el of document.querySelectorAll<HTMLElement>('[data-feed]')) {
       const [platform, track] = (el.dataset.feed ?? '').split(':') as [string, Track];
-      const tracks = feed.platforms?.[platform];
-      if (!tracks) continue;
-
-      let best: { track: Track; entry: FeedEntry } | null = null;
-      for (const candidate of ORDER.slice(0, ORDER.indexOf(track) + 1)) {
-        const entry = tracks[candidate];
-        if (entry && (!best || entry.build > best.entry.build)) best = { track: candidate, entry };
-      }
+      const best = resolveTrackBuild(feed, platform, track);
       if (!best) continue;
 
       const { entry } = best;
@@ -516,10 +503,14 @@ const betaDocs = `${docsBase}/beta-builds/`;
       if (entry.size) parts.push(megabytes(entry.size));
       const when = day(entry.published_at);
       if (when) parts.push(when);
+      // Set where the build is one of several ways in (the Linux tarball beside
+      // the Flatpak remote), so the line does not describe the wrong button.
+      const subject = el.dataset.feedLabel;
+      const details = parts.join(' · ');
       el.textContent =
         best.track === track
-          ? parts.join(' · ')
-          : `No ${track} build newer than ${best.track} right now, so this gets ${parts.join(' · ')}`;
+          ? subject ? `${subject}: ${details}` : details
+          : `No ${track} ${subject ? subject.toLowerCase() : 'build'} newer than ${best.track} right now, so ${subject ? 'it' : 'this'} gets ${details}`;
       el.classList.remove('hidden');
     }
   }

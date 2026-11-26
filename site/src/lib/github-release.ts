@@ -26,7 +26,7 @@ export async function fetchLatestRelease(): Promise<GitHubRelease | null> {
   const cache = (caches as unknown as { default: Cache }).default;
 
   const cached = await cache.match(CACHE_KEY);
-  if (cached) return safeParse(await cached.text());
+  if (cached) return safeParse(await readBody(cached));
 
   let response: Response;
   try {
@@ -43,7 +43,7 @@ export async function fetchLatestRelease(): Promise<GitHubRelease | null> {
 
   if (!response.ok) return null;
 
-  const body = await response.text();
+  const body = await readBody(response);
   const release = safeParse(body);
   if (!release) return null;
 
@@ -81,7 +81,7 @@ export async function fetchReleaseFeed(): Promise<ReleaseFeed | null> {
   const cache = (caches as unknown as { default: Cache }).default;
 
   const cached = await cache.match(FEED_URL);
-  if (cached) return parseFeed(await cached.text());
+  if (cached) return parseFeed(await readBody(cached));
 
   let response: Response;
   try {
@@ -93,7 +93,7 @@ export async function fetchReleaseFeed(): Promise<ReleaseFeed | null> {
   }
   if (!response.ok) return null;
 
-  const body = await response.text();
+  const body = await readBody(response);
   const feed = parseFeed(body);
   if (!feed) return null;
 
@@ -107,4 +107,16 @@ export async function fetchReleaseFeed(): Promise<ReleaseFeed | null> {
     }),
   );
   return feed;
+}
+
+/**
+ * A body that cannot be read (a dropped connection, bad encoding) parses as
+ * nothing, so callers fall back instead of the route throwing.
+ */
+async function readBody(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return '';
+  }
 }
