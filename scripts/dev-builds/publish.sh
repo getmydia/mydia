@@ -187,18 +187,24 @@ if ! jq -e --arg file "$OWN_FILE" '.builds | any(.file == $file)' "$work/index.k
   exit 1
 fi
 
-# Write the index first, then delete the objects it no longer references:
-# builds pruned from the kept set, and an earlier upload of a version this
-# run replaced under a different key (macOS keys carry the DMG digest, so a
-# re-dispatch never overwrites bytes a signed feed entry still describes).
-# Deleting only after the write means a failed write leaves every object the
-# old index and the deployed feed point at in place. The just-uploaded file
-# is excluded explicitly, whatever the ranking says, even though the check
-# above already guarantees it survived.
+# Write the index first, then delete the objects of builds pruned from the
+# kept set. Deleting only after the write means a failed write leaves every
+# object the old index and the deployed feed point at in place.
+#
+# An earlier upload of a version this run republished under a different key
+# (macOS keys carry the DMG digest, so a re-dispatch never overwrites bytes a
+# signed feed entry still describes) is deliberately kept: until the appcast
+# job redeploys, and for as long as a CDN holds the old feed, that object is
+# the newest dev build clients are offered. Re-dispatching one version is
+# rare, so the orphan is the cheaper trade. Pruned builds are older than five
+# others on their platform, so no current feed offers them as an update.
+# The just-uploaded file is excluded explicitly, whatever the ranking says.
 rclone copyto "$work/index.kept.json" "${REMOTE}/index.json"
 
 jq -r --slurpfile kept "$work/index.kept.json" --arg own "$OWN_FILE" \
-  '[.builds[].file] - [$kept[0].builds[].file] - [$own] | unique | .[]' \
+  '($kept[0].builds | map("\(.platform)\u0000\(.version)")) as $live
+   | [.builds[] | select(("\(.platform)\u0000\(.version)") as $k | $live | index($k) | not) | .file]
+     - [$own] | unique | .[]' \
   "$work/index.json" > "$work/dropped.txt"
 while read -r file; do
   if [ -n "$file" ]; then

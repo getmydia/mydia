@@ -282,10 +282,27 @@ jobs:
           # and enclosure shape, not signature validity. See the plan's KTD3 / R4.
           echo "appcast.xml validated (well-formed, single signature/length, sparkle:version=$sparkle_version)"
 
+      - name: "Upload artifact: DMG"
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-macos-dmg
+          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.dmg
+          retention-days: 30
+
+      - name: "Upload artifact: Appcast"
+        if: ${{ inputs.generate_appcast }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-macos-appcast
+          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/appcast.xml
+          retention-days: 30
+
       # A dev build reaches Macs on the Dev track through the dev channel of
       # the Sparkle feed (scripts/appcast), which reads the entry written
       # here. Only notarized and stapled builds get here: both steps above
-      # skip on dry_run, and so does this one.
+      # skip on dry_run, and so does this one. It is the last step that can
+      # fail, so a published build always means a successful job, which is
+      # what player-ondemand.yml's appcast job waits for.
       - name: Publish the dev build to R2
         if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
         env:
@@ -330,21 +347,6 @@ jobs:
           DEV_BUILD_VERSION="$VERSION" \
           DEV_BUILD_NUMBER="$VERSION_CODE" \
             "$GITHUB_WORKSPACE/.ci-actions/scripts/dev-builds/publish.sh"
-
-      - name: "Upload artifact: DMG"
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-macos-dmg
-          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/Mydia Player.dmg
-          retention-days: 30
-
-      - name: "Upload artifact: Appcast"
-        if: ${{ inputs.generate_appcast }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: mydia-player-macos-appcast
-          path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/appcast.xml
-          retention-days: 30
 
       - name: Cleanup keychain
         if: always()

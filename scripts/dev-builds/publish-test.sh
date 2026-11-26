@@ -119,15 +119,16 @@ same_version_replaced_per_platform() {
 }
 
 # A re-dispatch of a version under a new object key (macOS keys carry the
-# DMG digest) must repoint the index and then remove the superseded object,
-# which nothing references any more.
-replaced_object_deleted() {
+# DMG digest) repoints the index but keeps the superseded object: the feed
+# still deployed until the appcast job finishes, and any CDN copy of it,
+# names that object as the newest dev build.
+replaced_object_kept() {
   publish macos 1.0.0-dev.1 100000001 '' macos/a-aaaa.dmg || return 1
   publish macos 1.0.0-dev.1 100000001 '' macos/a-bbbb.dmg || return 1
   q '[.builds[] | select(.platform == "macos")] | length == 1' &&
     q '.builds[0].file == "macos/a-bbbb.dmg"' &&
     [ -f "$tmp/bucket/macos/a-bbbb.dmg" ] &&
-    [ ! -f "$tmp/bucket/macos/a-aaaa.dmg" ]
+    [ -f "$tmp/bucket/macos/a-aaaa.dmg" ]
 }
 
 # The script also runs on the macOS runner: bash 3.2 and BSD userland.
@@ -145,7 +146,7 @@ missing_required_env_fails() {
 
 for c in bootstrap_empty_bucket zero_byte_index malformed_rows_dropped \
   keeps_five_per_platform refuses_older_than_kept extra_fields_preserved \
-  android_entry_shape same_version_replaced_per_platform replaced_object_deleted \
+  android_entry_shape same_version_replaced_per_platform replaced_object_kept \
   portable_userland \
   missing_required_env_fails; do
   run_case "$c"
