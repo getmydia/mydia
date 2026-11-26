@@ -48,12 +48,15 @@ jobs:
           cache: npm
           cache-dependency-path: scripts/appcast/package-lock.json
 
+      # rclone and jq for the dev build index publisher's contract test,
+      # xmllint so test/validate.test.mjs runs instead of skipping.
+      - name: Install test tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone jq libxml2-utils
+
       # The dev build index publisher feeds this generator, so its contract
       # test runs here, against an rclone local-filesystem bucket.
       - name: Test the dev build index publisher
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq rclone jq
-          ../dev-builds/publish-test.sh
+        run: ../dev-builds/publish-test.sh
 
       - name: Install dependencies
         run: npm ci

@@ -83,3 +83,12 @@ test('renders a feed with the sparkle namespace and every item', () => {
   assert.equal(xml.match(/<item>/g).length, 2)
   assert.ok(xml.includes('<title>Mydia Player</title>'))
 })
+
+test('emits the dev channel and minimum system version for a dev item', () => {
+  const xml = renderItem(
+    item({ title: 'Dev build 1.2.3-dev.4', channel: 'dev', minimumSystemVersion: '13.0' }),
+  )
+
+  assert.match(xml, /<sparkle:channel>dev<\/sparkle:channel>/)
+  assert.match(xml, /<sparkle:minimumSystemVersion>13\.0<\/sparkle:minimumSystemVersion>/)
+})

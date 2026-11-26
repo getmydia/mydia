@@ -3,7 +3,12 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { marked } from 'marked'
 
-import { buildItems, assertFeedInvariants } from './lib/build.mjs'
+import {
+  buildItems,
+  buildDevItems,
+  mergeFeedItems,
+  assertFeedInvariants,
+} from './lib/build.mjs'
 import { renderFeed } from './lib/render.mjs'
 import {
   buildReleasesModel,
@@ -57,9 +62,16 @@ async function loadAppcast(asset) {
 const renderNotes = (markdown) => marked.parse(markdown, { async: false, gfm: true })
 
 const releases = await fetchReleases()
-const { items, warnings } = await buildItems(releases, { loadAppcast, renderNotes })
+// Fetched once and shared: the dev channel of the appcast and the dev track of
+// releases.json must describe the same builds.
+const devBuilds = await fetchDevBuilds()
 
-for (const warning of warnings) {
+const releaseResult = await buildItems(releases, { loadAppcast, renderNotes })
+const devResult = buildDevItems(devBuilds)
+const merged = mergeFeedItems(releaseResult.items, devResult.items)
+const items = merged.items
+
+for (const warning of [...releaseResult.warnings, ...devResult.warnings, ...merged.warnings]) {
   console.warn(`::warning::${warning}`)
 }
 
@@ -71,10 +83,11 @@ assertFeedInvariants(items)
 await mkdir(dirname(OUTPUT), { recursive: true })
 await writeFile(OUTPUT, renderFeed(items), 'utf8')
 
-const betaCount = items.filter((item) => item.prerelease).length
-console.log(`Wrote ${OUTPUT}: ${items.length} item(s), ${betaCount} on the beta channel.`)
+const countKind = (kind) => items.filter((item) => item.kind === kind).length
+console.log(
+  `Wrote ${OUTPUT}: ${items.length} item(s): ${countKind('stable')} stable, ${countKind('beta')} beta, ${countKind('dev')} dev.`,
+)
 
-const devBuilds = await fetchDevBuilds()
 const releasesModel = buildReleasesModel(releases, devBuilds)
 
 // Same reason the appcast asserts before writing: a feed with no stable entry
