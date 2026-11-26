@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/layout/breakpoints.dart';
+import 'chrome_title_block.dart';
 
 /// Responsive sizing for the full-width playback bottom bar.
 ///
@@ -45,6 +46,10 @@ class ChromeMetrics {
   /// track buttons to the top bar.
   final bool compactTouch;
 
+  /// The ten-foot remote tier: directional input drives the chrome. Only
+  /// sizes the title block; the bar's other flags are unaffected.
+  final bool remote;
+
   const ChromeMetrics({
     required this.showVolume,
     required this.touchTargets,
@@ -54,6 +59,7 @@ class ChromeMetrics {
     required this.secondaryGap,
     required this.horizontalPadding,
     this.compactTouch = false,
+    this.remote = false,
   });
 
   /// Whether a viewport of [size] with this input is [compactTouch]. Shared
@@ -71,7 +77,21 @@ class ChromeMetrics {
   double get barHeight => ChromeBottomBar.heightFor(
     touchTargets: touchTargets,
     compactTouch: compactTouch,
+    titleTier: titleTier,
   );
+
+  /// The size tier of the title block above the timeline.
+  ChromeTitleTier get titleTier => compactTouch
+      ? ChromeTitleTier.compact
+      : remote
+      ? ChromeTitleTier.remote
+      : ChromeTitleTier.pointer;
+
+  /// The title block's height plus the gap under it: the part of
+  /// [barHeight] the title takes, for the scrim to cover.
+  double get titleBlockExtent =>
+      ChromeTitleBlock.heightFor(titleTier) +
+      ChromeTitleBlock.gapFor(titleTier);
 
   /// Bottom inset for a corner overlay so it always clears the bar.
   double get cornerInsetBottom => barHeight + cornerGap;
@@ -100,6 +120,7 @@ class ChromeMetrics {
     required double width,
     required double height,
     required bool touchPrimary,
+    bool remote = false,
   }) {
     final compactTransport = width < Breakpoints.mobile;
     final touchTargets = touchPrimary || width < Breakpoints.mobile;
@@ -115,6 +136,7 @@ class ChromeMetrics {
         secondaryGap: 0,
         horizontalPadding: 12,
         compactTouch: true,
+        remote: remote,
       );
     }
     if (width >= Breakpoints.tablet) {
@@ -126,6 +148,7 @@ class ChromeMetrics {
         showAlwaysOnTop: true,
         secondaryGap: 8,
         horizontalPadding: horizontalPadding,
+        remote: remote,
       );
     }
     if (width >= Breakpoints.mobile) {
@@ -137,6 +160,7 @@ class ChromeMetrics {
         showAlwaysOnTop: false,
         secondaryGap: 6,
         horizontalPadding: horizontalPadding,
+        remote: remote,
       );
     }
     return ChromeMetrics(
@@ -147,6 +171,7 @@ class ChromeMetrics {
       showAlwaysOnTop: false,
       secondaryGap: 0,
       horizontalPadding: horizontalPadding,
+      remote: remote,
     );
   }
 
@@ -188,6 +213,12 @@ class ChromeBottomBar extends StatelessWidget {
   /// breakpoint crossing. Pass `null` only when there is no volume control.
   final Widget? volume;
 
+  /// The title block, drawn first, above the timeline and control row.
+  ///
+  /// The bar reserves the block's height and gap whether or not this is
+  /// passed, so the bar never changes size when a title arrives.
+  final Widget? title;
+
   final ChromeMetrics metrics;
 
   /// Whether the control row sits above the timecodes and scrubber instead
@@ -207,6 +238,7 @@ class ChromeBottomBar extends StatelessWidget {
     required this.secondary,
     this.transport,
     this.volume,
+    this.title,
     this.controlsFirst = false,
   });
 
@@ -234,9 +266,12 @@ class ChromeBottomBar extends StatelessWidget {
   static double heightFor({
     required bool touchTargets,
     bool compactTouch = false,
+    ChromeTitleTier titleTier = ChromeTitleTier.pointer,
   }) => compactTouch
       ? CompactChromeBottomBar.height
       : verticalPadding * 2 +
+            ChromeTitleBlock.heightFor(titleTier) +
+            ChromeTitleBlock.gapFor(titleTier) +
             (touchTargets ? _scrubberTouchHeight : _scrubberFineHeight) +
             rowGap +
             controlRowHeight;
@@ -291,9 +326,13 @@ class ChromeBottomBar extends StatelessWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: controlsFirst
-            ? [controlRow, const SizedBox(height: rowGap), timeline]
-            : [timeline, const SizedBox(height: rowGap), controlRow],
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TitleSlot(title: title, tier: metrics.titleTier),
+          ...controlsFirst
+              ? [controlRow, const SizedBox(height: rowGap), timeline]
+              : [timeline, const SizedBox(height: rowGap), controlRow],
+        ],
       ),
     );
   }
@@ -340,6 +379,9 @@ class CompactChromeBottomBar extends StatelessWidget {
   /// moves here and back instead of being rebuilt.
   final Widget? volume;
 
+  /// The title block, drawn above the row.
+  final Widget? title;
+
   const CompactChromeBottomBar({
     super.key,
     required this.metrics,
@@ -347,6 +389,7 @@ class CompactChromeBottomBar extends StatelessWidget {
     required this.remaining,
     required this.scrubber,
     this.volume,
+    this.title,
   });
 
   /// Vertical padding above and below the row.
@@ -359,7 +402,11 @@ class CompactChromeBottomBar extends StatelessWidget {
   static const double timecodeGap = 12;
 
   /// The bar's rendered height.
-  static const double height = verticalPadding * 2 + rowHeight;
+  static final double height =
+      verticalPadding * 2 +
+      ChromeTitleBlock.heightFor(ChromeTitleTier.compact) +
+      ChromeTitleBlock.gapFor(ChromeTitleTier.compact) +
+      rowHeight;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -367,19 +414,44 @@ class CompactChromeBottomBar extends StatelessWidget {
       horizontal: metrics.horizontalPadding,
       vertical: verticalPadding,
     ),
-    child: SizedBox(
-      height: rowHeight,
-      child: Row(
-        children: [
-          elapsed,
-          const SizedBox(width: timecodeGap),
-          Expanded(child: scrubber),
-          const SizedBox(width: timecodeGap),
-          remaining,
-          if (volume case final volume?)
-            Visibility(visible: false, maintainState: true, child: volume),
-        ],
-      ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _TitleSlot(title: title, tier: ChromeTitleTier.compact),
+        SizedBox(
+          height: rowHeight,
+          child: Row(
+            children: [
+              elapsed,
+              const SizedBox(width: timecodeGap),
+              Expanded(child: scrubber),
+              const SizedBox(width: timecodeGap),
+              remaining,
+              if (volume case final volume?)
+                Visibility(visible: false, maintainState: true, child: volume),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// The title block's slot at the top of a bar: the block's height plus the gap
+/// below it, held even when there is no title.
+class _TitleSlot extends StatelessWidget {
+  const _TitleSlot({required this.title, required this.tier});
+
+  final Widget? title;
+  final ChromeTitleTier tier;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: ChromeTitleBlock.heightFor(tier) + ChromeTitleBlock.gapFor(tier),
+    child: Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(height: ChromeTitleBlock.heightFor(tier), child: title),
     ),
   );
 }

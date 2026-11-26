@@ -24,6 +24,7 @@ import 'buffering_indicator.dart';
 import 'chrome_bottom_bar.dart';
 import 'chrome_scrim.dart';
 import 'chrome_subtitle_lift.dart';
+import 'chrome_title_block.dart';
 import 'chrome_top_bar.dart';
 import 'panel_controls.dart';
 import 'playback_surface.dart';
@@ -726,6 +727,9 @@ class PlaybackChrome extends StatefulWidget {
   final Future<void> Function(Duration realTarget) onSeekToReal;
 
   final String? title;
+
+  /// The line above [title] in the bottom bar's title block.
+  final String? kicker;
   final VoidCallback? onBack;
   final Widget? castAction;
   final VoidCallback? onCastTap;
@@ -808,6 +812,7 @@ class PlaybackChrome extends StatefulWidget {
     required this.timeline,
     required this.onSeekToReal,
     this.title,
+    this.kicker,
     this.onBack,
     this.castAction,
     this.onCastTap,
@@ -930,6 +935,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       width: size.width,
       height: size.height,
       touchPrimary: touch,
+      remote: InputCapabilities.directionalPrimary,
     );
     // A touch phone: one-row bottom bar, track buttons in the top bar.
     final compact = metrics.compactTouch;
@@ -940,6 +946,14 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
     // presses are also the only activity this tier produces, which is what
     // the auto-hide settings below account for.
     final remote = InputCapabilities.directionalPrimary;
+    final titleText = widget.title;
+    final Widget? titleBlock = titleText == null
+        ? null
+        : ChromeTitleBlock(
+            title: titleText,
+            kicker: widget.kicker,
+            tier: metrics.titleTier,
+          );
 
     // The track buttons. In the bottom bar, or on a touch phone in the top
     // bar (see `ChromeMetrics.compactTouch`).
@@ -1124,6 +1138,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                           remaining: remaining,
                                           scrubber: scrubber,
                                           volume: volume,
+                                          title: titleBlock,
                                         )
                                       : ChromeBottomBar(
                                           metrics: metrics,
@@ -1131,6 +1146,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                           // UP from the scrubber reaches the
                                           // remembered control above it.
                                           controlsFirst: remote,
+                                          title: titleBlock,
                                           transport: touch
                                               ? null
                                               : TransportCluster(
@@ -1184,7 +1200,6 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                     child: ChromeSlide(
                       hiddenOffsetY: -6,
                       child: ChromeTopBar(
-                        title: widget.title,
                         showBack: !remote,
                         onBack: widget.onBack,
                         castAction: remote ? null : widget.castAction,

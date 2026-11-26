@@ -29,6 +29,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
@@ -366,6 +367,43 @@ void main() {
           expect(bar.bottom, height - padding.bottom);
         },
       );
+
+      for (final (label, touch, size) in <(String, bool, Size)>[
+        ('pointer', false, const Size(1200, 700)),
+        ('touch tablet', true, const Size(1200, 800)),
+        ('phone', true, const Size(760, 350)),
+      ]) {
+        testWidgets('corner overlays sit above the taller bar: $label', (
+          tester,
+        ) async {
+          InputCapabilities.debugTouchPrimaryOverride = touch;
+          addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(chromeHost());
+          await tester.pumpAndSettle();
+
+          final metrics = ChromeMetrics.resolve(
+            width: size.width,
+            height: size.height,
+            touchPrimary: touch,
+          );
+          final bar = tester.getRect(
+            find.byWidgetPredicate(
+              (w) => w is ChromeBottomBar || w is CompactChromeBottomBar,
+            ),
+          );
+          // What `SkipSegmentButton` and `UpNextPrompt` pad by, resolved
+          // against the safe-area bottom this host adds.
+          final overlayBottom =
+              size.height - (metrics.cornerInsetBottom + padding.bottom);
+          expect(
+            overlayBottom,
+            closeTo(bar.top - ChromeMetrics.cornerGap, 0.01),
+          );
+        });
+      }
 
       testWidgets(
         'the top bar still clears the same left inset the old SafeArea gave '

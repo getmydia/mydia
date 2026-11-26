@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 import 'package:player/presentation/widgets/video_controls/video_progress_bar.dart';
@@ -21,6 +22,11 @@ Widget _bar(double width, {bool quality = true, bool alwaysOnTop = false}) {
         alignment: Alignment.bottomCenter,
         child: ChromeBottomBar(
           metrics: metrics,
+          title: ChromeTitleBlock(
+            title: 'The Lantern Coast ${'and a very long subtitle ' * 5}',
+            kicker: 'S2, E4 · ${'Low Tide ' * 12}',
+            tier: metrics.titleTier,
+          ),
           // Hour-long timecodes, the widest the scrubber row carries.
           elapsed: const Text('1:23:45'),
           remaining: const Text('-1:23:45'),
