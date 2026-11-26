@@ -19,7 +19,7 @@
 - `ChromeTitleBlock` holds no `Focus`, no gesture handler, no `BackdropFilter`, no glass, no text shadow.
 - Legibility thresholds are fixed: 4.5:1 for the small line, 3:1 for the title, over a pure-white frame. A failure is fixed in `DepthTokens.osdTitleScrimOpacity`, never in a threshold.
 - Titles in tests and the lab are invented ("The Lantern Coast", "Low Tide"). Never a real film or show.
-- All user-visible text goes through ARB messages (`player/docs/l10n.md`); add each new message to every `app_*.arb`.
+- All user-visible text goes through ARB messages (`player/docs/l10n.md`); add each new message to `app_en.arb` only; Weblate fills the other locales and a missing message shows in English.
 - No em dashes in comments, docs or commit messages. No AI attribution in commits.
 - Stage every intended path before `git commit`, run one commit per shell command, and check `git show --stat HEAD` after each (root `CLAUDE.md`, Git Guidelines).
 - Glass files (`chrome_scrim.dart`, `depth_tokens.dart`, the lab) need `./dev player glass-diff` before their commit; the pre-commit hook enforces it.
@@ -66,7 +66,7 @@
 
 - [ ] **Step 2: Run** `./dev flutter test --concurrency=1 test/presentation/widgets/video_controls/playback_title_test.dart`. Expected: FAIL, `PlaybackTitle` undefined.
 
-- [ ] **Step 3: Add the ARB message** to every `app_*.arb` (English text in all; translators follow up), with an `@playerEpisodeCode` description and two `int` placeholders. Regenerate with the command `player/docs/l10n.md` gives.
+- [ ] **Step 3: Add the ARB message** to `app_en.arb` only, with an `@playerEpisodeCode` description and two `int` placeholders. Leave the other locales to Weblate: a missing message shows in English and non-English ARB files are not hand-edited. Regenerate with the command `player/docs/l10n.md` gives.
 
 - [ ] **Step 4: Add the four fields to `PlaybackDetail`** and implement `PlaybackTitle.resolve`. The separator is `' · '`. `seasonNumber` comes from the detail's existing field.
 
@@ -246,13 +246,13 @@
 
 **Interfaces:**
 - Consumes: `PlaybackTitle.resolve` (Task 1), `PlaybackChrome.kicker` (Task 3).
-- Produces: state field `PlaybackTitle? _osdTitle`.
+- Produces: state field `PlaybackDetail? _osdDetail`.
 
 - [ ] **Step 1: Write the failing test:** play an episode whose route title is 'The Lantern Coast S2E4' and whose scripted detail has show title 'The Lantern Coast', season 2, episode 4, title 'Low Tide'. After the detail resolves, the chrome shows title 'The Lantern Coast' and `ChromeTitleBlock.kickerKey` text 'S2, E4 · Low Tide'. A second case with a detail of `null`: the route string, no kicker.
 
 - [ ] **Step 2: Run.** Expected: FAIL.
 
-- [ ] **Step 3: Implement.** In `_fetchDetail`, after the existing assignments and inside the same `_isCurrentLoad(gen)` guard, `setState` `_osdTitle = PlaybackTitle.resolve(routeTitle: widget.title ?? l10n.playerUntitled, isEpisode: widget.mediaType == 'episode', detail: detail, l10n: …)`. Pass `title: _osdTitle?.title ?? widget.title` and `kicker: _osdTitle?.kicker` to the chrome builder. Clear `_osdTitle` wherever the screen starts a new load for a different item. Leave the window title, media session and cast metadata on `widget.title`.
+- [ ] **Step 3: Implement.** In `_fetchDetail`, after the existing assignments and inside the same `_isCurrentLoad(gen)` guard (and `mounted`), `setState` `_osdDetail = detail`. `PlaybackTitle.resolve` runs where the chrome is built, with `context.l10n`, so the wording follows the widget's locale instead of being cached at fetch time: `routeTitle: widget.title?.trim() ?? ''`, `isEpisode: widget.mediaType == 'episode'`, `detail: _osdDetail`. When the resolved title is empty treat the result as null, so no title and no kicker show (the OSD never shows `playerUntitled`). Pass `title: osdTitle?.title ?? widget.title` and `kicker: osdTitle?.kicker` to the chrome builder. Clear `_osdDetail` in `_resetPerFileState`. Leave the window title, media session and cast metadata on `widget.title ?? playerUntitled`; `playerUntitled` stays there.
 
 - [ ] **Step 4: Run** the test file. Expected: PASS.
 

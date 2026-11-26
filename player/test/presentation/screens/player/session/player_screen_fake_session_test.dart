@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/l10n/gen/app_localizations_es.dart';
+import 'package:player/l10n/locale_aliases.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
@@ -332,6 +335,39 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('the kicker wording follows a locale change', (tester) async {
+    final locale = ValueNotifier<Locale?>(const Locale('en'));
+    addTearDown(locale.dispose);
+    final session = _TitledEpisodeSession(
+      const PlaybackDetail(
+        showTitle: 'The Lantern Coast',
+        seasonNumber: 2,
+        episodeNumber: 4,
+        episodeTitle: 'Low Tide',
+      ),
+    );
+    await _pumpEpisode(
+      tester,
+      session,
+      showId: 's1',
+      seasonNumber: 2,
+      title: 'The Lantern Coast S2E4',
+      locale: locale,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    String kicker() =>
+        tester.widget<Text>(find.byKey(ChromeTitleBlock.kickerKey)).data!;
+    expect(kicker(), 'S2, E4 · Low Tide');
+
+    locale.value = const Locale('es');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(kicker(), 'T2, E4 · Low Tide');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
   testWidgets('a missing detail keeps the route title and no kicker', (
     tester,
   ) async {
@@ -494,6 +530,7 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   int? seasonNumber,
   String? title,
   String mediaType = 'episode',
+  ValueListenable<Locale?>? locale,
 }) async {
   final container = buildPlayerScreenContainer(
     connectionState: HarnessLink.direct(),
@@ -527,11 +564,18 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        routerConfig: router,
+      child: ValueListenableBuilder<Locale?>(
+        valueListenable: locale ?? ValueNotifier<Locale?>(null),
+        builder: (_, value, _) => MaterialApp.router(
+          locale: value,
+          localizationsDelegates: [
+            _SpanishCodeDelegate(),
+            ...appLocalizationsDelegates,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          routerConfig: router,
+        ),
       ),
     ),
   );
@@ -597,4 +641,25 @@ void castPillTests() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
+}
+
+/// Serves Spanish with a distinct episode code, so a test can tell whether
+/// the OSD kicker was worded for the current locale. The shipped Spanish
+/// catalog has no override for it and would read the same as English.
+class _SpanishCodeLocalizations extends AppLocalizationsEs {
+  @override
+  String playerEpisodeCode(int season, int episode) => 'T$season, E$episode';
+}
+
+class _SpanishCodeDelegate extends LocalizationsDelegate<AppLocalizations> {
+  @override
+  bool isSupported(Locale locale) => locale.languageCode == 'es';
+
+  @override
+  Future<AppLocalizations> load(Locale locale) =>
+      SynchronousFuture(_SpanishCodeLocalizations());
+
+  @override
+  bool shouldReload(covariant LocalizationsDelegate<AppLocalizations> old) =>
+      false;
 }

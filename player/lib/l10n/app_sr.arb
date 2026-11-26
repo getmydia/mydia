@@ -6354,6 +6354,5 @@
     "statsWhyMacSurfaceFallback": "Користи се стандардни видео излаз: HDR рендерер није могао да се покрене на овом Mac-у",
     "@statsWhyMacSurfaceFallback": {
         "description": "Stats panel Why row, macOS only: the HDR video renderer failed to start on this app version, so the player fell back to the standard video output until the app is updated."
-    },
-    "playerEpisodeCode": "S{season}, E{episode}"
+    }
 }

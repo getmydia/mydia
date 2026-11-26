@@ -638,9 +638,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// discarded, and nothing could rebuild it.
   List<app_models.SubtitleTrack> _serverSubtitleTracks = [];
 
-  /// The OSD's two-line title, resolved from the detail. Null until the
-  /// detail answers; the chrome then falls back to the route string.
-  PlaybackTitle? _osdTitle;
+  /// The detail the OSD's two-line title is resolved from, at build time so
+  /// the wording follows the widget's locale. Null until the detail answers;
+  /// the chrome then falls back to the route string.
+  PlaybackDetail? _osdDetail;
 
   /// The tracks actually offered to the viewer in the subtitle sheet.
   /// Derived: never assigned outside [_applySubtitleTracks].
@@ -1805,7 +1806,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _savedDurationSeconds = null;
     _serverLastWatchedAt = null;
     _runtimeMinutes = null;
-    _osdTitle = null;
+    _osdDetail = null;
     _totalDuration = null;
     _serverSubtitleTracks = [];
     _showId = widget.showId;
@@ -3615,18 +3616,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _refreshSubtitleTracks();
         debugPrint('Extracted ${tracks.length} subtitle tracks from GraphQL');
       }
-      // The OSD never shows the "Untitled" fallback: with no usable route
-      // title only a show title (episode) can name the block, and otherwise
-      // it stays empty, as it was before the detail landed.
-      final routeTitle = widget.title?.trim() ?? '';
-      final resolved = PlaybackTitle.resolve(
-        routeTitle: routeTitle,
-        isEpisode: widget.mediaType == 'episode',
-        detail: detail,
-        l10n: currentAppLocalizations(),
-      );
-      final osdTitle = resolved.title.isEmpty ? null : resolved;
-      if (mounted) setState(() => _osdTitle = osdTitle);
+      if (mounted) setState(() => _osdDetail = detail);
     } catch (e) {
       debugPrint('Error fetching progress: $e');
     }
@@ -6413,11 +6403,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
+    // The OSD never shows the "Untitled" fallback: with no usable route
+    // title only a show title (episode) can name the block, and otherwise
+    // it stays empty, as it was before the detail landed.
+    final osdDetail = _osdDetail;
+    final resolvedTitle = osdDetail == null
+        ? null
+        : PlaybackTitle.resolve(
+            routeTitle: widget.title?.trim() ?? '',
+            isEpisode: widget.mediaType == 'episode',
+            detail: osdDetail,
+            l10n: context.l10n,
+          );
+    final osdTitle = resolvedTitle == null || resolvedTitle.title.isEmpty
+        ? null
+        : resolvedTitle;
     final chrome = playbackChromeBuilder(
       timeline: _timeline,
       onSeekToReal: seekToReal,
-      title: _osdTitle?.title ?? widget.title,
-      kicker: _osdTitle?.kicker,
+      title: osdTitle?.title ?? widget.title,
+      kicker: osdTitle?.kicker,
       chromeVisibility: _chromeVisibility,
       playPauseFocusNode: _osdPlayPauseFocus,
       chromeFocusNode: _chromeFocusNode,
