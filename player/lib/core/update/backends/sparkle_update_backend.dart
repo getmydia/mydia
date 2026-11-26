@@ -46,9 +46,9 @@ class SparkleUpdateBackend implements UpdateBackend {
 
   @override
   Set<UpdateTrack> get availableTracks =>
-      // No macOS dev builds are published yet. Offering the track would put a
-      // choice in the picker that resolves to nothing.
-      const {UpdateTrack.stable, UpdateTrack.beta};
+      // Dev items come from master on-demand builds, published to the dev
+      // channel of the Sparkle feed (scripts/appcast).
+      const {UpdateTrack.stable, UpdateTrack.beta, UpdateTrack.dev};
 
   @override
   UpdateTrack get currentTrack => _track;

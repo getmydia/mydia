@@ -428,7 +428,7 @@ void main() {
     });
   });
 
-  test('Sparkle offers stable and beta, and applies a switch', () async {
+  test('Sparkle offers stable, beta and dev, and applies a switch', () async {
     var written = UpdateTrack.stable;
     final backend = SparkleUpdateBackend(
       checkForUpdates: () async {},
@@ -441,12 +441,22 @@ void main() {
     addTearDown(backend.dispose);
     await backend.start();
 
-    expect(backend.availableTracks, {UpdateTrack.stable, UpdateTrack.beta});
+    expect(backend.availableTracks, {
+      UpdateTrack.stable,
+      UpdateTrack.beta,
+      UpdateTrack.dev,
+    });
     expect(
       await backend.selectTrack(UpdateTrack.beta),
       isA<TrackSwitchApplied>(),
     );
     expect(written, UpdateTrack.beta);
+    expect(
+      await backend.selectTrack(UpdateTrack.dev),
+      isA<TrackSwitchApplied>(),
+    );
+    expect(written, UpdateTrack.dev);
+    expect(backend.currentTrack, UpdateTrack.dev);
   });
 
   test('a host that refuses the write is reported, not swallowed', () async {
