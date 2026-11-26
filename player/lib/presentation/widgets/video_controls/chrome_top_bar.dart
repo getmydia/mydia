@@ -12,7 +12,9 @@ import 'control_button.dart';
 /// cluster button so the two never disagree.
 IconData scalingIcon(VideoScaling scaling) => switch (scaling) {
   VideoScaling.fit => Icons.fit_screen_rounded,
-  VideoScaling.fill => Icons.crop_free_rounded,
+  // Not `crop_free`: its four corners read as the fullscreen glyph in the
+  // bottom bar.
+  VideoScaling.fill => Icons.crop_rounded,
 };
 
 /// The tooltip naming the mode in effect, shown on both scaling controls.
@@ -25,10 +27,8 @@ String scalingTooltip(AppLocalizations l10n, VideoScaling scaling) =>
 /// A 36px-tall pill in the unblurred OSD pill material
 /// ([GlassSurface.osdPill]).
 ///
-/// Used for the back pill and the corner overlays. The top bar sits on
-/// `ChromeScrim`'s top band, whose plateau is the same OSD fill, so the bare
-/// title beside the pills stays legible over bright video. Text and icons
-/// carry no shadow: the OSD fill holds their contrast on its own
+/// Used for the corner overlays. Text and icons carry no shadow: the OSD
+/// fill holds their contrast on its own over a pure-white frame
 /// (`osd_legibility_test.dart`).
 class GlassPill extends StatelessWidget {
   final Widget child;
@@ -36,7 +36,7 @@ class GlassPill extends StatelessWidget {
 
   /// Pill height. Defaults to [defaultHeight]; `UpNextPrompt` passes 44 at the
   /// touch tier so its two hit targets clear the 44px floor. The top bar's
-  /// back pill takes the default.
+  /// title pill takes the default.
   final double height;
 
   const GlassPill({
@@ -46,7 +46,7 @@ class GlassPill extends StatelessWidget {
     this.height = defaultHeight,
   });
 
-  /// Default pill height, shared by the back pill and the top bar's actions
+  /// Default pill height, shared by the title pill and the top bar's actions
   /// pill.
   static const double defaultHeight = 36.0;
 
@@ -93,24 +93,25 @@ class GlassPill extends StatelessWidget {
   }
 }
 
-/// The playback screen's top chrome: a back pill, the bare left-aligned
-/// title, and one actions pill holding the scaling and cast controls.
+/// The playback screen's top chrome: one pill holding the back chevron and
+/// the title, and one actions pill holding the scaling and cast controls.
 ///
-/// Replaces the former left-aligned chevron-and-title row that lived in
-/// `player_screen.dart`, so all playback chrome is owned by one widget.
+/// No scrim sits behind it (`ChromeScrim` darkens only the bottom), so the
+/// title lives inside the pill: the OSD fill holds its contrast over a
+/// bright frame, and the rest of the picture stays clear.
 class ChromeTopBar extends StatelessWidget {
   /// Media title. When null no title text renders and the actions pill
   /// stays at the end of the row.
   final String? title;
 
-  /// Back action. When null the back pill is inert but still rendered.
+  /// Back action. When null the back chevron is inert but still rendered.
   final VoidCallback? onBack;
 
-  /// Whether the back pill renders at all.
+  /// Whether the back chevron renders at all.
   ///
   /// False on the remote tier, whose BACK key already dismisses the chrome
   /// and then leaves playback. Distinct from a null [onBack], which keeps the
-  /// pill on screen but inert.
+  /// chevron on screen but inert.
   final bool showBack;
 
   /// Cast / AirPlay affordance. When null the pill is omitted.
@@ -119,7 +120,7 @@ class ChromeTopBar extends StatelessWidget {
   /// Cast tap handler. Lives here rather than inside [castAction] so the whole
   /// pill is the tap target: an 18px glyph in a 36px pill would leave most of
   /// the affordance dead to touch, and only the pill can offer the hover
-  /// cursor. When null the pill renders but is inert, like the back pill.
+  /// cursor. When null the pill renders but is inert, like the back chevron.
   final VoidCallback? onCastTap;
 
   /// Fit/Fill toggle. When null the pill is omitted: the remote tier puts
@@ -162,7 +163,21 @@ class ChromeTopBar extends StatelessWidget {
   /// The pill holding [trailing].
   static const Key trailingPillKey = Key('osd-top-trailing');
 
-  /// Gap between back, title and the pills.
+  /// The pill holding the back chevron and the title.
+  static const Key titlePillKey = Key('osd-top-title');
+
+  /// Width of the back chevron's tap target inside the title pill.
+  static const double backWidth = 40.0;
+
+  /// Inset between the title text and the title pill's edge, and between the
+  /// text and the back target. The chevron's own target supplies most of the
+  /// space on its side, so that gap is narrower.
+  static const double titleInset = 14.0;
+
+  /// Gap between the back target and the title text.
+  static const double titleGap = 2.0;
+
+  /// Gap between the title pill and the other pills.
   static const double gap = 12.0;
 
   /// [gap] when [compact].
@@ -218,73 +233,119 @@ class ChromeTopBar extends StatelessWidget {
       ],
     ];
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        if (showBack) ...[
-          Tooltip(
-            message: l10n.commonBack,
-            // The Semantics below already carries the label; without this
-            // the tooltip would announce Back a second time.
-            excludeFromSemantics: true,
-            child: Semantics(
-              label: l10n.commonBack,
-              button: true,
-              onTap: onBack,
-              excludeSemantics: true,
-              child: GlassPill(
-                key: backKey,
-                onTap: onBack,
-                child: const Icon(Icons.chevron_left_rounded, size: 22),
+    final titlePill = (showBack || titleText != null)
+        ? _titlePill(titleText, l10n.commonBack)
+        : null;
+
+    // The title pill takes its natural width up to whatever the other pills
+    // leave, ellipsizing past that. Below ~300 px, where the pills alone
+    // would not fit, they scale down rather than overflow, as the bottom
+    // bar's pill does, and the title pill keeps at least the back target.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final reserved = showBack ? backWidth : 0.0;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: titlePill ?? const SizedBox.shrink(),
               ),
             ),
-          ),
-          SizedBox(width: gap),
-        ],
-        // The pills take their natural width and the title the rest. Below
-        // ~300 px, where the pills alone would not fit, they scale down
-        // rather than overflow, as the bottom bar's pill does.
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Row(
-              children: [
-                Expanded(
-                  child: titleText == null
-                      ? const SizedBox.shrink()
-                      : Text(
-                          titleText,
-                          key: titleKey,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.start,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xD9FFFFFF), // white @ 0.85
-                          ),
-                        ),
+            if (pills.isNotEmpty) ...[
+              SizedBox(width: gap),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: math.max(0, constraints.maxWidth - reserved - gap),
                 ),
-                if (pills.isNotEmpty) ...[
-                  SizedBox(width: gap),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: math.max(0, constraints.maxWidth - gap),
-                    ),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: pills,
-                      ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: pills),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// The back chevron and the title in one OSD pill. Only the chevron's
+  /// target is the back button; the title is plain text.
+  Widget _titlePill(String? titleText, String backLabel) {
+    const side = GlassPill.defaultHeight;
+    return SizedBox(
+      height: side,
+      child: GlassSurface.osdPill(
+        key: titlePillKey,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showBack) _backButton(backLabel, side),
+            if (titleText != null)
+              Flexible(
+                child: Padding(
+                  padding: EdgeInsetsDirectional.only(
+                    start: showBack ? titleGap : titleInset,
+                    end: titleInset,
+                  ),
+                  child: Text(
+                    titleText,
+                    key: titleKey,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.start,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xD9FFFFFF), // white @ 0.85
                     ),
                   ),
-                ],
-              ],
-            ),
-          ),
+                ),
+              ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _backButton(String label, double side) {
+    Widget target = SizedBox(
+      key: backKey,
+      width: backWidth,
+      height: side,
+      child: const Center(
+        child: Icon(
+          Icons.chevron_left_rounded,
+          size: 22,
+          color: Color(0xCCFFFFFF), // white @ 0.80
+        ),
+      ),
+    );
+    if (onBack != null) {
+      target = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onBack,
+          child: target,
+        ),
+      );
+    }
+    return Tooltip(
+      message: label,
+      // The Semantics below already carries the label; without this the
+      // tooltip would announce Back a second time.
+      excludeFromSemantics: true,
+      child: Semantics(
+        label: label,
+        button: true,
+        onTap: onBack,
+        excludeSemantics: true,
+        child: target,
+      ),
     );
   }
 

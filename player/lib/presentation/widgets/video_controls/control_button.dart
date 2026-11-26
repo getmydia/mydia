@@ -52,6 +52,14 @@ class ControlButton extends StatefulWidget {
   /// the glyph keeps a single owner for the node and cross-fades identically.
   final bool animateIcon;
 
+  /// Whether the glyph sits on a light disc instead of straight on the OSD.
+  ///
+  /// Marks the one control a row is anchored on (play/pause). The disc is
+  /// inset [filledInset] inside [size], so the focus ring, drawn on the
+  /// button's edge, lands on the dark scrim around the disc rather than on
+  /// the disc's own near-white edge where it would vanish.
+  final bool filled;
+
   const ControlButton({
     super.key,
     required this.icon,
@@ -62,7 +70,19 @@ class ControlButton extends StatefulWidget {
     this.enabled = true,
     this.focusNode,
     this.animateIcon = false,
+    this.filled = false,
   });
+
+  /// Fill of a [filled] button's disc at rest (white-ish at 0.95). Shared
+  /// with the touch transport's play disc.
+  static const Color filledFill = Color(0xF2F0EFED);
+
+  /// Glyph colour on a [filled] button's disc.
+  static const Color filledGlyph = Color(0xFF0B0B0C);
+
+  /// Gap between a [filled] button's disc and its edge, where the focus ring
+  /// draws.
+  static const double filledInset = 3.0;
 
   /// Glyph opacity at rest.
   static const double restOpacity = 0.92;
@@ -133,57 +153,86 @@ class _ControlButtonState extends State<ControlButton> {
               final glyph = Icon(
                 widget.icon,
                 size: widget.iconSize,
-                color: Colors.white.withValues(alpha: glyphOpacity),
+                color: widget.filled
+                    ? ControlButton.filledGlyph.withValues(
+                        alpha: widget.enabled
+                            ? 1.0
+                            : ControlButton.disabledOpacity,
+                      )
+                    : Colors.white.withValues(alpha: glyphOpacity),
               );
-              return DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: backdropAlpha),
-                ),
-                child: Center(
-                  child: widget.animateIcon
-                      ? AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 120),
-                          // Neither glyph overshoots full size. A
-                          // ScaleTransition reads the animation the switcher
-                          // hands its builder: 0 -> 1 for the incoming glyph
-                          // and 1 -> 0 for the outgoing one, because
-                          // AnimatedSwitcher reverses the outgoing entry's
-                          // controller and eases it back through
-                          // `switchOutCurve`. Both curves therefore only have
-                          // to stay inside [0, 1], and the pair reads as the
-                          // same scale-and-fade the wrapping switcher
-                          // produced: grow in, shrink out. Reading the
-                          // outgoing animation through ReverseAnimation
-                          // instead would run its scale backwards, blowing the
-                          // departing glyph up to full size on the way out;
-                          // that is not what shipped.
-                          //
-                          // Linear is `AnimatedSwitcher`'s default, and it is
-                          // named here rather than left implicit only to say
-                          // that it is deliberate: the wrapper this replaces
-                          // set no curves either, so keeping the default is
-                          // what stops this refactor from subtly restyling a
-                          // transition the viewer already knows.
-                          switchInCurve: Curves.linear,
-                          switchOutCurve: Curves.linear,
-                          transitionBuilder: (child, animation) =>
-                              ScaleTransition(
-                                scale: animation,
-                                child: FadeTransition(
-                                  opacity: animation,
-                                  child: child,
-                                ),
-                              ),
-                          // Keyed on the glyph, so a change of icon — and only
-                          // a change of icon — triggers the cross-fade.
-                          child: KeyedSubtree(
-                            key: ValueKey<IconData>(widget.icon),
-                            child: glyph,
+              final Widget backdrop = widget.filled
+                  ? Padding(
+                      padding: const EdgeInsets.all(ControlButton.filledInset),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          // Brightens to pure white on hover.
+                          color: Color.lerp(
+                            ControlButton.filledFill,
+                            Colors.white,
+                            t,
                           ),
-                        )
-                      : glyph,
-                ),
+                        ),
+                        child: const SizedBox.expand(),
+                      ),
+                    )
+                  : DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: backdropAlpha),
+                      ),
+                      child: const SizedBox.expand(),
+                    );
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  backdrop,
+                  Center(
+                    child: widget.animateIcon
+                        ? AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 120),
+                            // Neither glyph overshoots full size. A
+                            // ScaleTransition reads the animation the switcher
+                            // hands its builder: 0 -> 1 for the incoming glyph
+                            // and 1 -> 0 for the outgoing one, because
+                            // AnimatedSwitcher reverses the outgoing entry's
+                            // controller and eases it back through
+                            // `switchOutCurve`. Both curves therefore only have
+                            // to stay inside [0, 1], and the pair reads as the
+                            // same scale-and-fade the wrapping switcher
+                            // produced: grow in, shrink out. Reading the
+                            // outgoing animation through ReverseAnimation
+                            // instead would run its scale backwards, blowing the
+                            // departing glyph up to full size on the way out;
+                            // that is not what shipped.
+                            //
+                            // Linear is `AnimatedSwitcher`'s default, and it is
+                            // named here rather than left implicit only to say
+                            // that it is deliberate: the wrapper this replaces
+                            // set no curves either, so keeping the default is
+                            // what stops this refactor from subtly restyling a
+                            // transition the viewer already knows.
+                            switchInCurve: Curves.linear,
+                            switchOutCurve: Curves.linear,
+                            transitionBuilder: (child, animation) =>
+                                ScaleTransition(
+                                  scale: animation,
+                                  child: FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                                ),
+                            // Keyed on the glyph, so a change of icon — and only
+                            // a change of icon — triggers the cross-fade.
+                            child: KeyedSubtree(
+                              key: ValueKey<IconData>(widget.icon),
+                              child: glyph,
+                            ),
+                          )
+                        : glyph,
+                  ),
+                ],
               );
             },
           ),

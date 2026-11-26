@@ -65,6 +65,9 @@ class TransportSurface extends StatelessWidget {
   /// the per-width budget this feeds.
   static const double gap = 2.0;
 
+  /// Hit-target size of play/pause, the row's one filled button.
+  static const double playPauseSize = 44.0;
+
   /// The play/pause glyph, cross-fading and scaling between states.
   ///
   /// Extracted so [compact] mode can render *only* this — no seek/episode
@@ -93,7 +96,10 @@ class TransportSurface extends StatelessWidget {
         focusNode: playPauseFocusNode,
         animateIcon: true,
         icon: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-        size: 40,
+        // The anchor of the row: a light disc, a size up from its
+        // neighbours. 44 keeps the disc (38) clear of the focus ring.
+        filled: true,
+        size: playPauseSize,
         iconSize: 24,
         tooltip: isPlaying ? context.l10n.commonPause : context.l10n.commonPlay,
         onTap: onPlayPause,

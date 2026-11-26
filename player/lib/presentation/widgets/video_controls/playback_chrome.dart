@@ -654,8 +654,7 @@ class PlayerTopBarSlot extends StatelessWidget {
       : (insets.height - GlassPill.defaultHeight) / 2;
 
   /// Distance from the top of the chrome to the top bar's bottom edge, as
-  /// this slot places a [GlassPill.defaultHeight]-tall bar. The top band of
-  /// the chrome scrim is solid down to here.
+  /// this slot places a [GlassPill.defaultHeight]-tall bar.
   static double bottomEdgeOf(BuildContext context) =>
       _top(context, WindowChromeInsets.of(context)) + GlassPill.defaultHeight;
 
@@ -787,7 +786,7 @@ class PlaybackChrome extends StatefulWidget {
   /// Null leaves subtitles where media_kit puts them, which is under the bar.
   final SubtitleLift? subtitleLift;
 
-  /// Keys for the timecodes above the scrubber.
+  /// Keys for the timecodes either side of the scrubber.
   static const Key elapsedKey = Key('osd-elapsed');
   static const Key remainingKey = Key('osd-remaining');
 
@@ -1039,14 +1038,13 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
               // bottom bar are unaffected by the top bar's needs.
               child: Stack(
                 children: [
-                  // First, so both bars paint over it. Inside
+                  // First, so the bottom bar paints over it. Inside
                   // ChromeVisibility so it fades with the chrome, but not in
                   // a ChromeSlide: a darkening band that translates would
                   // uncover a strip of bright video at the screen edge.
-                  // Outside the SafeArea, so the bottom band reaches under
+                  // Outside the SafeArea, so the band reaches under
                   // the home indicator the bar sits above.
                   ChromeScrim(
-                    topHeight: PlayerTopBarSlot.bottomEdgeOf(context),
                     bottomHeight:
                         metrics.barHeight +
                         MediaQuery.paddingOf(context).bottom,
@@ -1170,10 +1168,8 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                           // swap to the compact bar.
                                           volume: volume,
                                           secondary: secondary,
-                                          timecodes: _Timecodes(
-                                            elapsed: elapsed,
-                                            remaining: remaining,
-                                          ),
+                                          elapsed: elapsed,
+                                          remaining: remaining,
                                           scrubber: scrubber,
                                         ),
                                 ),
@@ -1281,24 +1277,8 @@ class _BandCentreDelegate extends SingleChildLayoutDelegate {
       old.top != top || old.bottom != bottom;
 }
 
-/// The timecode row above the scrubber: elapsed on the left, remaining on
-/// the right.
-class _Timecodes extends StatelessWidget {
-  final Widget elapsed;
-  final Widget remaining;
-
-  const _Timecodes({required this.elapsed, required this.remaining});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [elapsed, remaining],
-  );
-}
-
 /// One timecode: elapsed, or with [remaining] the time left as `-m:ss`.
-/// Separate widgets rather than one row so `CompactChromeBottomBar` can put
-/// them either side of the scrubber.
+/// Both bars put the two either side of the scrubber.
 class _Timecode extends StatelessWidget {
   final Player player;
   final StreamTimeline timeline;
