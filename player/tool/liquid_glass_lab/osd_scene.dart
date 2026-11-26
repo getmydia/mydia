@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/presentation/widgets/glass/dry_liquid_glass.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
 
 import 'lab_glass.dart';
 
@@ -10,14 +11,13 @@ import 'lab_glass.dart';
 /// and dry glass (macOS native surface output, no sampling).
 ///
 /// The real bars import providers and plugins the lab's scratch project does
-/// not have, so this builds the OSD from its glass pieces: lens pills with
-/// white glyphs (back and title share one), the bottom scrim with its eased
-/// fade into the OSD fill plateau (as `ChromeScrim` draws it in every mode,
-/// with no top band), the circular glass play disc, the timecodes and
-/// controls straight on the scrim, the scrubber with its plain white thumb,
-/// and an up next panel. The
-/// sampled tints and the dry recipe are the ones `GlassSurface._osdGlass`
-/// uses. Every word is invented.
+/// not have, so this builds the OSD from its glass pieces: a glass back disc
+/// and an actions capsule (white glyphs), the real `ChromeScrim` behind the
+/// bottom bar, the two-line title block as bare text, the circular glass play
+/// disc, the timecodes and controls straight on the scrim, the scrubber at
+/// rest (a thumbless track), and an up next panel. The sampled tints and the
+/// dry recipe are the ones `GlassSurface._osdGlass` uses. Every word is
+/// invented.
 class OsdScene extends StatelessWidget {
   const OsdScene({super.key});
 
@@ -105,44 +105,6 @@ class _Cell extends StatelessWidget {
     ],
   );
 
-  /// The scrubber thumb: Material's white dot in every mode, as the real
-  /// progress bar draws it. A clear knob over the white played track
-  /// vanished (spec, "Revision after #1525").
-  Widget _thumb() => Container(
-    width: 14,
-    height: 14,
-    decoration: const BoxDecoration(
-      color: _white,
-      shape: BoxShape.circle,
-      boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 6)],
-    ),
-  );
-
-  /// The bottom scrim as `ChromeScrim` builds it: an eased fade over
-  /// [_fade], then the OSD fill solid behind the bar.
-  static LinearGradient _scrim() {
-    final plateau = DepthTokens.osdTint.withValues(
-      alpha: DepthTokens.osdFillOpacity,
-    );
-    const steps = 12;
-    const plateauStart = _fade / (_plateau + _fade);
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        for (var i = 0; i <= steps; i++)
-          plateau.withValues(
-            alpha: plateau.a * Curves.easeInOut.transform(i / steps),
-          ),
-        plateau,
-      ],
-      stops: [for (var i = 0; i <= steps; i++) i / steps * plateauStart, 1],
-    );
-  }
-
-  static const double _plateau = 96;
-  static const double _fade = 40;
-
   static const _timecode = TextStyle(
     color: _white,
     fontSize: 12,
@@ -155,54 +117,67 @@ class _Cell extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(child: _Frame(bright: bright)),
-          // The scrim: bottom band only, solid behind the bar in every mode.
+          // The real scrim: solid behind the bar, one eased fall across the
+          // title block and above it. 96 is the bar without its title block,
+          // 52 the pointer tier's block and its gap.
+          const ChromeScrim(bottomHeight: 96, titleHeight: 52),
+          // The back disc: a circular glass pill, as `ChromeTopBar` draws it.
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: _plateau + _fade,
-            child: DecoratedBox(decoration: BoxDecoration(gradient: _scrim())),
-          ),
-          // Back and the title share one pill.
-          Positioned(
-            top: 14,
+            top: 16,
             left: 14,
             child: _pill(
-              18,
+              20,
               const SizedBox(
-                height: 36,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 40,
-                      child: Icon(
-                        Icons.chevron_left_rounded,
-                        color: _white,
-                        size: 22,
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsetsDirectional.only(start: 2, end: 14),
-                      child: Text(
-                        'Harbor Lights',
-                        style: TextStyle(
-                          color: _white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                  ],
+                width: 40,
+                height: 40,
+                child: Icon(
+                  Icons.chevron_left_rounded,
+                  color: _white,
+                  size: 22,
                 ),
               ),
             ),
           ),
+          // The title block: a small line over the title, bare on the scrim.
+          const Positioned(
+            left: 14,
+            right: 14,
+            bottom: 90,
+            height: 46,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 18,
+                  child: Text(
+                    'S2, E4 \u00b7 Low Tide',
+                    style: TextStyle(
+                      color: Color(0xC7FFFFFF),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 28,
+                  child: Text(
+                    'The Lantern Coast',
+                    style: TextStyle(
+                      color: Color(0xF2FFFFFF),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 22,
+                      letterSpacing: -0.22,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Positioned(
-            top: 14,
+            top: 16,
             right: 14,
             child: _pill(
-              18,
+              20,
               _icons(const [Icons.fit_screen_rounded, Icons.cast_rounded]),
             ),
           ),
@@ -274,7 +249,7 @@ class _Cell extends StatelessWidget {
             ),
           ),
           // Timeline row on the scrim: elapsed, the scrubber, remaining.
-          // Neither the track nor the thumb takes glass.
+          // At rest the scrubber has no thumb, and the track takes no glass.
           Positioned(
             left: 14,
             right: 14,
@@ -305,10 +280,6 @@ class _Cell extends StatelessWidget {
                           ),
                         ),
                       ),
-                      Align(
-                        alignment: const Alignment(-0.2, 0),
-                        child: _thumb(),
-                      ),
                     ],
                   ),
                 ),
@@ -336,7 +307,7 @@ class _Cell extends StatelessWidget {
             ),
           ),
           labTag(
-            top: 60,
+            top: 66,
             left: 14,
             text: '${bright ? 'bright' : 'dark'} / ${dry ? 'dry' : 'sampled'}',
           ),

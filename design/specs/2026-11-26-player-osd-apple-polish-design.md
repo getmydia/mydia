@@ -1,7 +1,7 @@
 # Player: Apple-style OSD polish
 
 Date: 2026-11-26
-Status: approved design, not yet implemented
+Status: implemented
 
 ## Goal
 
@@ -101,7 +101,8 @@ query), which shows at once as a single-line `PlaybackTitle`. `PlaybackDetail`
 gains `showTitle`, `episodeNumber`, `episodeTitle` and `year`, filled by
 `MydiaPlaybackSession.detail()` and `SourcePlaybackSession.detail()` where the
 source knows them. When the detail lands, the player screen builds the
-two-line `PlaybackTitle` from it. A source that cannot supply the parts stays
+two-line `PlaybackTitle` from it. The detail-driven title is cleared with the
+other per-file state at the start of every load. A source that cannot supply the parts stays
 single-line. Any GraphQL field the Mydia session does not already select is
 added to its document. `EpisodeDetail` already selects `episodeNumber`,
 `title` and `show.title`, and `MovieDetail` selects `year`, so no document or
@@ -118,7 +119,9 @@ string as they do today.
   actions capsule, holding the chevron. `backKey` keeps its name;
   `titlePillKey` is removed.
 - Capsule height goes from 36 to 40 px on pointer and tablet, with 20 px
-  glyphs. The touch phone keeps 36.
+  glyphs. The touch phone keeps 36. Corner overlays sit 4 px lower off the
+  phone because the top bar is 40 px. The stats panel hangs exactly 12 px
+  below the real top bar on every tier.
 - The actions capsule (scaling, cast) and the phone's tracks capsule are
   unchanged otherwise. Placement still goes through `PlayerTopBarSlot`.
 - Remote tier: `showBack` is false and scaling lives in the secondary cluster,
@@ -142,7 +145,8 @@ string as they do today.
   they are rated against.
 - Across the title block: an eased descent to
   at least `DepthTokens.osdTitleScrimOpacity` at the block's top edge. The
-  token starts at 0.60 and is set by the legibility sweep.
+  token is 0.66, set by the legibility sweep (small line 4.71:1, title 6.05:1
+  over white); it started at 0.60.
 - Above the block: the same descent continues to nothing.
 
 It is one `Curves.easeInOut` from the plateau's top edge, so there is no joint
