@@ -20,6 +20,11 @@ on:
         type: boolean
         required: false
         default: false
+      publish_dev_build:
+        description: Sign the DMG for Sparkle and publish it to the dev build index (dl.mydia.dev)
+        type: boolean
+        required: false
+        default: false
       dry_run:
         description: Build without publishing or final notarization submission
         type: boolean
@@ -39,6 +44,12 @@ on:
       APPLE_TEAM_ID:
         required: false
       SPARKLE_EDDSA_KEY:
+        required: false
+      R2_ACCOUNT_ID:
+        required: false
+      R2_ACCESS_KEY_ID:
+        required: false
+      R2_SECRET_ACCESS_KEY:
         required: false
 
 permissions:
@@ -163,7 +174,7 @@ jobs:
           rm -rf dmg_contents
 
       - name: Download Sparkle tools
-        if: ${{ inputs.generate_appcast }}
+        if: ${{ inputs.generate_appcast || (inputs.publish_dev_build && !inputs.dry_run) }}
         run: |
           curl -sSL https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz -o sparkle.tar.xz
           echo "5cddb7695674ef7704268f38eccaee80e3accbf19e61c1689efff5b6116d85be  sparkle.tar.xz" | shasum -a 256 -c -
@@ -266,6 +277,48 @@ jobs:
           # on the pinned 2.8.1 toolchain. The guard therefore proves well-formedness
           # and enclosure shape, not signature validity. See the plan's KTD3 / R4.
           echo "appcast.xml validated (well-formed, single signature/length, sparkle:version=$sparkle_version)"
+
+      # A dev build reaches Macs on the Dev track through the dev channel of
+      # the Sparkle feed (scripts/appcast), which reads the entry written
+      # here. Only notarized and stapled builds get here: both steps above
+      # skip on dry_run, and so does this one.
+      - name: Publish the dev build to R2
+        if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          VERSION: ${{ inputs.version }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: |
+          set -euo pipefail
+          if [ -z "${SPARKLE_EDDSA_KEY}" ]; then
+            echo "::error::SPARKLE_EDDSA_KEY is missing, so the dev build cannot be signed for Sparkle and would be rejected by every client."
+            exit 1
+          fi
+          command -v rclone > /dev/null || brew install rclone
+          command -v jq > /dev/null || brew install jq
+
+          # Same invocation and format check as "Generate appcast" above.
+          SIGNATURE=$(echo "$SPARKLE_EDDSA_KEY" | "$GITHUB_WORKSPACE/sparkle-tools/bin/sign_update" "Mydia Player.dmg" --ed-key-file -)
+          if ! printf '%s' "$SIGNATURE" | grep -Eq '^sparkle:edSignature="[^"]+" length="[0-9]+"$'; then
+            echo "::error::Unexpected sign_update output, refusing to publish: $SIGNATURE"
+            exit 1
+          fi
+          ED_SIG=$(printf '%s' "$SIGNATURE" | sed -E 's/^sparkle:edSignature="([^"]+)".*$/\1/')
+          LENGTH=$(printf '%s' "$SIGNATURE" | sed -E 's/^.* length="([0-9]+)"$/\1/')
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "Mydia Player.app/Contents/Info.plist")
+
+          DEV_BUILD_EXTRA=$(jq -nc --arg s "$ED_SIG" --argjson l "$LENGTH" --arg m "$MIN_OS" \
+            '{ed_signature: $s, length: $l, minimum_system_version: $m}') \
+          DEV_BUILD_PLATFORM=macos \
+          DEV_BUILD_SOURCE="Mydia Player.dmg" \
+          DEV_BUILD_FILE="macos/mydia-player-macos-v${VERSION}.dmg" \
+          DEV_BUILD_VERSION="$VERSION" \
+          DEV_BUILD_NUMBER="$VERSION_CODE" \
+            "$GITHUB_WORKSPACE/scripts/dev-builds/publish.sh"
 
       - name: "Upload artifact: DMG"
         uses: actions/upload-artifact@v7
