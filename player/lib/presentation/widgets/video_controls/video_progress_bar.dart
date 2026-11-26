@@ -419,7 +419,7 @@ class _Thumb extends StatelessWidget {
 
   /// Opacity of the white fill where there is no shader to refract with (dry
   /// glass, or a missing shader program). Matches the `GlassSlider` fallback.
-  static const double _fillOpacity = 0.85;
+  static const double _fillOpacity = DepthTokens.liquidKnobFillOpacity;
 
   @override
   Widget build(BuildContext context) {

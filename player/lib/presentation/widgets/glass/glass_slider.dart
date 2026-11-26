@@ -256,7 +256,9 @@ class _KnobFill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const DecoratedBox(
     key: Key('glass-slider-knob-fill'),
-    decoration: BoxDecoration(color: Color.fromRGBO(255, 255, 255, 0.85)),
+    decoration: BoxDecoration(
+      color: Color.fromRGBO(255, 255, 255, DepthTokens.liquidKnobFillOpacity),
+    ),
     child: SizedBox.expand(),
   );
 }

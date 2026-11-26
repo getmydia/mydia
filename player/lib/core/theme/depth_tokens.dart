@@ -206,6 +206,11 @@ abstract final class DepthTokens {
   /// which composites tint, then catch light, then the glyph.
   static const double osdDryCatchLightAlpha = 0.06;
 
+  /// Opacity of the white scrubber knob where there is no shader to refract
+  /// with (dry glass, a missing shader program, Reduce Transparency). Shared
+  /// by `GlassSlider` and the playback progress bar.
+  static const double liquidKnobFillOpacity = 0.85;
+
   /// Backdrop blur sigma. Light on purpose: the fill does the legibility
   /// work, and the blur only turns the ~15% of video that shows through into
   /// soft colour instead of faint detail.

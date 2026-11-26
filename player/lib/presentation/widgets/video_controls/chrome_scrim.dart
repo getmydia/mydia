@@ -6,11 +6,15 @@ import '../../../core/theme/depth_tokens.dart';
 import '../glass/osd_glass.dart';
 
 /// The darkening behind the playback bars: one band at the top, one at the
-/// bottom, each solid behind its bar and fading to nothing beyond it.
+/// bottom.
 ///
-/// Replaces a per-pill backdrop blur. The plateau is the OSD fill, so a pill
-/// painted on top reads against the same colour wherever the video is bright.
-/// Place it in a [Stack] that fills the video; it ignores pointers.
+/// Replaces a per-pill backdrop blur. Without Liquid Glass each band is solid
+/// behind its bar and fades to nothing beyond it, so a pill painted on top
+/// reads against the same colour wherever the video is bright. In the glass
+/// modes it is a pure gradient from `DepthTokens.osdLiquidScrimOpacity` at
+/// the screen edge to nothing, with no plateau, so glass pills have real
+/// video under them. Place it in a [Stack] that fills the video; it ignores
+/// pointers.
 class ChromeScrim extends StatelessWidget {
   /// Creates a scrim whose bands are solid for [topHeight] and
   /// [bottomHeight] logical pixels, then fade over [fadeExtentFor] the
