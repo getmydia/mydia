@@ -187,19 +187,25 @@ if ! jq -e --arg file "$OWN_FILE" '.builds | any(.file == $file)' "$work/index.k
   exit 1
 fi
 
-# Delete the files that fell out of the kept set. The just-uploaded file is
-# also excluded explicitly here, whatever the ranking says, even though the
-# check above already guarantees it survived.
+# Write the index first, then delete the objects it no longer references:
+# builds pruned from the kept set, and an earlier upload of a version this
+# run replaced under a different key (macOS keys carry the DMG digest, so a
+# re-dispatch never overwrites bytes a signed feed entry still describes).
+# Deleting only after the write means a failed write leaves every object the
+# old index and the deployed feed point at in place. The just-uploaded file
+# is excluded explicitly, whatever the ranking says, even though the check
+# above already guarantees it survived.
+rclone copyto "$work/index.kept.json" "${REMOTE}/index.json"
+
 jq -r --slurpfile kept "$work/index.kept.json" --arg own "$OWN_FILE" \
-  '[.builds[].file] - [$kept[0].builds[].file] - [$own] | .[]' \
-  "$work/index.next.json" > "$work/dropped.txt"
+  '[.builds[].file] - [$kept[0].builds[].file] - [$own] | unique | .[]' \
+  "$work/index.json" > "$work/dropped.txt"
 while read -r file; do
   if [ -n "$file" ]; then
     rclone deletefile "${REMOTE}/${file}" || echo "::warning::Failed to delete stale build ${file}; it may need manual cleanup."
   fi
 done < "$work/dropped.txt"
 
-rclone copyto "$work/index.kept.json" "${REMOTE}/index.json"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   echo "Published ${OWN_FILE} (build ${VERSION_CODE})." >> "$GITHUB_STEP_SUMMARY"
 fi

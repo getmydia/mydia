@@ -78,7 +78,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .ci-actions
-          sparse-checkout: .github/actions
+          # scripts/dev-builds comes from here too, not from the build
+          # target: an older target predates the dev build publisher.
+          sparse-checkout: |
+            .github/actions
+            scripts/dev-builds
           persist-credentials: false
 
       - name: Flutter prep
@@ -309,16 +313,23 @@ jobs:
           fi
           ED_SIG=$(printf '%s' "$SIGNATURE" | sed -E 's/^sparkle:edSignature="([^"]+)".*$/\1/')
           LENGTH=$(printf '%s' "$SIGNATURE" | sed -E 's/^.* length="([0-9]+)"$/\1/')
+          # The digest in the object key keeps a re-dispatch of the same
+          # version from overwriting bytes that a signed feed entry still
+          # describes; publish.sh removes the superseded object afterwards.
+          DIGEST=$(shasum -a 256 "Mydia Player.dmg" | cut -c1-12)
           MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "Mydia Player.app/Contents/Info.plist")
 
-          DEV_BUILD_EXTRA=$(jq -nc --arg s "$ED_SIG" --argjson l "$LENGTH" --arg m "$MIN_OS" \
-            '{ed_signature: $s, length: $l, minimum_system_version: $m}') \
+          # Its own assignment so a jq failure stops the step under set -e.
+          EXTRA=$(jq -nc --arg s "$ED_SIG" --argjson l "$LENGTH" --arg m "$MIN_OS" \
+            '{ed_signature: $s, length: $l, minimum_system_version: $m}')
+
+          DEV_BUILD_EXTRA="$EXTRA" \
           DEV_BUILD_PLATFORM=macos \
           DEV_BUILD_SOURCE="Mydia Player.dmg" \
-          DEV_BUILD_FILE="macos/mydia-player-macos-v${VERSION}.dmg" \
+          DEV_BUILD_FILE="macos/mydia-player-macos-v${VERSION}-${DIGEST}.dmg" \
           DEV_BUILD_VERSION="$VERSION" \
           DEV_BUILD_NUMBER="$VERSION_CODE" \
-            "$GITHUB_WORKSPACE/scripts/dev-builds/publish.sh"
+            "$GITHUB_WORKSPACE/.ci-actions/scripts/dev-builds/publish.sh"
 
       - name: "Upload artifact: DMG"
         uses: actions/upload-artifact@v7

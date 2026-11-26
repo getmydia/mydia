@@ -161,6 +161,8 @@ export function assertFeedInvariants(items) {
   }
 }
 
+const isNonNegativeSafeInteger = (value) => Number.isSafeInteger(value) && value >= 0
+
 /**
  * Turns the macOS entries of the dev build index (dl.mydia.dev/index.json,
  * written by scripts/dev-builds/publish.sh) into dev channel items.
@@ -184,8 +186,16 @@ export function buildDevItems(devBuilds) {
       warnings.push(`dev build ${file}: skipped, no Sparkle signature`)
       continue
     }
-    if (!Number.isInteger(devBuild.length)) {
-      warnings.push(`dev build ${file}: skipped, length must be an integer, got ${JSON.stringify(devBuild.length)}`)
+    if (!isNonNegativeSafeInteger(devBuild.length)) {
+      warnings.push(`dev build ${file}: skipped, length must be a non-negative safe integer, got ${JSON.stringify(devBuild.length)}`)
+      continue
+    }
+    // isWellFormedDevBuild only asks for a number. Checked here rather than
+    // there so releases.json keeps its own rules: a build that is not a
+    // whole number would become a sparkle:version assertFeedInvariants
+    // rejects, failing the whole feed instead of this one entry.
+    if (!isNonNegativeSafeInteger(devBuild.build)) {
+      warnings.push(`dev build ${file}: skipped, build must be a non-negative safe integer, got ${JSON.stringify(devBuild.build)}`)
       continue
     }
 

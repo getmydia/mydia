@@ -77,7 +77,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .ci-actions
-          sparse-checkout: .github/actions
+          # scripts/dev-builds comes from here too, not from the build
+          # target: an older target predates the dev build publisher.
+          sparse-checkout: |
+            .github/actions
+            scripts/dev-builds
           persist-credentials: false
 
       - name: Setup Java
@@ -151,7 +155,7 @@ jobs:
           DEV_BUILD_FILE="android/mydia-player-android-${VERSION}.apk" \
           DEV_BUILD_VERSION="$VERSION" \
           DEV_BUILD_NUMBER="$VERSION_CODE" \
-            ./scripts/dev-builds/publish.sh
+            ./.ci-actions/scripts/dev-builds/publish.sh
 
       - name: Setup Ruby for Fastlane
         if: ${{ inputs.upload_to_play_store && !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}

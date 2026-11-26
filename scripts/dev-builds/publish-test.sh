@@ -21,17 +21,18 @@ setup() {
 }
 teardown() { rm -rf "$tmp"; }
 
-# publish <platform> <version> <build> [extra-json]
+# publish <platform> <version> <build> [extra-json] [object-key]
 publish() {
   local platform="$1" version="$2" build="$3" extra="${4:-}"
   local ext=apk
   [ "$platform" = macos ] && ext=dmg
+  local key="${5:-${platform}/mydia-player-${platform}-${version}.${ext}}"
   (
     cd "$tmp"
     export DEV_BUILDS_REMOTE="$tmp/bucket"
     export DEV_BUILD_PLATFORM="$platform"
     export DEV_BUILD_SOURCE="$tmp/artifact"
-    export DEV_BUILD_FILE="${platform}/mydia-player-${platform}-${version}.${ext}"
+    export DEV_BUILD_FILE="$key"
     export DEV_BUILD_VERSION="$version"
     export DEV_BUILD_NUMBER="$build"
     unset GITHUB_STEP_SUMMARY
@@ -117,6 +118,18 @@ same_version_replaced_per_platform() {
     q '[.builds[] | select(.platform == "macos")] | length == 1'
 }
 
+# A re-dispatch of a version under a new object key (macOS keys carry the
+# DMG digest) must repoint the index and then remove the superseded object,
+# which nothing references any more.
+replaced_object_deleted() {
+  publish macos 1.0.0-dev.1 100000001 '' macos/a-aaaa.dmg || return 1
+  publish macos 1.0.0-dev.1 100000001 '' macos/a-bbbb.dmg || return 1
+  q '[.builds[] | select(.platform == "macos")] | length == 1' &&
+    q '.builds[0].file == "macos/a-bbbb.dmg"' &&
+    [ -f "$tmp/bucket/macos/a-bbbb.dmg" ] &&
+    [ ! -f "$tmp/bucket/macos/a-aaaa.dmg" ]
+}
+
 # The script also runs on the macOS runner: bash 3.2 and BSD userland.
 portable_userland() {
   [ -f "$PUBLISH" ] || return 1
@@ -132,7 +145,8 @@ missing_required_env_fails() {
 
 for c in bootstrap_empty_bucket zero_byte_index malformed_rows_dropped \
   keeps_five_per_platform refuses_older_than_kept extra_fields_preserved \
-  android_entry_shape same_version_replaced_per_platform portable_userland \
+  android_entry_shape same_version_replaced_per_platform replaced_object_deleted \
+  portable_userland \
   missing_required_env_fails; do
   run_case "$c"
 done

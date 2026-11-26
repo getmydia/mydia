@@ -82,8 +82,11 @@ and `dry_run` is false, the job runs these steps after "Create DMG":
 3. Read `LSMinimumSystemVersion` from the built app's Info.plist, as "Generate
    appcast" already does.
 4. Call `publish.sh` with platform `macos`, the file
-   `macos/mydia-player-macos-v<version>.dmg` (the same per-platform prefix
-   Android's `android/` files use), and these extra fields:
+   `macos/mydia-player-macos-v<version>-<digest12>.dmg` (the same
+   per-platform prefix Android's `android/` files use; the first twelve hex
+   digits of the DMG's SHA-256 keep a re-dispatch of the same version from
+   overwriting bytes a signed feed entry still describes), and these extra
+   fields:
    `ed_signature`, `length` and `minimum_system_version`.
 
 The step fails before it touches the index when any of the signature, the

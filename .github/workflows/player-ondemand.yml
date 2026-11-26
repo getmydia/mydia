@@ -229,6 +229,9 @@ jobs:
     concurrency:
       group: ${{ needs.prepare.outputs.branch_mode == 'false' && 'mydia-dev-builds-index' || format('player-ondemand-android-{0}', github.run_id) }}
       cancel-in-progress: false
+      # The default (single) cancels a pending job when another joins the
+      # group, so a second platform or dispatch would silently drop one.
+      queue: max
     uses: ./.github/workflows/player-android.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
@@ -259,6 +262,9 @@ jobs:
     concurrency:
       group: ${{ needs.prepare.outputs.branch_mode == 'false' && 'mydia-dev-builds-index' || format('player-ondemand-macos-{0}', github.run_id) }}
       cancel-in-progress: false
+      # The default (single) cancels a pending job when another joins the
+      # group, so a second platform or dispatch would silently drop one.
+      queue: max
     uses: ./.github/workflows/player-macos.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}

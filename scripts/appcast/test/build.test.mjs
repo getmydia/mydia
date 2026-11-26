@@ -267,6 +267,11 @@ for (const [name, overrides] of [
   ['a string length', { length: '5' }],
   ['a missing length', { length: undefined }],
   ['a malformed published_at', { published_at: 'not-a-date' }],
+  ['a negative length', { length: -1 }],
+  ['an unsafe length', { length: Number.MAX_SAFE_INTEGER + 1 }],
+  ['a fractional build', { build: 1.5 }],
+  ['a negative build', { build: -1 }],
+  ['an unsafe build', { build: Number.MAX_SAFE_INTEGER + 1 }],
 ]) {
   test(`buildDevItems drops ${name} with a warning naming the file`, () => {
     const { items, warnings } = buildDevItems([devBuild(overrides)])
