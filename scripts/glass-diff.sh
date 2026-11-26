@@ -170,7 +170,7 @@ fi
 
 summary=()
 compare_failed=0
-for scene in grid artwork panel; do
+for scene in grid artwork panel osd; do
   rm -f "$out/$scene-diff.png"
   before_scene=$scene
   [ "$shared_lab" = 1 ] || before_scene=grid
@@ -206,6 +206,6 @@ fi
 printf 'base %s\nstamp %s\ncreated %s\nshared_lab %s\n' \
   "$base_sha" "$stamp" "$(date -Is)" "$shared_lab" >"$out/stamp"
 echo "Look at these before committing:"
-for scene in grid artwork panel; do
+for scene in grid artwork panel osd; do
   echo "  $out/$scene-side.png"
 done

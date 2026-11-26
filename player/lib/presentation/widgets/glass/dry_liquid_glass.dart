@@ -93,6 +93,11 @@ class DryGlassPainter extends CustomPainter {
   @visibleForTesting
   static const double catchLightFraction = 0.3;
 
+  /// How much white the rim gains at the top and bottom, scaled by the
+  /// profile's specular.
+  @visibleForTesting
+  static const double rimLitBoost = 0.25;
+
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
@@ -132,14 +137,25 @@ class DryGlassPainter extends CustomPainter {
       );
     }
 
-    // Rim, inset by half its width so the stroke stays inside the clip.
+    // Rim, inset by half its width so the stroke stays inside the clip. Lit at
+    // the top and bottom like the shader's specular rim, and a faint hairline
+    // between. The lit ends sit at the edge of the glass, under no content.
     final half = profile.rimWidth / 2;
+    final base = const Color(0xFFFFFFFF).withValues(alpha: rimAlpha);
+    final lit = const Color(0xFFFFFFFF).withValues(
+      alpha: (rimAlpha + rimLitBoost * profile.specular).clamp(0.0, 1.0),
+    );
     canvas.drawRRect(
       rrect.deflate(half),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = profile.rimWidth
-        ..color = const Color(0xFFFFFFFF).withValues(alpha: rimAlpha),
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [lit, base, base, lit],
+          stops: const [0, catchLightFraction, 1 - catchLightFraction, 1],
+        ).createShader(rect),
     );
   }
 

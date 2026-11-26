@@ -11,7 +11,7 @@
 //                            plus 600 ms, print the result, then exit.
 //   LAB_GRID=true            start with the grid backdrop.
 //   LAB_SCROLL=<pixels>      initial scroll offset of the backdrop.
-//   LAB_SCENE=<grid|artwork|panel>  which scene to draw (default grid).
+//   LAB_SCENE=<grid|artwork|panel|osd>  which scene to draw (default grid).
 //
 // Every LAB_* value can also come from the process environment, which is how
 // `./dev player glass-diff` runs one release build per scene.
@@ -34,6 +34,7 @@ import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 
 import 'artwork_scene.dart';
 import 'lab_glass.dart';
+import 'osd_scene.dart';
 
 /// A LAB_* value from the process environment, else from --dart-define.
 String _define(String key, String compiled) =>
@@ -131,6 +132,7 @@ class _LabState extends State<_Lab> {
           child: switch (_scene) {
             'artwork' => const ArtworkScene(),
             'panel' => const PanelScene(),
+            'osd' => const OsdScene(),
             _ => _gridScene(),
           },
         ),
