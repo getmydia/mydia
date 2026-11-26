@@ -29,6 +29,7 @@ import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/player_screen_views.dart'
     show PlayerStatsPanel;
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
+import 'package:player/presentation/widgets/glass/osd_glass.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_surface/player_video_surface.dart';
 
@@ -404,6 +405,59 @@ void main() {
       _log,
       containsAllInOrder(['attach 11', 'open 11', 'awaitVideoOutput 11']),
     );
+
+    await _unmount(tester);
+  });
+
+  testWidgets('the OSD is told while the surface holds the video', (
+    tester,
+  ) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final fake = _FakePlayer(handleValue: 13);
+    expect(rig.container.read(videoSurfaceOutputProvider), isFalse);
+
+    await _mount(
+      tester,
+      rig,
+      createPlayer: () => Player(platformPlayer: fake),
+      surface: _FakeSurface(),
+    );
+    await pumpUntil(tester, _playing);
+    expect(rig.container.read(videoSurfaceOutputProvider), isTrue);
+
+    await _unmount(tester);
+    await tester.runAsync(() => pumpUntilReal(tester, () => fake.disposed));
+    expect(rig.container.read(videoSurfaceOutputProvider), isFalse);
+  });
+
+  testWidgets('the OSD is told the surface is gone after a fallback', (
+    tester,
+  ) async {
+    _mockPlatformViews(tester);
+    final rig = _rig();
+    final players = <_FakePlayer>[];
+    Player next() {
+      final p = _FakePlayer(handleValue: players.isEmpty ? 32 : null);
+      players.add(p);
+      return Player(platformPlayer: p);
+    }
+
+    await _mount(
+      tester,
+      rig,
+      createPlayer: next,
+      surface: _FakeSurface(start: VideoOutputStart.failed),
+    );
+    await tester.runAsync(
+      () =>
+          pumpUntilReal(tester, () => players.length == 2 && players[1].opened),
+    );
+    await pumpUntil(tester, _playing);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.byType(Video), findsOneWidget);
+    expect(rig.container.read(videoSurfaceOutputProvider), isFalse);
 
     await _unmount(tester);
   });

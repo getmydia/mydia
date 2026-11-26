@@ -222,6 +222,18 @@ abstract final class Palettes {
     const Color(0xFFFFFFFF),
   );
 
+  /// The dry panel's lightest fill: the panel tint over a pure-white frame,
+  /// plus the catch light at its peak. Dry panels are fixed-tint, so this is
+  /// the lightest background accent text can sit on there.
+  static final Color _osdDryPanelWorstCase = Color.alphaBlend(
+    const Color(0xFFFFFFFF)
+        .withValues(alpha: DepthTokens.osdDryCatchLightAlpha),
+    Color.alphaBlend(
+      DepthTokens.osdTint.withValues(alpha: DepthTokens.osdDryPanelTintOpacity),
+      const Color(0xFFFFFFFF),
+    ),
+  );
+
   static const Color _macosBackground = Color(0xFF1E1E1E);
 
   /// A hair above the 4.5:1 floor, so 8-bit rounding of the lifted colour
@@ -242,7 +254,8 @@ abstract final class Palettes {
   static Color legibleAccent(Color accent, {required Color background}) {
     bool clears(Color c) =>
         contrastRatio(c, background) >= _accentTarget &&
-        contrastRatio(c, _osdWorstCase) >= _accentTarget;
+        contrastRatio(c, _osdWorstCase) >= _accentTarget &&
+        contrastRatio(c, _osdDryPanelWorstCase) >= _accentTarget;
     if (clears(accent)) return accent;
     final hct = Hct.fromInt(accent.toARGB32());
     for (var tone = hct.tone.ceilToDouble() + 1; tone <= 100; tone++) {

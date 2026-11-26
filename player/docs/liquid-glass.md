@@ -15,7 +15,8 @@ and volume shading inside, and blooms a press glow under the pointer. Glass
 casts the profile's drop shadow for depth.
 It is tuned to the iOS 27 look. With the setting off, the app keeps the
 frosted `GlassSurface` recipes and Material controls, and the playback OSD
-(`GlassSurface.osd` and `GlassSurface.osdPill`) never uses Liquid Glass.
+(`GlassSurface.osd` and `GlassSurface.osdPill`) keeps its dark cards. The OSD
+takes glass only on iOS and macOS; see "OSD".
 
 | Piece | File |
 | --- | --- |
@@ -26,6 +27,8 @@ frosted `GlassSurface` recipes and Material controls, and the playback OSD
 | Uniforms | `lib/core/theme/liquid_glass/liquid_glass_uniforms.dart` |
 | Adaptive tint maths | `lib/core/theme/liquid_glass/liquid_glass_adaptive.dart` |
 | Render object | `lib/presentation/widgets/glass/liquid_glass_filter.dart` |
+| OSD mode and gate | `lib/presentation/widgets/glass/osd_glass.dart` |
+| Dry glass (no backdrop) | `lib/presentation/widgets/glass/dry_liquid_glass.dart` |
 | Press and hover | `lib/presentation/widgets/glass/glass_interaction.dart`, `glass_pointer.dart` |
 | Accessibility flags | `lib/core/theme/liquid_glass/glass_accessibility.dart` |
 | Lab and visual diff | `tool/liquid_glass_lab/`, `scripts/glass-diff.sh` |
@@ -239,6 +242,85 @@ Flutter does not expose Reduce Transparency, so the Runners report both
 flags over `mydia/native-tab-bar` (`glassAccessibility`,
 `glassAccessibilityChanged`).
 
+## OSD
+
+The playback OSD's surfaces (`GlassSurface.osd`, `GlassSurface.osdPill` and
+the touch transport's play disc) follow `OsdGlass.of(context)`, which returns
+one of three `OsdGlassMode`s. Call sites do not choose; they build the same
+widgets and the surface picks the recipe.
+
+| Mode | When | Renders |
+| --- | --- | --- |
+| `off` | Liquid Glass off, any platform but iOS and macOS, web, or Reduce Transparency | The dark card and pill, exactly as without glass |
+| `sampled` | iOS; macOS when the video is a Flutter texture; and the shader is loaded | `LiquidGlassFilter`: the shader over the video |
+| `dry` | macOS native video surface, or no shader on iOS and macOS | `DryLiquidGlass`: no backdrop pass |
+
+`resolveOsdGlassMode` holds the rule and its tests pin it. Pills take the lens
+profile and the control tint tokens; panels (up next, skip segment, stats,
+sheets and dialogs) take the panel profile and the modal tokens.
+
+The macOS video is mpv output in an `AppKitView`, which the shader does not
+sample (see `docs/playback.md`). That is the only reason `dry` exists: Flutter
+still composites its layers over the platform view with normal alpha, so a
+translucent surface and the scrim work, and only the backdrop sample is lost.
+A macOS playback that falls back to the texture path flips to `sampled`.
+
+The surface-output flag reaches `OsdGlass.of` through `OsdGlassScope`, which
+`OsdGlassHost` mounts once in `MaterialApp.router`'s builder. It lives at the
+app level, above the navigator, because sheets, dialogs and pickers opened from
+the OSD are separate routes: a scope inside the player screen would not reach
+them, and they would render `sampled` on macOS over a video they cannot sample.
+`OsdGlassScope` is an inherited widget rather than a provider read so that
+`OsdGlass.of` also works in the many tests that pump an OSD widget with no
+`ProviderScope`.
+
+**What is glass.** Every OSD pill goes through `GlassSurface.osdPill`: the top
+bar's back and title pill and its actions pill (`ChromeTopBar`), the corner
+overlays and skip segment (`GlassPill`), the touch transport's skip pills and
+play disc, and the up next prompt's buttons. Panels (`GlassSurface.osd`) are
+up next, stats, and the OSD's sheets and dialogs. The bottom bar has no pill:
+its timecodes, scrubber, volume, transport and secondary cluster sit straight
+on the scrim, and its play/pause is `ControlButton`'s filled light disc in
+every mode.
+
+**The scrim.** `ChromeScrim` is one band at the bottom in every mode: an eased
+fade into a plateau in the OSD fill, solid behind the bar. There is no top band;
+the top bar's pills carry their own fill. The plateau stays on Liquid Glass
+because text and glyphs are drawn straight on it, so legibility outranks pills
+seeing video there. An earlier glass-mode gradient with no plateau was dropped
+for that reason (see the spec's "Revision after #1525").
+
+**Dry glass.** `DryLiquidGlass` paints a fixed tint, the top and bottom catch
+light, a rim lit at the top and bottom, and the press glow, from the same
+profile as the shader. It has no blur, no bend and no adaptive tint, so its
+tint must hold over every grey the video can show. The tints are set by the
+"OSD dry" sweeps in `liquid_glass_legibility_test.dart`, not by eye:
+`osdDryTintOpacity` (0.70, pills, which draw white as faint as 0.80 alpha
+and `textPrimary`: 4.5:1 over pure white) and `osdDryPanelTintOpacity` (0.85,
+panels, which also draw the status tones and `textSecondary`). The sweeps rate
+every colour in `osdTextColors` (4.5:1) and `osdIconOnlyColors` (3:1) from
+`test/test_utils/osd_contrast.dart`, composited with its alpha, not just pure
+white. The catch light's peak, `osdDryCatchLightAlpha`, is a tuned value that
+still keeps those ratios. Tune the shape of the rim and light by eye; change an alpha only
+with the sweep.
+
+**The scrubber.** The track, the thumb, the timecodes and the subtitles never
+take glass (Apple's player and Infuse keep the seek bar off glass; Infuse
+removed one for distracting the picture). The scrubber and the volume slider
+keep Material's white thumb in every mode: a clear knob over the white played
+track refracts white into white and vanishes.
+
+The touch transport's play disc is a circular `osdPill` with a white glyph on
+glass: the dark glyph it has on the opaque disc would vanish. Adjacent buttons
+share one `osdPill` around a `Row`, which keeps a phone's visible glass to a
+handful of surfaces (each lens costs two backdrop passes, see "Two backdrop
+passes").
+
+The `osd` lab scene shows both glass modes over a bright and a dark frame (see
+"Visual diff"). White glyphs must clear 4.5:1 and icons 3:1 over greys 0 to 1
+in every glass mode; fix tokens, never thresholds. The design is in
+`design/specs/2026-11-25-player-osd-liquid-glass-design.md`.
+
 ## The app bar's scroll edge
 
 `GlassSurface.appBar` is not a full glass surface. It is a scroll edge band:
@@ -334,7 +416,7 @@ the scratch project:
 
 `GDK_SCALE=2` gives a 2x device pixel ratio. Add `LAB_GRID=true` for the
 grid, `LAB_SCROLL=<px>` to scroll the backdrop first and
-`LAB_SCENE=<grid|artwork|panel>` to pick a scene. Every `LAB_*` value may
+`LAB_SCENE=<grid|artwork|panel|osd>` to pick a scene. Every `LAB_*` value may
 come from the environment as well as `--dart-define`.
 
 ## Visual diff
@@ -347,9 +429,12 @@ the shader, `lib/core/theme/liquid_glass/`, `depth_tokens.dart`,
     ./dev player glass-diff [--base <ref>]
 
 renders the lab twice, at `--base` (default: the merge base with
-`origin/master`) and from the index, in three scenes: `grid` (flat colour, a
+`origin/master`) and from the index, in four scenes: `grid` (flat colour, a
 white strip and the scroll edge), `artwork` (the detail screen's controls over
-painted poster-like art) and `panel` (a dialog and the floating sidebar). It
+painted poster-like art), `panel` (a dialog and the floating sidebar) and
+`osd` (the playback OSD over a bright and a dark frame, each as sampled and as
+dry glass). The `osd` scene is built from the OSD's glass pieces, not the real
+bars, because the scratch project has no Riverpod and no plugins. It
 prints a side-by-side per scene and a changed-pixel count. Both sides run the
 staged lab, so the counts compare like with like; when the base cannot compile
 the staged lab (or lacks a file it imports), it falls back to its own lab and
@@ -361,7 +446,8 @@ The run records a stamp keyed to the staged glass blobs, under
 key and refuses the commit when no stamp exists, so restaging anything means
 rendering again. There is no skip: a refactor's evidence is a zero count.
 
-Look at the images, and put the `artwork` side-by-side in the PR. Unit tests
+Look at the images, and put the `artwork` side-by-side in the PR, plus the
+`osd` one when the OSD's glass changed. Unit tests
 cannot see pixels (`flutter test` has no Impeller), and #1232 shipped values
 that matched the iOS 27 kit and looked worse, because nothing compared the
 render against the previous one.

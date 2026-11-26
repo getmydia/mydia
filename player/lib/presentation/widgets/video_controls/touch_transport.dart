@@ -2,7 +2,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../../core/focus/focus_memory.dart';
+import '../../../core/theme/palette.dart';
 import '../../../l10n/l10n.dart';
+import '../glass/osd_glass.dart';
 import '../controls/press_scale.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
@@ -114,6 +116,54 @@ class TouchTransport extends StatelessWidget {
     );
   }
 
+  /// The play disc: opaque with a dark glyph, or on the glass OSD a circular
+  /// glass pill with a white glyph (the dark glyph would vanish on glass).
+  Widget _playDisc(BuildContext context, bool isPlaying) {
+    final glass = OsdGlass.of(context) != OsdGlassMode.off;
+    final diameter = compact ? compactPlaySize : playSize;
+    final glyph = glass ? context.palette.textPrimary : playGlyph;
+    final content = StreamBuilder<bool>(
+      stream: player.stream.buffering,
+      initialData: player.state.buffering,
+      builder: (context, buffering) => buffering.data == true
+          ? Center(
+              child: SizedBox(
+                key: bufferingKey,
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 3, color: glyph),
+              ),
+            )
+          : Icon(
+              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              size: compact ? _compactPlayIconSize : _playIconSize,
+              color: glyph,
+            ),
+    );
+    if (glass) {
+      return GlassSurface.osdPill(
+        borderRadius: BorderRadius.circular(diameter / 2),
+        child: SizedBox(width: diameter, height: diameter, child: content),
+      );
+    }
+    return Container(
+      width: diameter,
+      height: diameter,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: playFill,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x73000000),
+            blurRadius: 30,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: content,
+    );
+  }
+
   Widget _playPause(BuildContext context, bool isPlaying) {
     final label = isPlaying
         ? context.l10n.commonPause
@@ -139,46 +189,7 @@ class TouchTransport extends StatelessWidget {
                 focusNode: playPauseFocusNode,
                 onActivate: toggle,
                 circular: true,
-                child: Container(
-                  width: compact ? compactPlaySize : playSize,
-                  height: compact ? compactPlaySize : playSize,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: playFill,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0x73000000),
-                        blurRadius: 30,
-                        offset: Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: StreamBuilder<bool>(
-                    stream: player.stream.buffering,
-                    initialData: player.state.buffering,
-                    builder: (context, buffering) => buffering.data == true
-                        ? const Center(
-                            child: SizedBox(
-                              key: bufferingKey,
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                color: playGlyph,
-                              ),
-                            ),
-                          )
-                        : Icon(
-                            isPlaying
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            size: compact
-                                ? _compactPlayIconSize
-                                : _playIconSize,
-                            color: playGlyph,
-                          ),
-                  ),
-                ),
+                child: _playDisc(context, isPlaying),
               ),
             ),
           ),

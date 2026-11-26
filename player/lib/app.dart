@@ -54,6 +54,7 @@ import 'core/router/navigator_keys.dart';
 import 'core/router/push_route.dart';
 import 'core/scroll/app_scroll_behavior.dart';
 import 'core/theme/liquid_glass/glass_accessibility.dart';
+import 'presentation/widgets/glass/osd_glass.dart';
 import 'presentation/screens/detail/load_content_fetchers.dart';
 import 'presentation/screens/settings/dialog/open_settings.dart'
     show routeMenuNavigation, settingsDialogEnabledProvider;
@@ -689,14 +690,18 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // flags.
       builder: (context, child) => TvCanvas(
         child: GlassAccessibilityHost(
-          child: DesktopWindowChrome(
-            layout: _decorationLayout.layout,
-            frameState: _windowFrame.state,
-            child: WindowChromeInset(
-              decorationLayout: _decorationLayout.layout,
-              child: ShellAmbientTint(
-                child: ToastLayer(
-                  child: CastBarLayer(child: child ?? const SizedBox.shrink()),
+          child: OsdGlassHost(
+            child: DesktopWindowChrome(
+              layout: _decorationLayout.layout,
+              frameState: _windowFrame.state,
+              child: WindowChromeInset(
+                decorationLayout: _decorationLayout.layout,
+                child: ShellAmbientTint(
+                  child: ToastLayer(
+                    child: CastBarLayer(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -175,6 +175,47 @@ abstract final class DepthTokens {
   /// Opacity of the OSD fill.
   static const double osdFillOpacity = 0.85;
 
+  /// Opacity of [osdTint] on dry glass (the macOS native video surface, where
+  /// no backdrop can be sampled). Fixed: there is no luma to adapt to, so it
+  /// must hold over every grey the video can show. Pills draw white at
+  /// 0.80 to 1.0 alpha (the back chevron and top-bar text are the faintest)
+  /// and `textPrimary`, so the limit is white at 0.80 over pure white video.
+  /// Smallest multiple of 0.05 that keeps every one at 4.5:1: at 0.65 the
+  /// 0.80 white measures 4.14:1, at 0.70 4.82:1 (full white 6.4:1). Set by the
+  /// "OSD dry" sweep in `liquid_glass_legibility_test.dart`, not by eye.
+  static const double osdDryTintOpacity = 0.70;
+
+  /// Opacity of [osdTint] on dry OSD panels (cards, sheets, dialogs, stats).
+  /// Panels also draw the status tones: `warningText` needs 4.5:1 and the
+  /// `error` icon 3:1, and no backdrop adapts, so the fixed tint must clear
+  /// them, white at every alpha and each preset's `textSecondary` (3:1) over
+  /// every grey from 0 to 1 with the catch light composited. Smallest
+  /// multiple of 0.05 that does: 0.80 leaves `warningText` at 4.25:1 and the
+  /// `error` icon at 2.57:1, 0.85 gives 5.08:1 and 3.08:1. Set by the "OSD
+  /// dry" sweep in `liquid_glass_legibility_test.dart`.
+  static const double osdDryPanelTintOpacity = 0.85;
+
+  /// Peak alpha of the white top and bottom catch light on dry glass, painted
+  /// under the content. Worst case is white video. A tuned value, not the
+  /// limit: with the pill tint at 0.70 the faintest glyph (white at 0.80)
+  /// still clears 4.5:1 with it at 0.06 (4.82:1 before the catch light is
+  /// composited). Set by the "OSD dry" sweep, which composites tint, then
+  /// catch light, then the glyph.
+  static const double osdDryCatchLightAlpha = 0.06;
+
+  /// Peak alpha of the press glow on dry glass. The shared
+  /// [liquidPressGlow] lifts a pressed pill's fill enough to drop 80% white
+  /// text under 4.5:1; dry glass has a fixed tint under the glyph, so it
+  /// gets its own, the largest 0.01 step that holds: 0.03 passes the pressed
+  /// sweep in `liquid_glass_legibility_test`, 0.04 leaves the 0.80 white at
+  /// 4.43:1 over white video.
+  static const double osdDryPressGlow = 0.03;
+
+  /// Opacity of `GlassSlider`'s white knob where there is no shader to
+  /// refract with (dry glass, a missing shader program, Reduce Transparency).
+  /// The playback OSD's scrubber and volume slider keep Material's thumb.
+  static const double liquidKnobFillOpacity = 0.85;
+
   /// Backdrop blur sigma. Light on purpose: the fill does the legibility
   /// work, and the blur only turns the ~15% of video that shows through into
   /// soft colour instead of faint detail.
