@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:material_ui/material_ui.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
@@ -105,6 +106,31 @@ void main() {
           tester.getSize(find.byType(ChromeTitleBlock)).height,
           ChromeTitleBlock.heightFor(tier),
         );
+        // Laid out at the box width and ellipsized at its designed size, not
+        // laid out wide and shrunk.
+        final keys = [
+          ChromeTopBar.titleKey,
+          if (withKicker) ChromeTitleBlock.kickerKey,
+        ];
+        for (final key in keys) {
+          final finder = find.byKey(key);
+          expect(tester.getSize(finder).width, 320, reason: '$key width');
+          expect(
+            tester.getRect(finder).width,
+            closeTo(tester.getSize(finder).width, 0.01),
+            reason: '$key is not scaled down',
+          );
+          expect(
+            tester.getRect(finder).height,
+            closeTo(tester.getSize(finder).height, 0.01),
+            reason: '$key is not scaled down',
+          );
+          expect(
+            tester.renderObject<RenderParagraph>(finder).didExceedMaxLines,
+            isTrue,
+            reason: '$key ellipsized',
+          );
+        }
       });
 
       testWidgets('text scale 2.0, $tier, kicker: $withKicker', (tester) async {
@@ -125,6 +151,31 @@ void main() {
         );
       });
     }
+  }
+
+  for (final tier in tiers) {
+    testWidgets('short title is not scaled down, $tier', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          ChromeTitleBlock(
+            title: 'Low Tide',
+            kicker: 'The Lantern Coast',
+            tier: tier,
+          ),
+        ),
+      );
+      for (final key in [ChromeTopBar.titleKey, ChromeTitleBlock.kickerKey]) {
+        final finder = find.byKey(key);
+        expect(
+          tester.getRect(finder).size.width,
+          closeTo(tester.getSize(finder).width, 0.01),
+        );
+        expect(
+          tester.getRect(finder).size.height,
+          closeTo(tester.getSize(finder).height, 0.01),
+        );
+      }
+    });
   }
 
   testWidgets('holds no Focus or gesture handler and ignores pointers', (

@@ -87,6 +87,8 @@ class ChromeTitleBlock extends StatelessWidget {
                 textKey: kickerKey,
                 style: TextStyle(
                   fontSize: kickerFontSize(tier),
+                  height: _kickerBoxHeight(tier) / kickerFontSize(tier),
+                  leadingDistribution: TextLeadingDistribution.even,
                   fontWeight: FontWeight.w500,
                   color: Colors.white.withValues(alpha: kickerOpacity),
                 ),
@@ -97,6 +99,8 @@ class ChromeTitleBlock extends StatelessWidget {
                 textKey: ChromeTopBar.titleKey,
                 style: TextStyle(
                   fontSize: titleSize,
+                  height: _titleBoxHeight(tier) / titleSize,
+                  leadingDistribution: TextLeadingDistribution.even,
                   fontWeight: FontWeight.w700,
                   color: Colors.white.withValues(alpha: _titleOpacity),
                   letterSpacing: -0.01 * titleSize,
