@@ -77,16 +77,18 @@ share one margin.
   fixed height, so the caption lift and `ChromeMetrics.cornerInsetBottom` are
   known before any metadata loads.
 - The block takes no focus and no pointer events.
-- `ChromeTopBar.titleKey` moves to the title text here so existing lookups keep
-  one name; the small line gets `ChromeTitleBlock.kickerKey`.
+- The title text keeps the key `ChromeTopBar.titleKey` (the constant stays
+  where it is, so `playback_chrome_tv_test` finds it unchanged); the small
+  line gets `ChromeTitleBlock.kickerKey`.
 - Width: the block ellipsizes at the bar's content width. Skip Intro and Up
   Next sit above the bar (`cornerInsetBottom`), so they never share a row with
   it.
 
 ### What the two lines say
 
-A new value type, `PlaybackTitle { title, kicker? }`, replaces the bare
-`String? title` that `PlaybackChrome` takes.
+A new value type, `PlaybackTitle { title, kicker? }`, is resolved by the player
+screen. `PlaybackChrome` keeps its `String? title` and gains `String? kicker`,
+so existing callers and tests compile unchanged.
 
 | Playing | `kicker` | `title` |
 | --- | --- | --- |
@@ -101,9 +103,9 @@ gains `showTitle`, `episodeNumber`, `episodeTitle` and `year`, filled by
 source knows them. When the detail lands, the player screen builds the
 two-line `PlaybackTitle` from it. A source that cannot supply the parts stays
 single-line. Any GraphQL field the Mydia session does not already select is
-added to its document, with the SDL parity gate
-(`lib/mydia_web/schema/README.md`) run if the server schema changes; it is not
-expected to.
+added to its document. `EpisodeDetail` already selects `episodeNumber`,
+`title` and `show.title`, and `MovieDetail` selects `year`, so no document or
+schema change is expected.
 
 The `S2, E4` format is a localized message with two integer placeholders. The
 window title, media session metadata and cast metadata keep using the route
@@ -128,7 +130,7 @@ string as they do today.
 - Remote (`controlsFirst`): title block, control row, timeline row. The focus
   regions and their order are untouched.
 - Touch phone: title block, then the single scrubber row. The bar grows from
-  56 px by the phone block's height (about 36 px); captions lift with it.
+  56 to 94 px (the 34 px block and its 4 px gap); captions lift with it.
 - Gap between the title block and the next row: 6 px (4 px on the phone).
 
 ### Scrim
@@ -139,24 +141,29 @@ string as they do today.
   `osdFillOpacity` (0.85), as today. Timecodes and bare glyphs keep the fill
   they are rated against.
 - Across the title block: an eased descent to
-  `DepthTokens.osdTitleScrimOpacity` at the block's top edge. The token starts
-  at 0.60 and is set by the legibility sweep.
-- Above the block: an eased fade to nothing over `fadeExtentFor`, whose
-  `maxFadeExtent` rises from 120 to 160 px. The 12% height cap stays, so a
-  landscape phone keeps its picture.
+  at least `DepthTokens.osdTitleScrimOpacity` at the block's top edge. The
+  token starts at 0.60 and is set by the legibility sweep.
+- Above the block: the same descent continues to nothing.
 
-The three segments are sampled from one monotonic curve so the slope is
-continuous where they meet. `ChromeScrim` takes the plateau height and the
-title block height as two arguments. There is still no top band.
+It is one `Curves.easeInOut` from the plateau's top edge, so there is no joint
+to show. Its length is the larger of two values: the title block height plus
+`fadeExtentFor` (whose `maxFadeExtent` rises from 120 to 160 px, the 12% height
+cap unchanged), and the length at which the curve is still at
+`osdTitleScrimOpacity` when it reaches the block's top edge. The second value
+wins on a landscape phone, where the scrim reaches about 160 px up a 350 px
+screen; the upper half of that is under 30% opacity. `ChromeScrim` takes the
+plateau height and the title block height as two arguments. There is still no
+top band.
 
 ### Scrubber (`video_progress_bar.dart`)
 
 | | Rest | Active (hover, drag, TV focus) |
 | --- | --- | --- |
-| Track height | 4 px | 6 px |
+| Track height | 4 px | 6 px (8 today) |
 | Thumb | none | 14 px white dot (18 px on TV focus, as today) |
 
-- Played stays `palette.accent`; buffered and unplayed colours are unchanged.
+- Played, buffered and unplayed colours are unchanged (played is
+  `palette.primary`).
 - The track is a capsule; the played portion's leading end is rounded and its
   trailing end is square while the thumb is hidden, so it reads as a fill
   rather than a second pill.
@@ -180,7 +187,7 @@ given.
 | `chrome_top_bar.dart` | Title and title pill removed; back disc; 40 px capsules off the phone. |
 | `chrome_scrim.dart` | Three-segment eased profile; takes the title block height. |
 | `video_progress_bar.dart` | Rest and active states. |
-| `playback_chrome.dart` | Takes `PlaybackTitle`; passes it to the bar; passes both heights to the scrim. |
+| `playback_chrome.dart` | Gains `kicker`; builds the title block for the bar; passes both heights to the scrim. |
 | `player/lib/core/theme/depth_tokens.dart` | `osdTitleScrimOpacity`. |
 | `player/lib/presentation/screens/player/session/playback_session_types.dart` | `PlaybackDetail` gains `showTitle`, `episodeNumber`, `episodeTitle`, `year`. |
 | `player/lib/presentation/screens/player/session/mydia_playback_session.dart`, `source_playback_session.dart` | Fill the new fields. |
@@ -206,16 +213,15 @@ given.
   absence of a title; the disc is inert with no `onBack`; the remote tier
   renders nothing.
 - **Scrim:** alpha is non-increasing from the bottom edge up; it equals the
-  OSD fill across the plateau and `osdTitleScrimOpacity` at the block's top
-  edge; no adjacent pair of stops differs in slope by more than the test's
-  bound (the "no shelf" check).
+  OSD fill across the plateau and is at least `osdTitleScrimOpacity` at the
+  block's top edge on every tier, including a 350 px tall phone.
 - **Legibility:** `osd_legibility_test` and the OSD cases in
   `liquid_glass_legibility_test` rate the small line and the title at the
   lightest scrim alpha each overlaps, over the full grey sweep. A failure is
   fixed in `osdTitleScrimOpacity`, never in a threshold.
 - **Scrubber:** no visible thumb at rest; thumb and 6 px track on hover, drag
   and focus; instant under Reduce Motion; the played portion is still
-  `palette.accent`.
+  `palette.primary`.
 - **Visual:** the bottom-bar golden is regenerated; `./dev player glass-diff`
   with the `osd` scene side-by-side in the PR.
 - **Manual:** Android TV emulator (`./dev player android tv-run`), counting
