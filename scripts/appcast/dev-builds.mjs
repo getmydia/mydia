@@ -1,9 +1,9 @@
 /**
- * Reads the dev build index that the "Publish the dev build to R2" step in
- * player-android.yml writes. That step only runs with publish_dev_build:
- * true, which player-ondemand.yml is the only workflow that sets; release.yml
- * calls player-android.yml without it, so a tagged release build never
- * touches the index.
+ * Reads the dev build index that the publish-dev-build jobs in
+ * player-android.yml and player-macos.yml write. Those jobs only run with
+ * publish_dev_build: true, which player-ondemand.yml is the only workflow
+ * that sets; release.yml calls both without it, so a tagged release build
+ * never touches the index.
  *
  * Fetching lives here rather than in lib/, which stays IO free. A missing or
  * unreadable index means no dev track in the feed, never a failed run: the

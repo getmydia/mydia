@@ -61,6 +61,9 @@ env:
 jobs:
   build:
     name: Build macOS
+    outputs:
+      dev_build_file: ${{ steps.sparkle.outputs.file }}
+      dev_build_extra: ${{ steps.sparkle.outputs.extra }}
     # The same image as player-ios.yml, so both Apple builds use the Xcode 27
     # SDKs App Store Connect requires from April 2027.
     runs-on: xcode-27
@@ -298,20 +301,18 @@ jobs:
           retention-days: 30
 
       # A dev build reaches Macs on the Dev track through the dev channel of
-      # the Sparkle feed (scripts/appcast), which reads the entry written
-      # here. Only notarized and stapled builds get here: both steps above
-      # skip on dry_run, and so does this one. It is the last step that can
-      # fail, so a published build always means a successful job, which is
-      # what player-ondemand.yml's appcast job waits for.
-      - name: Publish the dev build to R2
+      # the Sparkle feed (scripts/appcast), which reads the index entry the
+      # publish-dev-build job below writes. Signing happens here because
+      # Sparkle's sign_update is a macOS binary; the upload and index write
+      # happen there, so only they hold the shared index lock. Only notarized
+      # and stapled builds get here: both steps above skip on dry_run, and so
+      # does this one.
+      - name: Sign the dev build for Sparkle
+        id: sparkle
         if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           VERSION: ${{ inputs.version }}
-          VERSION_CODE: ${{ inputs.version_code }}
         working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
         run: |
           set -euo pipefail
@@ -319,7 +320,6 @@ jobs:
             echo "::error::SPARKLE_EDDSA_KEY is missing, so the dev build cannot be signed for Sparkle and would be rejected by every client."
             exit 1
           fi
-          command -v rclone > /dev/null || brew install rclone
           command -v jq > /dev/null || brew install jq
 
           # Same invocation and format check as "Generate appcast" above.
@@ -340,15 +340,61 @@ jobs:
           EXTRA=$(jq -nc --arg s "$ED_SIG" --argjson l "$LENGTH" --arg m "$MIN_OS" \
             '{ed_signature: $s, length: $l, minimum_system_version: $m}')
 
-          DEV_BUILD_EXTRA="$EXTRA" \
-          DEV_BUILD_PLATFORM=macos \
-          DEV_BUILD_SOURCE="Mydia Player.dmg" \
-          DEV_BUILD_FILE="macos/mydia-player-macos-v${VERSION}-${DIGEST}.dmg" \
-          DEV_BUILD_VERSION="$VERSION" \
-          DEV_BUILD_NUMBER="$VERSION_CODE" \
-            "$GITHUB_WORKSPACE/.ci-actions/scripts/dev-builds/publish.sh"
+          {
+            echo "extra=$EXTRA"
+            echo "file=macos/mydia-player-macos-v${VERSION}-${DIGEST}.dmg"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Cleanup keychain
         if: always()
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+
+  # The twin of player-android.yml's job of the same name, which explains the
+  # lock. It uploads the DMG artifact, the exact bytes signed above, so the
+  # signature and length in the index entry describe the published file.
+  publish-dev-build:
+    name: Publish dev build
+    needs: build
+    # release.yml calls this workflow without publish_dev_build, so a tagged
+    # release never runs this job and never waits on the lock.
+    if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: mydia-dev-builds-index
+      cancel-in-progress: false
+      # The default (single) cancels a pending job when another joins the
+      # group, so a second platform or dispatch would silently drop one.
+      queue: max
+    steps:
+      - name: Checkout CI scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-actions
+          sparse-checkout: scripts/dev-builds
+          persist-credentials: false
+
+      - name: "Download artifact: DMG"
+        uses: actions/download-artifact@v8
+        with:
+          name: mydia-player-macos-dmg
+          path: dmg
+
+      - name: Publish the dev build to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          VERSION: ${{ inputs.version }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          DEV_BUILD_FILE: ${{ needs.build.outputs.dev_build_file }}
+          DEV_BUILD_EXTRA: ${{ needs.build.outputs.dev_build_extra }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone jq
+          DEV_BUILD_PLATFORM=macos \
+          DEV_BUILD_SOURCE="dmg/Mydia Player.dmg" \
+          DEV_BUILD_VERSION="$VERSION" \
+          DEV_BUILD_NUMBER="$VERSION_CODE" \
+            ./.ci-actions/scripts/dev-builds/publish.sh
