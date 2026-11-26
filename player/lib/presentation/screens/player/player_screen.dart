@@ -92,6 +92,7 @@ import '../../widgets/video_controls/chrome_subtitle_lift.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_surface/player_video_surface.dart';
 import '../../widgets/video_controls/playback_chrome.dart';
+import '../../widgets/video_controls/playback_title.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/video_controls/chrome_bottom_bar.dart';
 import '../../widgets/tap_to_play_overlay.dart';
@@ -615,6 +616,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// just after `open()` left an empty list with the server's tracks already
   /// discarded, and nothing could rebuild it.
   List<app_models.SubtitleTrack> _serverSubtitleTracks = [];
+
+  /// The OSD's two-line title, resolved from the detail. Null until the
+  /// detail answers; the chrome then falls back to the route string.
+  PlaybackTitle? _osdTitle;
 
   /// The tracks actually offered to the viewer in the subtitle sheet.
   /// Derived: never assigned outside [_applySubtitleTracks].
@@ -1779,6 +1784,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _savedDurationSeconds = null;
     _serverLastWatchedAt = null;
     _runtimeMinutes = null;
+    _osdTitle = null;
     _totalDuration = null;
     _serverSubtitleTracks = [];
     _showId = widget.showId;
@@ -3588,6 +3594,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _refreshSubtitleTracks();
         debugPrint('Extracted ${tracks.length} subtitle tracks from GraphQL');
       }
+      final osdTitle = PlaybackTitle.resolve(
+        routeTitle: widget.title ?? currentAppLocalizations().playerUntitled,
+        isEpisode: widget.mediaType == 'episode',
+        detail: detail,
+        l10n: currentAppLocalizations(),
+      );
+      if (mounted) setState(() => _osdTitle = osdTitle);
     } catch (e) {
       debugPrint('Error fetching progress: $e');
     }
@@ -6377,7 +6390,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final chrome = playbackChromeBuilder(
       timeline: _timeline,
       onSeekToReal: seekToReal,
-      title: widget.title,
+      title: _osdTitle?.title ?? widget.title,
+      kicker: _osdTitle?.kicker,
       chromeVisibility: _chromeVisibility,
       playPauseFocusNode: _osdPlayPauseFocus,
       chromeFocusNode: _chromeFocusNode,

@@ -13,6 +13,8 @@ import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
 import '../../../../test_utils/probed_tracks.dart';
@@ -297,6 +299,62 @@ void main() {
     },
   );
 
+  testWidgets('an episode shows the show name over its code and title', (
+    tester,
+  ) async {
+    final session = _TitledEpisodeSession(
+      const PlaybackDetail(
+        showTitle: 'The Lantern Coast',
+        seasonNumber: 2,
+        episodeNumber: 4,
+        episodeTitle: 'Low Tide',
+      ),
+    );
+    await _pumpEpisode(
+      tester,
+      session,
+      showId: 's1',
+      seasonNumber: 2,
+      title: 'The Lantern Coast S2E4',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      tester.widget<Text>(find.byKey(ChromeTopBar.titleKey)).data,
+      'The Lantern Coast',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(ChromeTitleBlock.kickerKey)).data,
+      'S2, E4 · Low Tide',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('a missing detail keeps the route title and no kicker', (
+    tester,
+  ) async {
+    final session = _TitledEpisodeSession(null);
+    await _pumpEpisode(
+      tester,
+      session,
+      showId: 's1',
+      seasonNumber: 2,
+      title: 'The Lantern Coast S2E4',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      tester.widget<Text>(find.byKey(ChromeTopBar.titleKey)).data,
+      'The Lantern Coast S2E4',
+    );
+    expect(find.byKey(ChromeTitleBlock.kickerKey), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
   testWidgets('the route season wins over the detail one', (tester) async {
     final session = _DetailNamesSeasonSession();
     await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 3);
@@ -392,6 +450,23 @@ class _DetailNamesSeasonSession extends _SeasonSession {
   }
 }
 
+/// An episode session whose detail is whatever the test scripts.
+class _TitledEpisodeSession extends FakePlaybackSession {
+  _TitledEpisodeSession(this._detail)
+    : super(
+        item: const ItemRef(
+          sourceId: SourceId('fake'),
+          kind: ItemKind.episode,
+          externalId: 'e1',
+        ),
+      );
+
+  final PlaybackDetail? _detail;
+
+  @override
+  Future<PlaybackDetail?> detail() async => _detail;
+}
+
 class _CastableSession extends FakePlaybackSession {
   @override
   Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
@@ -404,6 +479,7 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   FakePlaybackSession session, {
   String? showId,
   int? seasonNumber,
+  String? title,
 }) async {
   final container = buildPlayerScreenContainer(
     connectionState: HarnessLink.direct(),
@@ -420,6 +496,7 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
         builder: (_, _) => PlayerScreen(
           mediaId: 'e1',
           mediaType: 'episode',
+          title: title,
           fileId: 'f1',
           showId: showId,
           seasonNumber: seasonNumber,
