@@ -18,6 +18,7 @@ class StatsMetrics {
     required this.density,
     required this.width,
     required this.gutter,
+    required this.top,
     required this.maxHeight,
     required this.labelSize,
     required this.valueSize,
@@ -35,6 +36,9 @@ class StatsMetrics {
 
   /// Distance from the left edge of the safe area.
   final double gutter;
+
+  /// Distance from the top of the safe area.
+  final double top;
 
   /// Room between [top] and the control panel's corner inset. The panel
   /// renders no taller than this.
@@ -59,17 +63,19 @@ class StatsMetrics {
   /// OSD's own focus scope.
   final bool showButtons;
 
-  /// The chrome's top pill row sits at `Positioned(top: 16)` inside a
-  /// SafeArea and is [GlassPill.defaultHeight] tall. 12px of air below it
-  /// puts the panel clear of the back, title and cast pills, which is the
-  /// whole reason the panel can stay on screen while the chrome fades.
+  /// The panel's distance from the top of the safe area: the top bar's top
+  /// inset, plus its height, plus 12px of air. That puts the panel clear of
+  /// the back disc and the capsules, which is the whole reason the panel can
+  /// stay on screen while the chrome fades.
   ///
-  /// The panel is mounted inside the same SafeArea as the chrome, so this
-  /// arithmetic stays true on a notched phone without repeating the inset.
-  static const double topInset = 16.0 + GlassPill.defaultHeight + 12.0;
-
-  /// Distance from the top of the safe area.
-  double get top => topInset;
+  /// Both the inset and the height are the top bar's own, which differ on a
+  /// touch phone ([compactTouch]). The panel is mounted inside the same
+  /// SafeArea as the chrome, so this stays true on a notched phone without
+  /// repeating the inset.
+  static double topInsetFor({required bool compactTouch}) =>
+      ChromeTopBar.topInsetFor(compact: compactTouch) +
+      ChromeTopBar.sideFor(compact: compactTouch) +
+      12.0;
 
   /// The least available height worth drawing this density in. NOT the
   /// panel's rendered height: the panel sizes to its content and scrolls
@@ -106,10 +112,16 @@ class StatsMetrics {
     bool touchPrimary = false,
     double verticalSafeInset = 0,
   }) {
+    final top = topInsetFor(
+      compactTouch: ChromeMetrics.isCompactTouch(
+        viewport,
+        touchPrimary: touchPrimary,
+      ),
+    );
     final available =
         viewport.height -
         verticalSafeInset -
-        topInset -
+        top -
         ChromeMetrics.resolve(
           width: viewport.width,
           height: viewport.height,
@@ -138,6 +150,7 @@ class StatsMetrics {
         density: StatsDensity.tv,
         width: 462,
         gutter: tvGutter,
+        top: top,
         maxHeight: available,
         labelSize: 15,
         valueSize: 15,
@@ -154,6 +167,7 @@ class StatsMetrics {
         density: StatsDensity.full,
         width: 352,
         gutter: pointerGutter,
+        top: top,
         maxHeight: available,
         labelSize: 11.5,
         valueSize: 12,
@@ -164,7 +178,7 @@ class StatsMetrics {
     }
     if (available >= compactMinHeight) {
       // Not a design choice, a fit constraint: a phone in landscape
-      // leaves about 168px between `topInset` and the control panel's
+      // leaves about 168px between the top inset and the control panel's
       // corner inset. The compact panel still draws all seven of its rows
       // at this tier; it scrolls to reach whichever ones do not fit rather
       // than dropping them, since the row set and the Why row's text
@@ -174,6 +188,7 @@ class StatsMetrics {
         density: StatsDensity.compact,
         width: 292,
         gutter: pointerGutter,
+        top: top,
         maxHeight: available,
         labelSize: 10.5,
         valueSize: 11,

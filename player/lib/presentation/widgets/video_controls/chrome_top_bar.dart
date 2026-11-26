@@ -168,6 +168,11 @@ class ChromeTopBar extends StatelessWidget {
   /// touch phone, 40 elsewhere.
   static double sideFor({required bool compact}) => compact ? 36.0 : 40.0;
 
+  /// Distance from the top of the safe area to the bar where no window chrome
+  /// needs clearing: 16, or 8 on a touch phone, whose landscape height is
+  /// short. `PlayerTopBarSlot` places the bar there.
+  static double topInsetFor({required bool compact}) => compact ? 8.0 : 16.0;
+
   /// Gap between the pills.
   static const double gap = 12.0;
 

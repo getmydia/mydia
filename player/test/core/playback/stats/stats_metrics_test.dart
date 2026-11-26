@@ -1,8 +1,11 @@
-import 'dart:ui' show Size;
-
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:player/core/player/input_capabilities.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
+import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 void main() {
   StatsMetrics? resolve(double w, double h, {bool tv = false}) =>
@@ -27,7 +30,7 @@ void main() {
       touchPrimary: true,
     );
 
-    final panelBottom = StatsMetrics.topInset + touch.maxHeight;
+    final panelBottom = touch.top + touch.maxHeight;
     expect(
       viewport.height - touchBar.barHeight - panelBottom,
       greaterThanOrEqualTo(ChromeMetrics.cornerGap),
@@ -49,7 +52,7 @@ void main() {
       remote: true,
     );
     expect(remoteBar.cornerInsetBottom, remoteBar.barHeight + 12);
-    final panelBottom = StatsMetrics.topInset + tv.maxHeight;
+    final panelBottom = tv.top + tv.maxHeight;
     expect(
       viewport.height - remoteBar.barHeight - panelBottom,
       greaterThanOrEqualTo(ChromeMetrics.cornerGap),
@@ -138,11 +141,51 @@ void main() {
     },
   );
 
-  // The panel hangs below the chrome's top pill row, which sits at
-  // `Positioned(top: 16)` inside a SafeArea and is GlassPill.defaultHeight
-  // (36) tall. Anything smaller draws the panel over the title pill.
-  test('the top inset clears the chrome top bar', () {
-    expect(StatsMetrics.topInset, 64.0);
-    expect(resolve(1280, 720)!.top, 64.0);
-  });
+  // The panel hangs 12px below the top bar as the chrome really places it:
+  // the back disc is 40 tall off the phone and 36 on it, and the slot's top
+  // inset differs too. Measured from a real bar rather than from constants.
+  for (final (label, touch, size) in [
+    ('pointer', false, const Size(1280, 720)),
+    ('touch tablet', true, const Size(1200, 800)),
+    ('phone', true, const Size(760, 350)),
+  ]) {
+    testWidgets('the panel sits 12px below the top bar: $label', (
+      tester,
+    ) async {
+      InputCapabilities.debugTouchPrimaryOverride = touch;
+      addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Stack(
+              children: [
+                PlayerTopBarSlot(
+                  child: ChromeTopBar(
+                    onBack: () {},
+                    compact: ChromeMetrics.isCompactTouch(
+                      size,
+                      touchPrimary: touch,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final barBottom = tester.getRect(find.byKey(ChromeTopBar.backKey)).bottom;
+      final metrics = StatsMetrics.resolve(
+        viewport: size,
+        directionalPrimary: false,
+        touchPrimary: touch,
+      )!;
+      expect(metrics.top - barBottom, 12.0);
+    });
+  }
 }

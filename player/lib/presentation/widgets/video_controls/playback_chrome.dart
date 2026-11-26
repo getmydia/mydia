@@ -615,7 +615,7 @@ class _ChromeToastObstructionState extends State<ChromeToastObstruction> {
 /// every edge, or 8px top and 12px sides on a touch phone, whose landscape
 /// height is short (see `ChromeMetrics.compactTouch`).
 ///
-/// Both [PlaybackChrome] (the playing state's back/title/cast pills) and
+/// Both [PlaybackChrome] (the playing state's back disc and capsules) and
 /// `player_screen.dart`'s `_withCastAffordance` (the loading and error
 /// states' cast-only pill) mount this in its own layer, a sibling of the
 /// `SafeArea` that insets their other content rather than a child inside it:
@@ -636,9 +636,6 @@ class PlayerTopBarSlot extends StatelessWidget {
   /// Inset from the safe area's top edge with no window chrome to clear.
   static const double edgeInset = 16;
 
-  /// [edgeInset] on a touch phone, whose landscape height is short.
-  static const double compactTopInset = 8;
-
   /// Side inset on a touch phone, matching its bottom bar's padding.
   static const double compactSideInset = 12;
 
@@ -651,7 +648,7 @@ class PlayerTopBarSlot extends StatelessWidget {
   static double _top(BuildContext context, WindowChromeInsets insets) =>
       insets.isZero
       ? MediaQuery.paddingOf(context).top +
-            (_compact(context) ? compactTopInset : edgeInset)
+            ChromeTopBar.topInsetFor(compact: _compact(context))
       : (insets.height - _barHeight(context)) / 2;
 
   /// The height of the bar this slot places: the back disc's diameter.

@@ -281,7 +281,9 @@ void main() {
     ).cornerInsetBottom;
     final viewport = Size(
       width,
-      StatsMetrics.tvMinHeight + StatsMetrics.topInset + cornerInsetBottom,
+      StatsMetrics.tvMinHeight +
+          StatsMetrics.topInsetFor(compactTouch: false) +
+          cornerInsetBottom,
     );
 
     await pumpPanel(
