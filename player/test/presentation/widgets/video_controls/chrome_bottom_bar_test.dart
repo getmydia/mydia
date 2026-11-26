@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 
 class _InitProbe extends StatefulWidget {
@@ -37,7 +38,8 @@ Widget _host(
       alignment: Alignment.bottomCenter,
       child: ChromeBottomBar(
         metrics: metrics,
-        timecodes: const SizedBox(key: Key('tc')),
+        elapsed: const Text('00:05', key: Key('e')),
+        remaining: const Text('-24:50', key: Key('r')),
         scrubber: const SizedBox(key: Key('s')),
         transport: SizedBox(
           key: const Key('t'),
@@ -182,15 +184,38 @@ void main() {
       });
     }
 
-    testWidgets('secondary sits in an osdPill', (tester) async {
+    testWidgets('no group carries a pill: the scrim is the backing', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(ChromeMetrics.forWidth(1280)));
       expect(
         find.descendant(
-          of: find.byKey(ChromeBottomBar.secondaryPillKey),
-          matching: find.byWidget(_secondary),
+          of: find.byType(ChromeBottomBar),
+          matching: find.byType(GlassSurface),
         ),
-        findsOneWidget,
+        findsNothing,
       );
+    });
+
+    testWidgets('timecodes sit either side of the scrubber, on its line', (
+      tester,
+    ) async {
+      final metrics = ChromeMetrics.forWidth(1280);
+      await tester.pumpWidget(_host(metrics));
+      final elapsed = tester.getRect(find.byKey(const Key('e')));
+      final scrubber = tester.getRect(find.byKey(const Key('s')));
+      final remaining = tester.getRect(find.byKey(const Key('r')));
+      final bar = tester.getRect(find.byType(ChromeBottomBar));
+
+      expect(elapsed.left, closeTo(bar.left + metrics.horizontalPadding, 0.5));
+      expect(scrubber.left - elapsed.right, ChromeBottomBar.timecodeGap);
+      expect(remaining.left - scrubber.right, ChromeBottomBar.timecodeGap);
+      expect(
+        remaining.right,
+        closeTo(bar.right - metrics.horizontalPadding, 0.5),
+      );
+      expect(elapsed.center.dy, closeTo(scrubber.center.dy, 0.5));
+      expect(remaining.center.dy, closeTo(scrubber.center.dy, 0.5));
     });
 
     testWidgets('omits the volume slot when not supplied', (tester) async {
@@ -239,12 +264,10 @@ void main() {
         final metrics = ChromeMetrics.forWidth(1280);
         await tester.pumpWidget(_host(metrics, controlsFirst: controlsFirst));
 
-        final timecodes = tester.getRect(find.byKey(const Key('tc')));
         final scrubber = tester.getRect(find.byKey(const Key('s')));
         final controls = tester.getRect(find.byKey(const Key('t')));
-        expect(timecodes.top, lessThan(scrubber.top));
         if (controlsFirst) {
-          expect(controls.bottom, lessThanOrEqualTo(timecodes.top));
+          expect(controls.bottom, lessThanOrEqualTo(scrubber.top));
         } else {
           expect(controls.top, greaterThanOrEqualTo(scrubber.bottom));
         }
@@ -269,7 +292,8 @@ void main() {
                   bottom: 0,
                   child: ChromeBottomBar(
                     metrics: metrics,
-                    timecodes: const SizedBox(),
+                    elapsed: const SizedBox(),
+                    remaining: const SizedBox(),
                     scrubber: const SizedBox(),
                     secondary: _secondary,
                   ),

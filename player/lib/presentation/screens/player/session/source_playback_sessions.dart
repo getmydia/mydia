@@ -15,6 +15,7 @@ import '../../../../core/sources/mydia/mydia_source.dart';
 import '../../../../core/sources/plex/plex_media_source.dart';
 import '../../../../core/sources/stash/stash_media_source.dart';
 import '../../../../domain/sources/item.dart';
+import '../../../../domain/sources/playback_sequence.dart';
 import 'files_playback_session.dart';
 import 'jellyfin_playback_session.dart';
 import 'mydia_playback_session.dart';
@@ -25,6 +26,7 @@ import 'stash_playback_session.dart';
 
 /// Null for a source this app cannot play from. [showId] and
 /// [seasonNumber] only matter to Mydia, whose episode navigation needs them.
+/// [sequence] only matters to a source implementing `SceneSequence`.
 PlaybackSession? playbackSessionFor(
   MediaSource source,
   ItemRef item,
@@ -32,29 +34,34 @@ PlaybackSession? playbackSessionFor(
   required MediaProxy Function() proxy,
   String? showId,
   int? seasonNumber,
+  PlaybackSequence? sequence,
   FilesCastBridge Function()? bridge,
 }) => switch (source) {
   PlexMediaSource() => PlexPlaybackSession(
     source: source,
     item: item,
     fileId: fileId,
+    sequence: sequence,
     profile: DeviceProfileHolder.instance.profile,
   ),
   StashMediaSource() => StashPlaybackSession(
     source: source,
     item: item,
     fileId: fileId,
+    sequence: sequence,
   ),
   JellyfinMediaSource() => JellyfinPlaybackSession(
     source: source,
     item: item,
     fileId: fileId,
+    sequence: sequence,
     profile: DeviceProfileHolder.instance.profile,
   ),
   FilesMediaSource() => FilesPlaybackSession(
     source: source,
     item: item,
     fileId: fileId,
+    sequence: sequence,
     bridge: bridge?.call(),
   ),
   MydiaSource() => MydiaPlaybackSession(

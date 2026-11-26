@@ -54,6 +54,7 @@ class PlexPlaybackSession extends SourcePlaybackSession {
     required PlexMediaSource source,
     required super.item,
     required super.fileId,
+    super.sequence,
     this._profile,
   }) : _plex = source,
        super(source: source);

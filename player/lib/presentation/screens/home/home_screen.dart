@@ -13,6 +13,7 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/startup/startup_timeline.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
@@ -22,6 +23,8 @@ import '../all_servers/all_servers_banner.dart';
 import '../all_servers/all_servers_cards.dart';
 import '../detail/detail_links.dart';
 import '../sources/home_header.dart';
+import '../sources/scene_sequence_links.dart';
+import '../sources/source_browse_providers.dart' show libraryPreviewSortId;
 import '../sources/source_error_view.dart';
 import '../sources/source_home_hero.dart';
 import '../sources/source_poster_row.dart';
@@ -265,6 +268,15 @@ class HomeScreen extends ConsumerWidget {
                   items: row.items,
                   onTitleTap: () =>
                       context.push(sourceLibraryLocation(row.library)),
+                  sequenceFor: (index, item) => sceneSequenceFor(
+                    ref.read(mediaSourceProvider(row.library.sourceId)),
+                    item,
+                    () => PlaybackSequence(
+                      origin: SequenceOrigin.library,
+                      position: index,
+                      sortId: libraryPreviewSortId(row.info),
+                    ),
+                  ),
                 ),
               if (rows.isEmpty)
                 Padding(

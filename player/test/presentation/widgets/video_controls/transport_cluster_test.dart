@@ -47,15 +47,16 @@ void main() {
         expect(find.byKey(TransportSurface.previousEpisodeKey), findsNothing);
         expect(find.byKey(TransportSurface.nextEpisodeKey), findsNothing);
 
-        // Still the same 40px play/pause button, not some other size.
+        // Still the same filled play/pause button, not some other size.
         //
-        // 40, not the original 48: the transport cluster was compacted so a
+        // 44, not the original 48: the transport cluster was compacted so a
         // 4th secondary button fits below the desktop tier. See
         // transport_cluster.dart's `gap` dartdoc.
         final button = tester.widget<ControlButton>(
           find.byKey(TransportSurface.playPauseKey),
         );
-        expect(button.size, 40);
+        expect(button.size, TransportSurface.playPauseSize);
+        expect(button.filled, isTrue);
       },
     );
 

@@ -11,6 +11,7 @@ import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/playback_sequence.dart';
 import '../../../l10n/l10n.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../player/player_screen.dart';
@@ -29,6 +30,7 @@ class SourcePlayerParams {
     this.audioTrack,
     this.subtitleTrack,
     this.autoplay = true,
+    this.sequence,
   });
 
   factory SourcePlayerParams.fromUri(Uri uri) {
@@ -45,6 +47,7 @@ class SourcePlayerParams {
       // Absent means play. Only a remote load content with autoplay off
       // sends this.
       autoplay: q['autoplay'] != 'false',
+      sequence: PlaybackSequence.fromQuery(q),
     );
   }
 
@@ -57,6 +60,9 @@ class SourcePlayerParams {
   final String? audioTrack;
   final String? subtitleTrack;
   final bool autoplay;
+
+  /// The listing the item was opened from; null when absent or malformed.
+  final PlaybackSequence? sequence;
 
   /// The player screen's vocabulary: episodes are episodes, anything else
   /// plays as a movie (no season list, no up-next).
@@ -111,6 +117,7 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
       proxy: () => ref.read(mediaProxyProvider),
       showId: _params.showId,
       seasonNumber: _params.seasonNumber,
+      sequence: _params.sequence,
       bridge: () => ref.read(filesCastBridgeProvider),
     );
   }();

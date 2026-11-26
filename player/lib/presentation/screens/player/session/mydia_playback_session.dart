@@ -42,6 +42,7 @@ import '../../../../graphql/queries/subtitle_preference.graphql.dart';
 import '../../../../graphql/queries/subtitle_search.graphql.dart';
 import '../../../../graphql/queries/subtitle_track_settings.graphql.dart';
 import '../../../../graphql/schema.graphql.dart';
+import '../../../../domain/sources/playback_sequence.dart';
 import '../../detail/detail_links.dart';
 import '../subtitle_preference.dart';
 import 'playback_problem.dart';
@@ -103,6 +104,14 @@ class MydiaPlaybackSession implements PlaybackSession {
     title: title,
     extra: {'seasonNumber': '$seasonNumber', 'showId': ?showId},
   );
+
+  /// Mydia items are never opened as part of a sequence.
+  @override
+  Future<SequenceNeighbours?> sequenceNeighbours() async => null;
+
+  @override
+  String sequenceLocation(SequenceNeighbour neighbour) =>
+      throw UnsupportedError('Mydia playback has no sequence');
 
   @override
   Future<ProgressReporter> openProgress() async =>

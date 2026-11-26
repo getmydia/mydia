@@ -10,6 +10,7 @@ import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/domain/sources/playback_sequence.dart';
 import 'package:player/domain/sources/source_error.dart';
 
 import '../fixed_connection.dart';
@@ -40,8 +41,9 @@ final stashRecord = SourceAccountRecord(
 );
 
 ({StashMediaSource source, FakeStashServer server, List<int> unauthorized})
-build() {
+build({int? seed, List<int>? sceneIds}) {
   final server = FakeStashServer();
+  if (sceneIds != null) server.sceneIds = sceneIds;
   final unauthorized = <int>[];
   final source = StashMediaSource(
     source: stashRecord.sources.single,
@@ -51,6 +53,7 @@ build() {
       apiKey: () async => FakeStashServer.apiKey,
       onUnauthorized: () => unauthorized.add(1),
     ),
+    seed: seed,
   );
   return (source: source, server: server, unauthorized: unauthorized);
 }
@@ -321,5 +324,199 @@ void main() {
     final items = await source.continueWatching();
     expect(items, isNotEmpty);
     expect(items.every(source.canRemoveFromContinueWatching), isTrue);
+  });
+
+  group('SceneSequence', () {
+    ItemRef ref(int n) =>
+        ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '$n');
+    PlaybackSequence lib(int position, {String? sortId, bool? descending}) =>
+        PlaybackSequence(
+          origin: SequenceOrigin.library,
+          position: position,
+          // The fake reverses `created_at DESC`; title keeps ids ascending.
+          sortId: sortId ?? 'title',
+          descending: descending,
+        );
+    List<int> ids(int count) => [for (var n = 1; n <= count; n++) n];
+    String id(SequenceNeighbour? n) => n!.item.ref.externalId;
+
+    test('is a capability of the Stash source', () {
+      expect(build().source.as<SceneSequence>(), isNotNull);
+    });
+
+    test('middle of library', () async {
+      final b = build();
+      final r = await b.source.as<SceneSequence>()!.neighbours(ref(3), lib(2));
+      expect(id(r.previous), '2');
+      expect(r.previous!.position, 1);
+      expect(id(r.next), '4');
+      expect(r.next!.position, 3);
+      expect(r.next!.item.defaultVersionId, '94');
+    });
+
+    test('first and last', () async {
+      final seq = build().source.as<SceneSequence>()!;
+      final first = await seq.neighbours(ref(1), lib(0));
+      expect(first.previous, isNull);
+      expect(id(first.next), '2');
+      final last = await seq.neighbours(ref(5), lib(4));
+      expect(id(last.previous), '4');
+      expect(last.next, isNull);
+    });
+
+    test('crosses a page boundary', () async {
+      final b = build(sceneIds: ids(70));
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(60),
+        lib(59),
+      );
+      expect(id(r.previous), '59');
+      expect(id(r.next), '61');
+      expect(r.next!.position, 60);
+      final pages = [
+        for (final (name, vars) in b.server.operations)
+          if (name == 'FindScenes') (vars['filter'] as Map)['page'],
+      ];
+      expect(pages, [1, 2]);
+    });
+
+    test('list shifted by one', () async {
+      final b = build(sceneIds: [1, 2, 9, 3, 4, 5]);
+      final r = await b.source.as<SceneSequence>()!.neighbours(ref(3), lib(2));
+      expect(id(r.previous), '9');
+      expect(r.previous!.position, 2);
+      expect(id(r.next), '4');
+      expect(r.next!.position, 4);
+    });
+
+    test('scene gone', () async {
+      final b = build();
+      final r = await b.source.as<SceneSequence>()!.neighbours(ref(42), lib(2));
+      expect(id(r.previous), '2');
+      expect(r.previous!.position, 1);
+      expect(id(r.next), '3');
+      expect(r.next!.position, 2);
+    });
+
+    test('found only by the page scan', () async {
+      // Scene 6 sits at index 5, but the route recorded 125: the pages
+      // around 125 do not hold it, so the scan from page 1 finds it.
+      final b = build(sceneIds: ids(130));
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(6),
+        lib(125),
+      );
+      expect(id(r.previous), '5');
+      expect(r.previous!.position, 4);
+      expect(id(r.next), '7');
+      expect(r.next!.position, 6);
+    });
+
+    test('beyond the scan cap falls back to the recorded place', () async {
+      // Scene 321 sits on page 6, past the 5 pages the scan reads.
+      final b = build(sceneIds: ids(400));
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(321),
+        lib(2),
+      );
+      expect(id(r.previous), '2');
+      expect(r.previous!.position, 1);
+      expect(id(r.next), '3');
+      expect(r.next!.position, 2);
+      final pages = [
+        for (final (name, vars) in b.server.operations)
+          if (name == 'FindScenes') (vars['filter'] as Map)['page'],
+      ];
+      expect(pages, [1, 2, 3, 4, 5]);
+    });
+
+    test('the current scene is never its own neighbour', () async {
+      // Page 2 was fetched after a scene was added ahead of 60, so it opens
+      // with 60 again: the item at position+1 is the scene now playing.
+      final b = build(sceneIds: [...ids(60), 60, 61, 62]);
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(60),
+        lib(59),
+      );
+      expect(id(r.previous), '59');
+      expect(r.next, isNull);
+    });
+
+    test('a neighbour with no file is no neighbour', () async {
+      final b = build()..server.filelessIds = {2, 4};
+      final r = await b.source.as<SceneSequence>()!.neighbours(ref(3), lib(2));
+      expect(r.previous, isNull);
+      expect(r.next, isNull);
+    });
+
+    test('search origin sends q and per_page 40', () async {
+      final b = build();
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(2),
+        const PlaybackSequence(
+          origin: SequenceOrigin.search,
+          position: 1,
+          query: 'Tidepool',
+        ),
+      );
+      final (_, vars) = b.server.operations.last;
+      expect((vars['filter'] as Map)['q'], 'Tidepool');
+      expect((vars['filter'] as Map)['per_page'], 40);
+      // Scene 3 has no title, so the fake's search skips it.
+      expect(id(r.next), '4');
+      expect(r.next!.position, 2);
+    });
+
+    test('continueWatching origin sends the resume_time filter', () async {
+      final b = build();
+      final r = await b.source.as<SceneSequence>()!.neighbours(
+        ref(4),
+        const PlaybackSequence(
+          origin: SequenceOrigin.continueWatching,
+          position: 0,
+        ),
+      );
+      final (_, vars) = b.server.operations.last;
+      expect(vars['scene_filter'], {
+        'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
+      });
+      expect(r.previous, isNull);
+      expect(id(r.next), '2');
+    });
+
+    test('graphql error returns none', () async {
+      final b = build();
+      b.server.graphqlError = 'boom';
+      final r = await b.source.as<SceneSequence>()!.neighbours(ref(3), lib(2));
+      expect(r, same(SequenceNeighbours.none));
+    });
+
+    test('random sort is seeded', () async {
+      final b = build(seed: 42);
+      const library = LibraryRef(sourceId: sid, id: stashScenesLibraryId);
+      const query = BrowseQuery(sortId: 'random', pageSize: 2);
+      await b.source.browse(library, query);
+      await b.source.browse(library, query, cursor: const Cursor('2'));
+      final sorts = [
+        for (final (name, vars) in b.server.operations)
+          if (name == 'FindScenes') (vars['filter'] as Map)['sort'],
+      ];
+      expect(sorts, ['random_42', 'random_42']);
+    });
+
+    test('random neighbours use the same seed', () async {
+      final b = build(seed: 42);
+      await b.source.as<SceneSequence>()!.neighbours(
+        ref(3),
+        lib(2, sortId: 'random'),
+      );
+      final (_, vars) = b.server.operations.last;
+      expect((vars['filter'] as Map)['sort'], 'random_42');
+    });
+
+    test('stashSummary sets defaultVersionId', () {
+      final summary = stashSummary(sid, FakeStashServer.scene(2));
+      expect(summary.defaultVersionId, '92');
+    });
   });
 }

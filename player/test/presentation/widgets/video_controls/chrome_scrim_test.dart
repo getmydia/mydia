@@ -18,15 +18,15 @@ Widget _host({Widget? behind, Size size = _size}) => MaterialApp(
       child: Stack(
         children: [
           if (behind != null) Positioned.fill(child: behind),
-          const ChromeScrim(topHeight: 60, bottomHeight: 120),
+          const ChromeScrim(bottomHeight: 120),
         ],
       ),
     ),
   ),
 );
 
-LinearGradient _gradient(WidgetTester tester, Key key) {
-  final box = tester.widget<DecoratedBox>(find.byKey(key));
+LinearGradient _gradient(WidgetTester tester) {
+  final box = tester.widget<DecoratedBox>(find.byKey(ChromeScrim.bottomKey));
   return (box.decoration as BoxDecoration).gradient! as LinearGradient;
 }
 
@@ -34,37 +34,65 @@ void main() {
   final plateau = DepthTokens.osdTint.withValues(
     alpha: DepthTokens.osdFillOpacity,
   );
-  const transparent = Color(0x00000000);
 
-  testWidgets('bands are plateau-coloured behind each bar and transparent '
-      'beyond', (tester) async {
+  testWidgets('one band at the bottom, solid behind the bar and transparent '
+      'beyond it', (tester) async {
     await tester.pumpWidget(_host());
     final origin = tester.getTopLeft(find.byType(ChromeScrim));
     final fade = ChromeScrim.fadeExtentFor(_size.height);
 
-    final bottom = _gradient(tester, ChromeScrim.bottomKey);
-    expect(bottom.colors, [transparent, plateau, plateau]);
-    expect(bottom.begin, Alignment.topCenter);
-    expect(bottom.end, Alignment.bottomCenter);
-    final bottomRect = tester.getRect(find.byKey(ChromeScrim.bottomKey));
-    expect(bottomRect.height, 120 + fade);
-    expect(bottomRect.bottom, origin.dy + _size.height);
+    final gradient = _gradient(tester);
+    expect(gradient.begin, Alignment.topCenter);
+    expect(gradient.end, Alignment.bottomCenter);
+    expect(gradient.colors.first.a, 0);
+    expect(gradient.colors.last, plateau);
 
-    final top = _gradient(tester, ChromeScrim.topKey);
-    expect(top.colors, [plateau, plateau, transparent]);
-    expect(top.begin, Alignment.topCenter);
-    expect(top.end, Alignment.bottomCenter);
-    final topRect = tester.getRect(find.byKey(ChromeScrim.topKey));
-    expect(topRect.height, 60 + fade);
-    expect(topRect.top, origin.dy);
-    expect(top.stops, [0, 60 / (60 + fade), 1]);
-    expect(bottom.stops, [0, fade / (120 + fade), 1]);
+    final rect = tester.getRect(find.byKey(ChromeScrim.bottomKey));
+    expect(rect.height, 120 + fade);
+    expect(rect.bottom, origin.dy + _size.height);
+
+    // The fade ends exactly where the plateau begins.
+    final stops = gradient.stops!;
+    final plateauStart = fade / (120 + fade);
+    expect(stops.last, 1);
+    expect(stops[stops.length - 2], closeTo(plateauStart, 1e-9));
+    expect(gradient.colors[stops.length - 2], plateau);
   });
 
-  test('the fade is 96 px, or 12 % of the height when that is shorter', () {
-    expect(ChromeScrim.maxFadeExtent, 96);
-    expect(ChromeScrim.fadeExtentFor(1080), 96);
-    expect(ChromeScrim.fadeExtentFor(800), 96);
+  testWidgets('no band at the top: the top bar floats in its own pills', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host());
+    expect(find.byType(DecoratedBox), findsOneWidget);
+  });
+
+  testWidgets('the fade eases in and out instead of ramping linearly', (
+    tester,
+  ) async {
+    // A linear ramp into a solid plateau leaves a visible shelf where the
+    // two meet. An eased ramp starts and ends with a near-zero slope.
+    await tester.pumpWidget(_host());
+    final gradient = _gradient(tester);
+    final stops = gradient.stops!;
+    final alphas = gradient.colors.map((c) => c.a).toList();
+    final fadeEnd = stops.length - 2;
+
+    expect(fadeEnd, greaterThanOrEqualTo(ChromeScrim.fadeSteps));
+    for (var i = 1; i <= fadeEnd; i++) {
+      expect(alphas[i], greaterThanOrEqualTo(alphas[i - 1]));
+    }
+    double slope(int i) =>
+        (alphas[i + 1] - alphas[i]) / (stops[i + 1] - stops[i]);
+    final linearSlope = plateau.a / stops[fadeEnd];
+    expect(slope(0), lessThan(linearSlope * 0.5));
+    expect(slope(fadeEnd - 1), lessThan(linearSlope * 0.5));
+    expect(slope(fadeEnd ~/ 2), greaterThan(linearSlope));
+  });
+
+  test('the fade is 120 px, or 12 % of the height when that is shorter', () {
+    expect(ChromeScrim.maxFadeExtent, 120);
+    expect(ChromeScrim.fadeExtentFor(1080), 120);
+    expect(ChromeScrim.fadeExtentFor(1000), 120);
     expect(ChromeScrim.fadeExtentFor(390), closeTo(46.8, 1e-9));
     expect(ChromeScrim.fadeExtentFor(320), closeTo(38.4, 1e-9));
   });
@@ -82,10 +110,6 @@ void main() {
       expect(
         tester.getRect(find.byKey(ChromeScrim.bottomKey)).height,
         closeTo(120 + fade, 1e-6),
-      );
-      expect(
-        tester.getRect(find.byKey(ChromeScrim.topKey)).height,
-        closeTo(60 + fade, 1e-6),
       );
     });
   }
@@ -122,7 +146,7 @@ void main() {
                   width: _size.width,
                   height: _size.height,
                   child: const Stack(
-                    children: [ChromeScrim(topHeight: 60, bottomHeight: 120)],
+                    children: [ChromeScrim(bottomHeight: 120)],
                   ),
                 ),
               ),
@@ -134,16 +158,8 @@ void main() {
         );
         final fade = ChromeScrim.fadeExtentFor(_size.height);
 
-        final top = _gradient(tester, ChromeScrim.topKey);
-        expect(top.colors, [edge, transparent]);
-        expect(top.stops, [0, 1]);
-        expect(
-          tester.getRect(find.byKey(ChromeScrim.topKey)).height,
-          60 + fade,
-        );
-
-        final bottom = _gradient(tester, ChromeScrim.bottomKey);
-        expect(bottom.colors, [transparent, edge]);
+        final bottom = _gradient(tester);
+        expect(bottom.colors, [const Color(0x00000000), edge]);
         expect(bottom.stops, [0, 1]);
         expect(
           tester.getRect(find.byKey(ChromeScrim.bottomKey)).height,

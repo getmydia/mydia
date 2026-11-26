@@ -12,6 +12,7 @@ import 'package:player/domain/models/subtitle_search_outcome.dart';
 import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/playback_sequence.dart';
 import 'package:player/presentation/screens/player/session/playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 
@@ -164,6 +165,13 @@ class FakePlaybackSession implements PlaybackSession {
     required int seasonNumber,
     required String? showId,
   }) => '/fake/episode/$episodeId';
+
+  @override
+  Future<SequenceNeighbours?> sequenceNeighbours() async => null;
+
+  @override
+  String sequenceLocation(SequenceNeighbour neighbour) =>
+      throw UnsupportedError('No sequence');
 
   @override
   Future<StreamingPreparation> prepareStreaming({

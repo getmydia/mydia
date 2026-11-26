@@ -8,6 +8,7 @@ import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/media_file.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../../domain/sources/playback_sequence.dart';
 
 /// The per-source pages that list items without a library behind them.
 enum SourceListing {
@@ -51,9 +52,14 @@ String filterLocation(SourceId id, String filterId) =>
 
 /// Kinds with a detail screen open it; videos and folders open the generic
 /// item route.
-String sourceItemLocation(ItemRef ref) => detailKindOf(ref.kind) != null
+String sourceItemLocation(ItemRef ref, {PlaybackSequence? sequence}) =>
+    detailKindOf(ref.kind) != null
     ? detailLocation(SourceTarget(ref))
-    : _sourcePath(ref.sourceId, ['item', ref.kind.name, ref.externalId]);
+    : _sourcePath(ref.sourceId, [
+        'item',
+        ref.kind.name,
+        ref.externalId,
+      ], query: sequence?.toQuery());
 
 /// The source player route. Credentials never ride along: the player asks the
 /// source for the stream.
@@ -62,10 +68,17 @@ String sourcePlayerLocation(
   String? fileId,
   String? title,
   Map<String, String> extra = const {},
+  PlaybackSequence? sequence,
 }) => _sourcePath(
   ref.sourceId,
   ['player', ref.externalId],
-  query: {'kind': ref.kind.name, 'fileId': ?fileId, 'title': ?title, ...extra},
+  query: {
+    'kind': ref.kind.name,
+    'fileId': ?fileId,
+    'title': ?title,
+    ...extra,
+    ...?sequence?.toQuery(),
+  },
 );
 
 String detailLocation(DetailTarget target) => _sourcePath(target.ref.sourceId, [
