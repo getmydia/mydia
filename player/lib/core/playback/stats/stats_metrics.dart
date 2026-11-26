@@ -114,6 +114,7 @@ class StatsMetrics {
           width: viewport.width,
           height: viewport.height,
           touchPrimary: touchPrimary,
+          remote: directionalPrimary,
         ).cornerInsetBottom;
 
     // A focusable copy/close button in the panel would join D-pad

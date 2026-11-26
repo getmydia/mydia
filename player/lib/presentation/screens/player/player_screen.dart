@@ -6475,6 +6475,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       width: MediaQuery.sizeOf(context).width,
       height: MediaQuery.sizeOf(context).height,
       touchPrimary: InputCapabilities.touchPrimary,
+      remote: InputCapabilities.directionalPrimary,
     );
 
     return Stack(

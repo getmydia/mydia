@@ -154,6 +154,7 @@ class CastPlaceholderView extends StatelessWidget {
       width: MediaQuery.sizeOf(context).width,
       height: MediaQuery.sizeOf(context).height,
       touchPrimary: InputCapabilities.touchPrimary,
+      remote: InputCapabilities.directionalPrimary,
     );
 
     return Stack(

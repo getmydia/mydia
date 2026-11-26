@@ -35,6 +35,27 @@ void main() {
     expect(touch.maxHeight, lessThan(pointer.maxHeight));
   });
 
+  // The remote tier's title block is taller, so its bar is too.
+  test('on the remote tier the panel clears the taller remote bar', () {
+    const viewport = Size(1280, 540);
+    final tv = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: true,
+    )!;
+    final remoteBar = ChromeMetrics.resolve(
+      width: viewport.width,
+      height: viewport.height,
+      touchPrimary: false,
+      remote: true,
+    );
+    expect(remoteBar.cornerInsetBottom, remoteBar.barHeight + 12);
+    final panelBottom = StatsMetrics.topInset + tv.maxHeight;
+    expect(
+      viewport.height - remoteBar.barHeight - panelBottom,
+      greaterThanOrEqualTo(ChromeMetrics.cornerGap),
+    );
+  });
+
   // The panel and the bar both sit inside the safe area, so a home
   // indicator below and a notch above eat into the room between them.
   test('verticalSafeInset shrinks the room above the bar', () {
@@ -108,7 +129,9 @@ void main() {
   test(
     'a D-pad viewport that falls through to compact still hides buttons',
     () {
-      final metrics = resolve(844, 390, tv: true);
+      // Taller than a landscape phone: the remote bar now carries a
+      // 62px title block, so 390 no longer leaves the compact minimum.
+      final metrics = resolve(844, 440, tv: true);
 
       expect(metrics!.density, StatsDensity.compact);
       expect(metrics.showButtons, isFalse);
