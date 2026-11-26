@@ -81,14 +81,29 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
 
   bool get _active => _seekable && (_hovering || _seeking);
 
-  /// Hover, a drag, or keyboard focus: any of them draws the bar larger.
+  /// Hover, a drag, or keyboard focus: any of them draws the bar thicker.
   bool get _emphasized => _active || widget.focused;
 
-  double get _trackHeight => _emphasized ? 8.0 : 4.0;
+  double get _trackHeight => _emphasized
+      ? VideoProgressBar.activeTrackHeight
+      : VideoProgressBar.restingTrackHeight;
 
-  double get _thumbSize => _emphasized
-      ? VideoProgressBar.activeThumbSize
-      : VideoProgressBar.restingThumbSize;
+  /// Zero at rest: the thumb only appears on interaction. Focus (a remote
+  /// viewer, metres away) gets the larger one a pointer does not need.
+  double get _thumbSize {
+    if (widget.focused) return VideoProgressBar.activeThumbSize;
+    if (_active) return VideoProgressBar.pointerThumbSize;
+    return VideoProgressBar.restingThumbSize;
+  }
+
+  /// The played fill's trailing end is square at rest and round once the bar
+  /// is emphasized and the thumb is there to cap it.
+  BorderRadius get _playedRadius {
+    final round = Radius.circular(_trackHeight / 2);
+    return _emphasized
+        ? BorderRadius.all(round)
+        : BorderRadius.horizontal(left: round);
+  }
 
   double get _displayed =>
       (_seeking ? _seekFraction : widget.progress).clamp(0.0, 1.0);
@@ -146,6 +161,9 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
   Widget _bar(double width) {
     final buffered = widget.buffered.clamp(0.0, 1.0);
     final scrub = widget.scrubFraction?.clamp(0.0, 1.0);
+    final motion = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : DepthTokens.motionFast;
 
     return SizedBox(
       width: double.infinity,
@@ -161,7 +179,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
               Center(
                 child: AnimatedContainer(
                   key: ProgressBarSurface.trackKey,
-                  duration: DepthTokens.motionFast,
+                  duration: motion,
                   curve: DepthTokens.curveStandard,
                   height: _trackHeight,
                   decoration: BoxDecoration(
@@ -185,7 +203,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                 alignment: Alignment.centerLeft,
                 widthFactor: buffered,
                 child: AnimatedContainer(
-                  duration: DepthTokens.motionFast,
+                  duration: motion,
                   curve: DepthTokens.curveStandard,
                   height: _trackHeight,
                   decoration: BoxDecoration(
@@ -201,12 +219,12 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                 alignment: Alignment.centerLeft,
                 widthFactor: _displayed,
                 child: AnimatedContainer(
-                  duration: DepthTokens.motionFast,
+                  duration: motion,
                   curve: DepthTokens.curveStandard,
                   height: _trackHeight,
                   decoration: BoxDecoration(
                     color: context.palette.primary,
-                    borderRadius: BorderRadius.circular(_trackHeight / 2),
+                    borderRadius: _playedRadius,
                   ),
                 ),
               ),
@@ -227,8 +245,9 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                     ),
                   ),
                 ),
-              // Thumb — always present, unlike the previous hover-only
-              // implementation. Centered exactly on the progress fraction: at
+              // Thumb — always mounted but zero-sized and transparent at rest,
+              // so it grows in on interaction without changing the layout.
+              // Centered exactly on the progress fraction: at
               // the 0.0/1.0 extremes it bleeds half its own width past the
               // track ends, which is the conventional scrubber look and is
               // accounted for by the glass bar's own padding in the caller.
@@ -244,24 +263,31 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
               // throughout the transition.
               TweenAnimationBuilder<double>(
                 tween: Tween<double>(end: _thumbSize),
-                duration: DepthTokens.motionFast,
+                duration: motion,
                 curve: DepthTokens.curveStandard,
                 builder: (context, size, _) {
+                  // Fades with its size so it does not pop in at the first
+                  // pixel.
+                  final opacity = (size / VideoProgressBar.pointerThumbSize)
+                      .clamp(0.0, 1.0);
                   return Positioned(
                     left: (width * _displayed) - (size / 2),
-                    child: Container(
-                      key: ProgressBarSurface.thumbKey,
-                      width: size,
-                      height: size,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0x40000000), // black @ 0.25
-                            blurRadius: 6,
-                          ),
-                        ],
+                    child: Opacity(
+                      opacity: opacity,
+                      child: Container(
+                        key: ProgressBarSurface.thumbKey,
+                        width: size,
+                        height: size,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x40000000), // black @ 0.25
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -349,10 +375,20 @@ class VideoProgressBar extends StatelessWidget {
     this.focused = false,
   });
 
-  /// Thumb diameter at rest.
-  static const double restingThumbSize = 14.0;
+  /// Track thickness at rest.
+  static const double restingTrackHeight = 4.0;
 
-  /// Thumb diameter while hovered or scrubbing.
+  /// Track thickness while hovered, scrubbing or focused.
+  static const double activeTrackHeight = 6.0;
+
+  /// Thumb diameter at rest: none, it only shows on interaction.
+  static const double restingThumbSize = 0.0;
+
+  /// Thumb diameter while hovered or scrubbing with a pointer.
+  static const double pointerThumbSize = 14.0;
+
+  /// Thumb diameter while focused, sized for a remote viewer. Also the height
+  /// of the bar's layout box, so the hit area never moves.
   static const double activeThumbSize = 18.0;
 
   /// Diameter of the D-pad scrub cursor.

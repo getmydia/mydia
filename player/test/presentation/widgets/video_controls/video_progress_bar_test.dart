@@ -63,13 +63,37 @@ void main() {
       );
     });
 
-    testWidgets('thumb is 14 at rest and 18 when focused', (tester) async {
+    Future<TestGesture> hover(WidgetTester tester) async {
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      await gesture.moveTo(tester.getCenter(find.byType(ProgressBarSurface)));
+      return gesture;
+    }
+
+    double thumbWidth(WidgetTester tester) =>
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width;
+
+    double trackHeight(WidgetTester tester) =>
+        tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height;
+
+    Widget seekable({bool focused = false}) => _host(
+      ProgressBarSurface(
+        progress: 0.4,
+        buffered: 0.6,
+        onSeekTo: (_) {},
+        focused: focused,
+      ),
+    );
+
+    testWidgets('thumb is hidden at rest and 18 when focused', (tester) async {
       await tester.pumpWidget(
         _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
       );
       expect(
-        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
-        14.0,
+        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)),
+        Size.zero,
       );
       await tester.pumpWidget(
         _host(
@@ -77,54 +101,88 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-        tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
-        18.0,
-      );
+      expect(thumbWidth(tester), 18.0);
+      expect(trackHeight(tester), VideoProgressBar.activeTrackHeight);
     });
 
-    testWidgets('renders a thumb at rest — the defect this fixes', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _host(const ProgressBarSurface(progress: 0.4, buffered: 0.6)),
-      );
+    testWidgets('keeps a mounted thumb at rest with no size', (tester) async {
+      await tester.pumpWidget(seekable());
+      await tester.pumpAndSettle();
 
       expect(find.byKey(ProgressBarSurface.thumbKey), findsOneWidget);
-      final size = tester.getSize(find.byKey(ProgressBarSurface.thumbKey));
-      expect(size.width, VideoProgressBar.restingThumbSize);
+      expect(thumbWidth(tester), VideoProgressBar.restingThumbSize);
+      expect(VideoProgressBar.restingThumbSize, 0.0);
+      expect(trackHeight(tester), VideoProgressBar.restingTrackHeight);
+      expect(VideoProgressBar.restingTrackHeight, 4.0);
     });
 
     testWidgets('thumb and track grow on hover', (tester) async {
-      await tester.pumpWidget(
-        // Seekable: the hover affordance only exists when a seek can
-        // actually be committed.
-        _host(
-          ProgressBarSurface(progress: 0.4, buffered: 0.6, onSeekTo: (_) {}),
-        ),
-      );
+      await tester.pumpWidget(seekable());
+      await tester.pumpAndSettle();
+      expect(thumbWidth(tester), 0.0);
+      expect(trackHeight(tester), 4.0);
 
-      // Resting state, asserted before any pointer interaction: half the
-      // original complaint was the 3px hairline track, so its height at
-      // rest gets its own assertion, not just the thumb's.
-      final restingTrack = tester.getSize(
-        find.byKey(ProgressBarSurface.trackKey),
-      );
-      expect(restingTrack.height, 4.0);
-
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      addTearDown(gesture.removePointer);
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(find.byType(ProgressBarSurface)));
+      await hover(tester);
       await tester.pumpAndSettle();
 
-      final size = tester.getSize(find.byKey(ProgressBarSurface.thumbKey));
-      expect(size.width, VideoProgressBar.activeThumbSize);
-      final activeTrack = tester.getSize(
-        find.byKey(ProgressBarSurface.trackKey),
+      expect(thumbWidth(tester), VideoProgressBar.pointerThumbSize);
+      expect(VideoProgressBar.pointerThumbSize, 14.0);
+      expect(trackHeight(tester), 6.0);
+    });
+
+    testWidgets('returns to rest when the pointer leaves', (tester) async {
+      await tester.pumpWidget(seekable());
+      final gesture = await hover(tester);
+      await tester.pumpAndSettle();
+      expect(thumbWidth(tester), 14.0);
+
+      await gesture.moveTo(const Offset(1, 1));
+      await tester.pumpAndSettle();
+      expect(thumbWidth(tester), 0.0);
+      expect(trackHeight(tester), 4.0);
+    });
+
+    testWidgets('with animations disabled one pump already shows the hover '
+        'size', (tester) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: seekable(),
+        ),
       );
-      expect(activeTrack.height, 8.0);
+      await hover(tester);
+      await tester.pump();
+
+      expect(thumbWidth(tester), 14.0);
+      expect(trackHeight(tester), 6.0);
+    });
+
+    testWidgets('played fill is square-ended at rest and round when '
+        'emphasized', (tester) async {
+      BorderRadiusGeometry? playedRadius() {
+        final box = tester.widget<DecoratedBox>(
+          find.descendant(
+            of: find.byKey(ProgressBarSurface.playedKey),
+            matching: find.byType(DecoratedBox),
+          ),
+        );
+        return (box.decoration as BoxDecoration).borderRadius;
+      }
+
+      await tester.pumpWidget(seekable());
+      await tester.pumpAndSettle();
+      final rest = playedRadius()!.resolve(TextDirection.ltr);
+      expect(rest.topLeft, const Radius.circular(2));
+      expect(rest.bottomLeft, const Radius.circular(2));
+      expect(rest.topRight, Radius.zero);
+      expect(rest.bottomRight, Radius.zero);
+
+      await hover(tester);
+      await tester.pumpAndSettle();
+      final active = playedRadius()!.resolve(TextDirection.ltr);
+      expect(active.topRight, const Radius.circular(3));
+      expect(active.bottomRight, const Radius.circular(3));
+      expect(active.topLeft, const Radius.circular(3));
     });
 
     testWidgets('renders played, buffered, and base track layers', (
@@ -253,7 +311,8 @@ void main() {
       final activeSize = tester.getSize(
         find.byKey(ProgressBarSurface.thumbKey),
       );
-      expect(activeSize.width, VideoProgressBar.activeThumbSize);
+      expect(activeSize.width, VideoProgressBar.pointerThumbSize);
+      expect(trackHeight(tester), VideoProgressBar.activeTrackHeight);
 
       await gesture.moveBy(const Offset(160, 0));
       await tester.pump();
@@ -266,6 +325,12 @@ void main() {
       expect(ended, isTrue);
       expect(committed, isNotNull);
       expect(committed!, closeTo(0.6, 0.05));
+
+      // The touch has lifted and no pointer hovers: back to rest.
+      await gesture.removePointer();
+      await tester.pumpAndSettle();
+      expect(thumbWidth(tester), 0.0);
+      expect(trackHeight(tester), 4.0);
     });
 
     testWidgets(
@@ -301,6 +366,10 @@ void main() {
         expect(
           tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
           4.0,
+        );
+        expect(
+          tester.getSize(find.byKey(ProgressBarSurface.thumbKey)),
+          Size.zero,
         );
       },
     );
@@ -405,7 +474,7 @@ void main() {
 
       expect(
         tester.getSize(find.byKey(ProgressBarSurface.trackKey)).height,
-        8.0,
+        VideoProgressBar.activeTrackHeight,
       );
       expect(
         tester.getSize(find.byKey(ProgressBarSurface.thumbKey)).width,
