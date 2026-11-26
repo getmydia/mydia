@@ -378,7 +378,10 @@ jobs:
     # authenticates with CLOUDFLARE_API_TOKEN, not GITHUB_TOKEN.
     permissions:
       contents: read
+    # No `ref`: the generator comes from the ref this workflow was dispatched
+    # from, as the dev Flatpak publish does, not from the build target. The
+    # feed is built from the published releases and the dev index, not from
+    # the target's tree, and an older target's generator would deploy a feed
+    # without the macOS dev build this run just published.
     uses: ./.github/workflows/deploy-appcast.yml
-    with:
-      ref: ${{ needs.prepare.outputs.sha }}
     secrets: inherit
