@@ -32,7 +32,6 @@ class ChromeTitleBlock extends StatelessWidget {
 
   static const double kickerOpacity = 0.78;
   static const double _titleOpacity = 0.95;
-  static const double _maxTextScale = 1.3;
 
   /// Total height of the block.
   static double heightFor(ChromeTitleTier tier) =>
@@ -74,8 +73,10 @@ class ChromeTitleBlock extends StatelessWidget {
     final kickerText = kicker;
     final titleSize = titleFontSize(tier);
     return IgnorePointer(
-      child: MediaQuery.withClampedTextScaling(
-        maxScaleFactor: _maxTextScale,
+      // Glyphs stay at the designed size at every text scale: the lines are
+      // pinned to their boxes, so a scaler would only shrink the width the
+      // ellipsis gets.
+      child: MediaQuery.withNoTextScaling(
         child: SizedBox(
           height: heightFor(tier),
           child: Column(
@@ -115,7 +116,7 @@ class ChromeTitleBlock extends StatelessWidget {
 }
 
 /// One single-line text in a fixed-height box. The text ellipsizes at the
-/// box width and scales down, bottom-left anchored, when scaling would
+/// box width and scales down, bottom-start anchored, when scaling would
 /// otherwise make it taller than the box.
 class _Line extends StatelessWidget {
   const _Line({
@@ -141,7 +142,7 @@ class _Line extends StatelessWidget {
           : LayoutBuilder(
               builder: (context, constraints) => FittedBox(
                 fit: BoxFit.scaleDown,
-                alignment: Alignment.bottomLeft,
+                alignment: AlignmentDirectional.bottomStart,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: constraints.maxWidth),
                   child: Text(

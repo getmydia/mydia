@@ -450,7 +450,7 @@ class _TitleSlot extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     height: ChromeTitleBlock.heightFor(tier) + ChromeTitleBlock.gapFor(tier),
     child: Align(
-      alignment: Alignment.topLeft,
+      alignment: AlignmentDirectional.topStart,
       child: SizedBox(height: ChromeTitleBlock.heightFor(tier), child: title),
     ),
   );

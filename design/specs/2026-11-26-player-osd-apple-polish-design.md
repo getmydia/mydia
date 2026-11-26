@@ -171,7 +171,8 @@ top band.
 - The track is a capsule; the played portion's leading end is rounded and its
   trailing end is square while the thumb is hidden, so it reads as a fill
   rather than a second pill.
-- Rest to active animates over 120 ms (`Curves.easeOut`): track height and
+- Rest to active animates with the fast-motion tokens (`DepthTokens.motionFast`,
+  `curveStandard`): track height and
   thumb scale and opacity together. With Reduce Motion the change is instant.
 - Hit areas, `ScrubBubble`, the scrub cursor and span, and `tv_scrubber.dart`
   behaviour are unchanged. `thumbKey` stays mounted at zero opacity at rest so

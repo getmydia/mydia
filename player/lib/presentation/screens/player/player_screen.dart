@@ -259,6 +259,27 @@ class PlayerScreen extends ConsumerStatefulWidget {
     body: SafeArea(top: false, child: child),
   );
 
+  /// The loading/error state's top bar: the cast capsule alone.
+  ///
+  /// Public and `@visibleForTesting` so a test can hold its size against the
+  /// playing state's bar without mounting the full screen.
+  @visibleForTesting
+  static Widget castOnlyTopBar(
+    BuildContext context, {
+    required Widget? castAction,
+    required VoidCallback onCastTap,
+  }) => ChromeTopBar(
+    showBack: false,
+    // The same size `PlaybackChrome` gives the bar, so the capsule does not
+    // resize when loading finishes.
+    compact: ChromeMetrics.isCompactTouch(
+      MediaQuery.sizeOf(context),
+      touchPrimary: InputCapabilities.touchPrimary,
+    ),
+    castAction: castAction,
+    onCastTap: onCastTap,
+  );
+
   /// Stands in for the platform fullscreen backend while a test is mounted.
   ///
   /// The real one is chosen by a conditional import, so a `flutter test` host
@@ -3594,12 +3615,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _refreshSubtitleTracks();
         debugPrint('Extracted ${tracks.length} subtitle tracks from GraphQL');
       }
-      final osdTitle = PlaybackTitle.resolve(
-        routeTitle: widget.title ?? currentAppLocalizations().playerUntitled,
+      // The OSD never shows the "Untitled" fallback: with no usable route
+      // title only a show title (episode) can name the block, and otherwise
+      // it stays empty, as it was before the detail landed.
+      final routeTitle = widget.title?.trim() ?? '';
+      final resolved = PlaybackTitle.resolve(
+        routeTitle: routeTitle,
         isEpisode: widget.mediaType == 'episode',
         detail: detail,
         l10n: currentAppLocalizations(),
       );
+      final osdTitle = resolved.title.isEmpty ? null : resolved;
       if (mounted) setState(() => _osdTitle = osdTitle);
     } catch (e) {
       debugPrint('Error fetching progress: $e');
@@ -6331,7 +6357,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// when it is most useful.
   ///
   /// Built through `PlayerTopBarSlot`, the same seam `PlaybackChrome` places
-  /// its back/title/cast pills through, so this state's cast pill lands at
+  /// its back disc and action capsules through, so this state's cast pill lands at
   /// the exact spot the playing state's does: level with the window controls
   /// on a windowed desktop, or 16px below the safe area everywhere else. A
   /// second, independently-positioned pill here would drift from that the
@@ -6341,8 +6367,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       children: [
         Positioned.fill(child: child),
         PlayerTopBarSlot(
-          child: ChromeTopBar(
-            showBack: false,
+          child: PlayerScreen.castOnlyTopBar(
+            context,
             castAction: _castSupported ? castChromeActionFor(ref) : null,
             onCastTap: _showCastDevicePicker,
           ),

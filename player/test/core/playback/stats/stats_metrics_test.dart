@@ -121,8 +121,8 @@ void main() {
   // the panel would still join D-pad traversal and fight the OSD's focus
   // scope, and that hazard does not care which density branch was taken.
   test('a D-pad viewport that falls through to full still hides buttons', () {
-    // 650 tall, minus the 64px top inset, minus the desktop tier's 174px
-    // corner inset, leaves 412: enough for the full panel, not the tv one.
+    // 650 tall, minus the 68px top inset, minus the desktop tier's 188px
+    // corner inset, leaves 394: enough for the full panel, not the tv one.
     final metrics = resolve(1280, 650, tv: true);
 
     expect(metrics!.density, StatsDensity.full);

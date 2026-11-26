@@ -634,7 +634,7 @@ class PlayerTopBarSlot extends StatelessWidget {
   final Widget child;
 
   /// Inset from the safe area's top edge with no window chrome to clear.
-  static const double edgeInset = 16;
+  static const double edgeInset = ChromeTopBar.edgeInset;
 
   /// Side inset on a touch phone, matching its bottom bar's padding.
   static const double compactSideInset = 12;

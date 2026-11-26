@@ -7,7 +7,7 @@ import '../../../core/theme/depth_tokens.dart';
 /// The darkening behind the playback bottom bar: solid behind the bar, then
 /// an eased fade to nothing above it.
 ///
-/// There is no top band. The top bar's back/title and action pills carry
+/// There is no top band. The top bar's back disc and action capsules carry
 /// their own OSD fill, so the picture above them stays clear.
 ///
 /// The plateau is the OSD fill, so text and glyphs drawn straight on it read
@@ -52,7 +52,9 @@ class ChromeScrim extends StatelessWidget {
   /// The share of the ease already travelled where the scrim has dropped from
   /// the plateau to [DepthTokens.osdTitleScrimOpacity]: the `t` at which
   /// `1 - easeInOut(t)` equals the token over the fill.
-  static double get titleEaseFraction {
+  static final double titleEaseFraction = _solveTitleEaseFraction();
+
+  static double _solveTitleEaseFraction() {
     const target =
         DepthTokens.osdTitleScrimOpacity / DepthTokens.osdFillOpacity;
     var low = 0.0;

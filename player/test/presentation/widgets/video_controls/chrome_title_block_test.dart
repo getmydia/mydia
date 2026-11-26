@@ -150,8 +150,60 @@ void main() {
           ChromeTitleBlock.heightFor(tier),
         );
       });
+
+      testWidgets('text scale 2.0 keeps designed glyphs and the full width, '
+          '$tier, kicker: $withKicker', (tester) async {
+        final long = List.filled(120, 'x').join();
+        await tester.pumpWidget(
+          _host(
+            ChromeTitleBlock(
+              title: long,
+              kicker: withKicker ? long : null,
+              tier: tier,
+            ),
+            width: 320,
+            textScale: 2.0,
+          ),
+        );
+        final keys = [
+          ChromeTopBar.titleKey,
+          if (withKicker) ChromeTitleBlock.kickerKey,
+        ];
+        for (final key in keys) {
+          final finder = find.byKey(key);
+          expect(tester.getSize(finder).width, 320, reason: '$key width');
+          expect(
+            MediaQuery.textScalerOf(tester.element(finder)).scale(10),
+            10,
+            reason: '$key effective scale',
+          );
+        }
+      });
     }
   }
+
+  testWidgets('under RTL the title hangs from the right edge', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        const Directionality(
+          textDirection: TextDirection.rtl,
+          child: ChromeTitleBlock(
+            title: 'Low Tide',
+            kicker: 'The Lantern Coast',
+            tier: ChromeTitleTier.pointer,
+          ),
+        ),
+      ),
+    );
+    final block = tester.getRect(find.byType(ChromeTitleBlock));
+    for (final key in [ChromeTopBar.titleKey, ChromeTitleBlock.kickerKey]) {
+      expect(
+        tester.getRect(find.byKey(key)).right,
+        closeTo(block.right, 0.01),
+        reason: '$key right edge',
+      );
+    }
+  });
 
   for (final tier in tiers) {
     testWidgets('short title is not scaled down, $tier', (tester) async {

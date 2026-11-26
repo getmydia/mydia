@@ -245,7 +245,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                     ),
                   ),
                 ),
-              // Thumb — always mounted but zero-sized and transparent at rest,
+              // Thumb: always mounted but zero-sized and transparent at rest,
               // so it grows in on interaction without changing the layout.
               // Centered exactly on the progress fraction: at
               // the 0.0/1.0 extremes it bleeds half its own width past the

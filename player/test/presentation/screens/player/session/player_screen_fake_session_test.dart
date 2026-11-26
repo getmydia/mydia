@@ -355,6 +355,19 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('a movie with no route title shows no title and no kicker, '
+      'not the untitled fallback', (tester) async {
+    final session = _TitledEpisodeSession(const PlaybackDetail(year: 2019));
+    await _pumpEpisode(tester, session, mediaType: 'movie');
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(ChromeTopBar.titleKey), findsNothing);
+    expect(find.byKey(ChromeTitleBlock.kickerKey), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
   testWidgets('the route season wins over the detail one', (tester) async {
     final session = _DetailNamesSeasonSession();
     await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 3);
@@ -480,6 +493,7 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   String? showId,
   int? seasonNumber,
   String? title,
+  String mediaType = 'episode',
 }) async {
   final container = buildPlayerScreenContainer(
     connectionState: HarnessLink.direct(),
@@ -495,7 +509,7 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
         path: '/',
         builder: (_, _) => PlayerScreen(
           mediaId: 'e1',
-          mediaType: 'episode',
+          mediaType: mediaType,
           title: title,
           fileId: 'f1',
           showId: showId,

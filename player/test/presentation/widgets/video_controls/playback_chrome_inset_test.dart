@@ -33,6 +33,7 @@ import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
+import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -252,6 +253,52 @@ void main() {
         ),
         insets: _macInsets,
         paddingTop: kMacTitleBarOverlap,
+      );
+
+      expect(loadingOrError, playing);
+    });
+
+    testWidgets('matches on a touch phone, where the bar is compact', (
+      tester,
+    ) async {
+      InputCapabilities.debugTouchPrimaryOverride = true;
+      addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+      tester.view.physicalSize = const Size(760, 350);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      // The playing state, as `PlaybackChrome` builds it on a phone.
+      final playing = await castRectFor(
+        tester,
+        chromeTopBar: ChromeTopBar(
+          onBack: () {},
+          compact: true,
+          castAction: const Icon(Icons.cast),
+          onCastTap: () {},
+        ),
+        insets: WindowChromeInsets.zero,
+        paddingTop: 0,
+      );
+
+      // The loading/error state, built by the real production seam.
+      late Widget loadingBar;
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            loadingBar = PlayerScreen.castOnlyTopBar(
+              context,
+              castAction: const Icon(Icons.cast),
+              onCastTap: () {},
+            );
+            return const SizedBox();
+          },
+        ),
+      );
+      final loadingOrError = await castRectFor(
+        tester,
+        chromeTopBar: loadingBar,
+        insets: WindowChromeInsets.zero,
+        paddingTop: 0,
       );
 
       expect(loadingOrError, playing);
