@@ -82,7 +82,8 @@ and `dry_run` is false, the job runs these steps after "Create DMG":
 3. Read `LSMinimumSystemVersion` from the built app's Info.plist, as "Generate
    appcast" already does.
 4. Call `publish.sh` with platform `macos`, the file
-   `mydia-player-macos-v<version>.dmg`, and these extra fields:
+   `macos/mydia-player-macos-v<version>.dmg` (the same per-platform prefix
+   Android's `android/` files use), and these extra fields:
    `ed_signature`, `length` and `minimum_system_version`.
 
 The step fails before it touches the index when any of the signature, the
@@ -137,8 +138,10 @@ Today `assertFeedInvariants` uses a boolean `prerelease` flag. It moves to a
 carry its own channel: none for stable, `beta` for beta, `dev` for dev. The
 assertion still runs on the merged list, so a dev item that would render
 without a channel, and so be offered to every stable Mac, makes the run fail
-before anything is written. Duplicate `sparkle:version` detection also covers
-the merged list.
+before anything is written. Before that assertion runs, a dev item whose
+`sparkle:version` equals a release item's is dropped with a warning. Without
+that, a reused version override would make the duplicate check throw and
+freeze stable updates. Duplicate detection still covers the merged list.
 
 `validate.sh` gains one check: every item whose enclosure url starts with
 `https://dl.mydia.dev/` carries `<sparkle:channel>dev</sparkle:channel>`. It is
