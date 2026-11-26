@@ -6,7 +6,12 @@ import 'package:media_kit/media_kit.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../../../core/theme/liquid_glass/liquid_glass_profile.dart';
+import '../../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../../core/theme/palette.dart';
+import '../glass/dry_liquid_glass.dart';
+import '../glass/liquid_glass_filter.dart';
+import '../glass/osd_glass.dart';
 
 /// The scrubber's painting and gesture surface, free of any [Player]
 /// dependency so it can be widget-tested directly.
@@ -249,21 +254,7 @@ class _ProgressBarSurfaceState extends State<ProgressBarSurface> {
                 builder: (context, size, _) {
                   return Positioned(
                     left: (width * _displayed) - (size / 2),
-                    child: Container(
-                      key: ProgressBarSurface.thumbKey,
-                      width: size,
-                      height: size,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0x40000000), // black @ 0.25
-                            blurRadius: 6,
-                          ),
-                        ],
-                      ),
-                    ),
+                    child: _Thumb(size: size),
                   );
                 },
               ),
@@ -414,6 +405,70 @@ class VideoProgressBar extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// The scrubber thumb: a white dot, or on the glass OSD a clear glass knob
+/// built like the `GlassSlider` knob. It keeps the animated [size] either way,
+/// so geometry and hit areas do not change.
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.size});
+
+  final double size;
+
+  /// Opacity of the white fill where there is no shader to refract with (dry
+  /// glass, or a missing shader program). Matches the `GlassSlider` fallback.
+  static const double _fillOpacity = 0.85;
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = OsdGlass.of(context);
+    if (mode == OsdGlassMode.off) {
+      return Container(
+        key: ProgressBarSurface.thumbKey,
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x40000000), // black @ 0.25
+              blurRadius: 6,
+            ),
+          ],
+        ),
+      );
+    }
+    final radius = BorderRadius.circular(size / 2);
+    const fill = ColoredBox(
+      color: Color.fromRGBO(255, 255, 255, _fillOpacity),
+      child: SizedBox.expand(),
+    );
+    final Widget knob = mode == OsdGlassMode.dry
+        ? DryLiquidGlass(
+            borderRadius: radius,
+            tint: const Color.fromRGBO(255, 255, 255, _fillOpacity),
+            profile: LiquidGlassProfile.clear,
+          )
+        : LiquidGlassFilter(
+            radius: size / 2,
+            tint: const Color(0x00FFFFFF),
+            profile: LiquidGlassProfile.clear,
+            child: LiquidGlassSupport.program == null ? fill : null,
+          );
+    return Container(
+      key: ProgressBarSurface.thumbKey,
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: LiquidGlassProfile.clear.shadow,
+      ),
+      child: RepaintBoundary(
+        child: ClipRRect(borderRadius: radius, child: knob),
+      ),
     );
   }
 }
