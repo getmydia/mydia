@@ -295,10 +295,13 @@ light, a rim lit at the top and bottom, and the press glow, from the same
 profile as the shader. It has no blur, no bend and no adaptive tint, so its
 tint must hold over every grey the video can show. The tints are set by the
 "OSD dry" sweeps in `liquid_glass_legibility_test.dart`, not by eye:
-`osdDryTintOpacity` (0.60, pills, white glyphs 4.5:1 over pure white) and
-`osdDryPanelTintOpacity` (0.80, panels, which also draw `textSecondary`). The
-catch light's peak, `osdDryCatchLightAlpha`, is the largest value that keeps
-those ratios. Tune the shape of the rim and light by eye; change an alpha only
+`osdDryTintOpacity` (0.70, pills, which draw white as faint as 0.80 alpha
+and `textPrimary`: 4.5:1 over pure white) and `osdDryPanelTintOpacity` (0.85,
+panels, which also draw the status tones and `textSecondary`). The sweeps rate
+every colour in `osdTextColors` (4.5:1) and `osdIconOnlyColors` (3:1) from
+`test/test_utils/osd_contrast.dart`, composited with its alpha, not just pure
+white. The catch light's peak, `osdDryCatchLightAlpha`, is a tuned value that
+still keeps those ratios. Tune the shape of the rim and light by eye; change an alpha only
 with the sweep.
 
 **The scrubber.** The track, the thumb, the timecodes and the subtitles never
@@ -313,7 +316,7 @@ share one `osdPill` around a `Row`, which keeps a phone's visible glass to a
 handful of surfaces (each lens costs two backdrop passes, see "Two backdrop
 passes").
 
-The `osd` lab scene shows both modes over a bright and a dark frame (see
+The `osd` lab scene shows both glass modes over a bright and a dark frame (see
 "Visual diff"). White glyphs must clear 4.5:1 and icons 3:1 over greys 0 to 1
 in every glass mode; fix tokens, never thresholds. The design is in
 `design/specs/2026-11-25-player-osd-liquid-glass-design.md`.

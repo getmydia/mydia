@@ -109,6 +109,13 @@ void main() {
     });
   });
 
+  test('VideoSurfaceOutputNotifier.set after disposal does not throw', () {
+    final container = ProviderContainer();
+    final notifier = container.read(videoSurfaceOutputProvider.notifier);
+    container.dispose();
+    expect(() => notifier.set(true), returnsNormally);
+  });
+
   test('videoSurfaceOutputProvider starts false and follows set', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);

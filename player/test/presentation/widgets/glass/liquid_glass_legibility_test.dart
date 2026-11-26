@@ -21,6 +21,9 @@ import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
 
+import '../../../test_utils/osd_contrast.dart'
+    show compositeOver, osdIconOnlyColors, osdTextColors;
+
 const _white = Color(0xFFFFFFFF);
 
 Color _over(Color base, double alpha) =>
@@ -35,6 +38,49 @@ Color _grey(double v, double lift) => Color.from(
 
 Color _overGrey(Color base, double alpha, double v, double lift) =>
     Color.alphaBlend(base.withValues(alpha: alpha), _grey(v, lift));
+
+/// The OSD glyph colours a surface role draws, from the legibility contract
+/// in `osd_contrast.dart`.
+///
+/// Pills draw white at several alphas and `textPrimary` (the touch transport
+/// glyph); status, accent and secondary tones only ever appear on panels
+/// (dialogs, sheets, stats), so rating them on a pill would only force the
+/// pill opaque. Panels draw every contract colour except `textSecondary`,
+/// which holds 3:1 per preset in 'OSD panel secondary text' (4.5:1 would
+/// need an almost opaque panel).
+Set<Color> _osdTextFor(String role) {
+  bool white(Color c) => c.r == 1 && c.g == 1 && c.b == 1;
+  final secondary = Palettes.projectionBooth.textSecondary;
+  final primary = Palettes.projectionBooth.textPrimary;
+  return osdTextColors
+      .where(
+        (c) => role == 'pill' ? (white(c) || c == primary) : c != secondary,
+      )
+      .toSet();
+}
+
+/// Every colour [role] draws, composited over [bg] (glyph alpha included):
+/// text colours 4.5:1, icon-only colours 3:1.
+///
+/// `palette.primary` is in [osdTextColors] (it is the contract's set), so it
+/// is rated as text on panels.
+void _expectOsdColours(String role, Color bg, String reason) {
+  for (final c in _osdTextFor(role)) {
+    expect(
+      contrastRatio(compositeOver(c, bg), bg),
+      greaterThanOrEqualTo(4.5),
+      reason: '$reason, text $c',
+    );
+  }
+  if (role != 'panel') return;
+  for (final c in osdIconOnlyColors) {
+    expect(
+      contrastRatio(compositeOver(c, bg), bg),
+      greaterThanOrEqualTo(3.0),
+      reason: '$reason, icon $c',
+    );
+  }
+}
 
 void main() {
   final roles =
@@ -221,8 +267,10 @@ void main() {
   });
 
   group('OSD sampled', () {
-    // The OSD tints with osdTint, not the ambient surface, and its labels are
-    // white. The scrim gets no credit: this is the conservative case.
+    // The OSD tints with osdTint, not the ambient surface. The scrim gets no
+    // credit: this is the conservative case. Every colour the OSD draws
+    // (osdTextColors at 4.5:1, osdIconOnlyColors at 3:1) is rated, composited
+    // over the glass, because pills draw translucent whites, not pure white.
     final osdRoles = <String, (double, double, double)>{
       'pill': (
         DepthTokens.liquidControlTintOpacity,
@@ -237,7 +285,7 @@ void main() {
     };
     osdRoles.forEach((name, role) {
       final (base, max, lift) = role;
-      test('$name: white labels clear 4.5:1 and icons 3:1 at every grey', () {
+      test('$name: every OSD text colour clears 4.5:1 and icon 3:1', () {
         for (final v in greys) {
           final alpha = liquidAdaptiveAlpha(
             base: base,
@@ -245,11 +293,7 @@ void main() {
             backdropLuma: v,
           );
           final bg = _overGrey(DepthTokens.osdTint, alpha, v, lift);
-          expect(
-            contrastRatio(Colors.white, bg),
-            greaterThanOrEqualTo(4.5),
-            reason: '$name label at grey $v',
-          );
+          _expectOsdColours(name, bg, '$name sampled grey $v');
         }
       });
     });
@@ -311,25 +355,21 @@ void main() {
     // Dry glass has no backdrop to adapt to, so one fixed tint must hold over
     // every grey the video can show.
     final greys = [for (var i = 0; i <= 20; i++) i / 20];
-
-    test('white labels clear 4.5:1 and icons 3:1 at every grey', () {
-      for (final v in greys) {
-        // Tint, then the catch light at its peak, then the glyph.
-        final bg = Color.alphaBlend(
-          Colors.white.withValues(alpha: DepthTokens.osdDryCatchLightAlpha),
-          _overGrey(DepthTokens.osdTint, DepthTokens.osdDryTintOpacity, v, 0),
-        );
-        expect(
-          contrastRatio(Colors.white, bg),
-          greaterThanOrEqualTo(4.5),
-          reason: 'label at grey $v',
-        );
-        expect(
-          contrastRatio(Colors.white, bg),
-          greaterThanOrEqualTo(3.0),
-          reason: 'icon at grey $v',
-        );
-      }
+    final roles = <String, double>{
+      'pill': DepthTokens.osdDryTintOpacity,
+      'panel': DepthTokens.osdDryPanelTintOpacity,
+    };
+    roles.forEach((name, tint) {
+      test('$name: every OSD text colour clears 4.5:1 and icon 3:1', () {
+        for (final v in greys) {
+          // Tint, then the catch light at its peak, then the glyph.
+          final bg = Color.alphaBlend(
+            Colors.white.withValues(alpha: DepthTokens.osdDryCatchLightAlpha),
+            _overGrey(DepthTokens.osdTint, tint, v, 0),
+          );
+          _expectOsdColours(name, bg, '$name dry grey $v');
+        }
+      });
     });
   });
 

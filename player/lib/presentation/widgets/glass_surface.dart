@@ -379,12 +379,13 @@ class GlassSurface extends StatelessWidget {
          child: child,
        );
 
-  /// The OSD material for pills (top bar, bottom bar, touch transport): the
-  /// [GlassSurface.osd] fill, hairline and radius family with **no** blur.
+  /// The OSD material for pills (the top bar's pills and the touch
+  /// transport's skip pills): the [GlassSurface.osd] fill, hairline and radius
+  /// family with **no** blur.
   ///
-  /// The scrim behind the bars (`ChromeScrim`) already darkens the video, so
-  /// a [BackdropFilter] per pill would cost a blur pass for no visible gain.
-  /// Sits at the pill elevation ([OsdElevation.pill]). On Liquid Glass it is
+  /// The top-bar pills sit over raw video (there is no top scrim) and the
+  /// bottom bar has no pills, so a [BackdropFilter] per pill would cost a blur
+  /// pass for no visible gain. Sits at the pill elevation ([OsdElevation.pill]). On Liquid Glass it is
   /// lens glass (sampled or dry) with the same pill shadow.
   GlassSurface.osdPill({Key? key, BorderRadius? borderRadius, Widget? child})
     : this(
@@ -453,7 +454,6 @@ class GlassSurface extends StatelessWidget {
   Widget _osdGlass(BuildContext context, OsdRole role, OsdGlassMode mode) {
     final access = GlassAccessibilityScope.of(context);
     final pill = role == OsdRole.pill;
-    final profile = pill ? LiquidGlassProfile.lens : LiquidGlassProfile.panel;
     if (mode == OsdGlassMode.dry) {
       return RepaintBoundary(
         child: DryLiquidGlass(
@@ -463,7 +463,7 @@ class GlassSurface extends StatelessWidget {
                 ? DepthTokens.osdDryTintOpacity
                 : DepthTokens.osdDryPanelTintOpacity,
           ),
-          profile: profile,
+          profile: liquidProfile,
           increaseContrast: access.increaseContrast,
           child: child,
         ),

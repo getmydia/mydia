@@ -52,7 +52,11 @@ class VideoSurfaceOutputNotifier extends Notifier<bool> {
   @override
   bool build() => false;
 
-  void set(bool active) => state = active;
+  void set(bool active) {
+    // The player's dispose microtask can land after the container is gone.
+    if (!ref.mounted) return;
+    state = active;
+  }
 }
 
 /// Carries the surface-output flag to [OsdGlass.of], which is used outside

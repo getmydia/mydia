@@ -82,7 +82,7 @@ backdrop sample is lost.
 | Up next (`up_next_prompt.dart`) | `osd` | Panel, `OsdElevation` shadow kept |
 | Skip segment (`skip_segment_button.dart`) | `osd` | Panel |
 | Stats panel, `osd_sheet.dart`, `osd_dialog.dart` | `osd` | Panel |
-| Volume knob | `GlassSlider` clear knob | Unchanged |
+| Volume knob | `GlassSlider` clear knob | Unchanged (superseded by "Revision after #1525") |
 | Scrubber thumb (`video_progress_bar.dart`) | Material thumb | `GlassSlider`-style clear knob |
 | Scrubber track, timecodes, subtitles | Solid | Unchanged |
 
