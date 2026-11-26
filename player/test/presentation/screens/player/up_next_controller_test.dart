@@ -39,6 +39,7 @@ class _Harness {
     this.downloadedSource = false,
     this.playing,
     this.episode = true,
+    this.sceneNavigation,
   }) {
     controller = UpNextController(
       fetchSeason: (season) async {
@@ -49,7 +50,10 @@ class _Harness {
       navigate: (episodeId, fileId, title, {required seasonNumber}) async {
         navigations.add((episodeId, fileId, title, seasonNumber));
       },
-      navigateSequence: (n) async => sceneNavigations.add(n),
+      navigateSequence: (n) async {
+        sceneNavigations.add(n);
+        await sceneNavigation?.call();
+      },
       playingSignal: () => playing,
       isEpisode: () => episode,
       hasShow: () => true,
@@ -65,6 +69,9 @@ class _Harness {
   final bool downloadedSource;
   final PlayingSignal? playing;
   final bool episode;
+
+  /// Awaited by each sequence navigation, to hold one in flight.
+  final Future<void> Function()? sceneNavigation;
   late final UpNextController controller;
   final sceneNavigations = <SequenceNeighbour>[];
   final fetchedSeasons = <int>[];
@@ -385,6 +392,33 @@ void main() {
       );
       h.controller.onPlaybackCompleted();
       expect(h.sceneNavigations, [next]);
+    });
+
+    test('completion does not start a second navigation while a manual '
+        'one is in flight', () async {
+      final inFlight = Completer<void>();
+      var fail = false;
+      final h = _Harness(
+        episode: false,
+        sceneNavigation: () async {
+          await inFlight.future;
+          if (fail) throw StateError('route failed');
+        },
+      );
+      h.controller.setSequence(
+        SequenceNeighbours(previous: previous, next: next),
+      );
+      h.controller.playPrevious();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous]);
+
+      // The previous navigation fails without leaving: auto-advance is
+      // available again for this file.
+      fail = true;
+      inFlight.complete();
+      await pumpEventQueue();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous, next]);
     });
 
     test('without a next scene, completion does nothing', () {

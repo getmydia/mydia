@@ -84,6 +84,15 @@ class UpNextController {
   /// Whether [onPlaybackCompleted] already advanced out of this file.
   bool _completionHandled = false;
 
+  /// Whether a sequence navigation is under way. The screen saves progress
+  /// before it routes, and a scene ending meanwhile must not start a second
+  /// navigation that lands somewhere the viewer did not ask for.
+  bool get _navigatingSequence => _sequenceNavigation != null;
+
+  /// The navigation in flight, as an identity token: one settling late after
+  /// a [reset] must not clear the flag of a navigation started since.
+  Object? _sequenceNavigation;
+
   /// The scene's time left and its prompt window, from [trackScene].
   Duration? _sceneRemaining;
   Duration _sceneWindow = kUpNextCountdown;
@@ -174,7 +183,7 @@ class UpNextController {
   /// before the scene ends. A dismissed prompt blocks it; an episode is left
   /// to its credits countdown.
   void onPlaybackCompleted() {
-    if (_completionHandled) return;
+    if (_completionHandled || _navigatingSequence) return;
     final next = _sequence?.next;
     if (next == null) return;
     // mpv also reports the end of a stream that died mid-file. Only a known
@@ -335,6 +344,7 @@ class UpNextController {
     _showing = false;
     _cancelled = false;
     _completionHandled = false;
+    _sequenceNavigation = null;
     _sceneRemaining = null;
     _sceneWindow = kUpNextCountdown;
   }
@@ -372,7 +382,7 @@ class UpNextController {
     final sequence = _sequence;
     if (sequence != null) {
       final next = sequence.next;
-      if (next != null) unawaited(navigateSequence(next));
+      if (next != null) unawaited(_goSequence(next));
       return;
     }
 
@@ -415,7 +425,7 @@ class UpNextController {
     final sequence = _sequence;
     if (sequence != null) {
       final previous = sequence.previous;
-      if (previous != null) unawaited(navigateSequence(previous));
+      if (previous != null) unawaited(_goSequence(previous));
       return;
     }
 
@@ -449,6 +459,20 @@ class UpNextController {
         seasonNumber: previousEpisode.seasonNumber,
       ),
     );
+  }
+
+  /// Navigates to [neighbour], marking the navigation in flight until it
+  /// settles. A failure leaves this file, and its auto-advance, in place.
+  Future<void> _goSequence(SequenceNeighbour neighbour) async {
+    final token = Object();
+    _sequenceNavigation = token;
+    try {
+      await navigateSequence(neighbour);
+    } catch (e) {
+      debugPrint('[UpNext] Sequence navigation failed: $e');
+    } finally {
+      if (identical(_sequenceNavigation, token)) _sequenceNavigation = null;
+    }
   }
 
   /// The viewer did something; resets the countdown's race guard.
