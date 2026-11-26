@@ -220,6 +220,33 @@ void main() {
     }
   });
 
+  group('OSD dry', () {
+    // Dry glass has no backdrop to adapt to, so one fixed tint must hold over
+    // every grey the video can show.
+    final greys = [for (var i = 0; i <= 20; i++) i / 20];
+
+    test('white labels clear 4.5:1 and icons 3:1 at every grey', () {
+      for (final v in greys) {
+        final bg = _overGrey(
+          DepthTokens.osdTint,
+          DepthTokens.osdDryTintOpacity,
+          v,
+          0,
+        );
+        expect(
+          contrastRatio(Colors.white, bg),
+          greaterThanOrEqualTo(4.5),
+          reason: 'label at grey $v',
+        );
+        expect(
+          contrastRatio(Colors.white, bg),
+          greaterThanOrEqualTo(3.0),
+          reason: 'icon at grey $v',
+        );
+      }
+    });
+  });
+
   test('every adaptive max clears the legibility floor', () {
     for (final alpha in [
       DepthTokens.liquidChromeAdaptiveMax,

@@ -175,6 +175,14 @@ abstract final class DepthTokens {
   /// Opacity of the OSD fill.
   static const double osdFillOpacity = 0.85;
 
+  /// Opacity of [osdTint] on dry glass (the macOS native video surface, where
+  /// no backdrop can be sampled). Fixed: there is no luma to adapt to, so it
+  /// must hold over every grey the video can show. Smallest multiple of 0.05
+  /// that keeps white labels at 4.5:1 over pure white: at 0.55 the fill
+  /// composites to ~#6A6967 (4.36:1), at 0.60 to ~#5B5A58 (5.2:1). Set by the
+  /// "OSD dry" sweep in `liquid_glass_legibility_test.dart`, not by eye.
+  static const double osdDryTintOpacity = 0.60;
+
   /// Backdrop blur sigma. Light on purpose: the fill does the legibility
   /// work, and the blur only turns the ~15% of video that shows through into
   /// soft colour instead of faint detail.
