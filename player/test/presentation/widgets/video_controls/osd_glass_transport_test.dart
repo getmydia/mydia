@@ -3,8 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/theme/app_theme.dart';
-import 'package:player/core/theme/liquid_glass/glass_accessibility.dart';
-import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/l10n/l10n.dart';
@@ -28,21 +26,14 @@ class _FakePlatformPlayer extends PlatformPlayer {
 
 enum _Mode { off, sampled, dry }
 
-Widget _host(
-  Widget child,
-  _Mode mode, {
-  GlassAccessibility access = GlassAccessibility.none,
-}) => MaterialApp(
+Widget _host(Widget child, _Mode mode) => MaterialApp(
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   theme: AppTheme.build(Palettes.projectionBooth, liquid: mode != _Mode.off),
-  home: GlassAccessibilityScope(
-    value: access,
-    child: OsdGlassScope(
-      surfaceOutput: mode == _Mode.dry,
-      child: Scaffold(
-        body: Center(child: SizedBox(width: 400, child: child)),
-      ),
+  home: OsdGlassScope(
+    surfaceOutput: mode == _Mode.dry,
+    child: Scaffold(
+      body: Center(child: SizedBox(width: 400, child: child)),
     ),
   ),
 );
@@ -138,65 +129,29 @@ void main() {
 
     Finder thumb() => find.byKey(ProgressBarSurface.thumbKey);
 
-    testWidgets('sampled holds a clear LiquidGlassFilter', (tester) async {
-      await _with(_Mode.sampled, () async {
-        await tester.pumpWidget(_host(bar(), _Mode.sampled));
-        await tester.pumpAndSettle();
-        final f = tester.widget<LiquidGlassFilter>(
-          find.descendant(
-            of: thumb(),
-            matching: find.byType(LiquidGlassFilter),
-          ),
-        );
-        expect(f.profile, LiquidGlassProfile.clear);
+    // The seek bar stays off glass in every mode (spec, "Revision after
+    // #1525"): a clear knob refracts the white played track and vanishes.
+    for (final mode in [_Mode.off, _Mode.sampled, _Mode.dry]) {
+      testWidgets('$mode keeps the plain white thumb', (tester) async {
+        await _with(mode, () async {
+          await tester.pumpWidget(_host(bar(), mode));
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: thumb(),
+              matching: find.byType(LiquidGlassFilter),
+            ),
+            findsNothing,
+          );
+          expect(
+            find.descendant(of: thumb(), matching: find.byType(DryLiquidGlass)),
+            findsNothing,
+          );
+          final box = tester.widget<Container>(thumb()).decoration;
+          expect((box! as BoxDecoration).color, Colors.white);
+        });
       });
-    });
-
-    testWidgets('dry holds a clear DryLiquidGlass', (tester) async {
-      await _with(_Mode.dry, () async {
-        await tester.pumpWidget(_host(bar(), _Mode.dry));
-        await tester.pumpAndSettle();
-        final d = tester.widget<DryLiquidGlass>(
-          find.descendant(of: thumb(), matching: find.byType(DryLiquidGlass)),
-        );
-        expect(d.profile, LiquidGlassProfile.clear);
-      });
-    });
-
-    testWidgets('off and Reduce Transparency keep today\'s thumb', (
-      tester,
-    ) async {
-      await _with(_Mode.off, () async {
-        await tester.pumpWidget(_host(bar(), _Mode.off));
-        expect(
-          find.descendant(
-            of: thumb(),
-            matching: find.byType(LiquidGlassFilter),
-          ),
-          findsNothing,
-        );
-      });
-      await _with(_Mode.sampled, () async {
-        await tester.pumpWidget(
-          _host(
-            bar(),
-            _Mode.sampled,
-            access: const GlassAccessibility(reduceTransparency: true),
-          ),
-        );
-        expect(
-          find.descendant(
-            of: thumb(),
-            matching: find.byType(LiquidGlassFilter),
-          ),
-          findsNothing,
-        );
-        expect(
-          find.descendant(of: thumb(), matching: find.byType(DryLiquidGlass)),
-          findsNothing,
-        );
-      });
-    });
+    }
 
     for (final mode in [_Mode.off, _Mode.sampled, _Mode.dry]) {
       testWidgets('$mode animates 14 to 18 when focused', (tester) async {

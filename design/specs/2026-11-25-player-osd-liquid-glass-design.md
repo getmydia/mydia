@@ -207,3 +207,29 @@ shipped code. It answers two questions:
 
 If the first answer is no and the second is yes, a later spec replaces `dry`
 with native glass on macOS.
+
+## Revision after #1525 (2026-11-26)
+
+#1525 polished the OSD while this work was in flight: it dropped the top scrim
+band and eased the bottom one, put back and the title in one pill, took the
+secondary cluster's pill away so the bottom bar's groups sit on the scrim, moved
+the timecodes onto the scrubber row, and kept Material's thumb on the OSD volume
+slider because the clear knob vanished over the white active track. Two parts of
+this spec are reversed to match:
+
+1. **The scrim keeps its plateau in every mode.** "The scrim" above (a
+   gradient-only band at `osdLiquidScrimOpacity` in the glass modes) is dropped,
+   and with it the token. After #1525 the timecodes, volume, transport and
+   secondary cluster are drawn straight on the bottom scrim, so their
+   legibility outranks pills seeing video through it. `ChromeScrim` is
+   master's single eased bottom band on every platform.
+2. **The scrubber thumb stays Material's white dot in every mode.** The clear
+   scrubber knob in "Surfaces" is dropped. It has the same flaw #1525 found on
+   the volume slider (a clear knob refracts the white played track and
+   disappears), and the research note above already says Apple and Infuse keep
+   the seek bar off glass. `liquidKnobFillOpacity` stays, for `GlassSlider`.
+
+Everything else stands: every `GlassSurface.osd` and `GlassSurface.osdPill`
+takes glass through `OsdGlass.of`, including the new back and title pill, and
+the touch transport's play disc is glass. The bottom bar's play/pause is #1525's
+filled light disc in every mode.

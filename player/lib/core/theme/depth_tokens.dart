@@ -175,11 +175,6 @@ abstract final class DepthTokens {
   /// Opacity of the OSD fill.
   static const double osdFillOpacity = 0.85;
 
-  /// Opacity of [osdTint] at the screen edge of the playback scrim when the OSD
-  /// is on Liquid Glass (the HIG's figure). The scrim is a pure gradient from
-  /// here to nothing, so glass pills have real video under them.
-  static const double osdLiquidScrimOpacity = 0.35;
-
   /// Opacity of [osdTint] on dry glass (the macOS native video surface, where
   /// no backdrop can be sampled). Fixed: there is no luma to adapt to, so it
   /// must hold over every grey the video can show. Smallest multiple of 0.05
@@ -206,9 +201,9 @@ abstract final class DepthTokens {
   /// which composites tint, then catch light, then the glyph.
   static const double osdDryCatchLightAlpha = 0.06;
 
-  /// Opacity of the white scrubber knob where there is no shader to refract
-  /// with (dry glass, a missing shader program, Reduce Transparency). Shared
-  /// by `GlassSlider` and the playback progress bar.
+  /// Opacity of `GlassSlider`'s white knob where there is no shader to
+  /// refract with (dry glass, a missing shader program, Reduce Transparency).
+  /// The playback OSD's scrubber and volume slider keep Material's thumb.
   static const double liquidKnobFillOpacity = 0.85;
 
   /// Backdrop blur sigma. Light on purpose: the fill does the legibility

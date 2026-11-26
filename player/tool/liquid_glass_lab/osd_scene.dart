@@ -2,7 +2,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/liquid_glass/liquid_glass_profile.dart';
 import 'package:player/presentation/widgets/glass/dry_liquid_glass.dart';
-import 'package:player/presentation/widgets/glass/liquid_glass_filter.dart';
 
 import 'lab_glass.dart';
 
@@ -12,8 +11,11 @@ import 'lab_glass.dart';
 ///
 /// The real bars import providers and plugins the lab's scratch project does
 /// not have, so this builds the OSD from its glass pieces: lens pills with
-/// white glyphs, the gradient-only scrim at `osdLiquidScrimOpacity`, the
-/// circular play disc, the clear scrubber knob and an up next panel. The
+/// white glyphs (back and title share one), the bottom scrim with its eased
+/// fade into the OSD fill plateau (as `ChromeScrim` draws it in every mode,
+/// with no top band), the circular glass play disc, the timecodes and
+/// controls straight on the scrim, the scrubber with its plain white thumb,
+/// and an up next panel. The
 /// sampled tints and the dry recipe are the ones `GlassSurface._osdGlass`
 /// uses. Every word is invented.
 class OsdScene extends StatelessWidget {
@@ -103,101 +105,105 @@ class _Cell extends StatelessWidget {
     ],
   );
 
-  Widget _knob() {
-    const size = 22.0;
-    final radius = BorderRadius.circular(size / 2);
-    const fill = ColoredBox(
-      color: Color.fromRGBO(255, 255, 255, DepthTokens.liquidKnobFillOpacity),
-      child: SizedBox.expand(),
+  /// The scrubber thumb: Material's white dot in every mode, as the real
+  /// progress bar draws it. A clear knob over the white played track
+  /// vanished (spec, "Revision after #1525").
+  Widget _thumb() => Container(
+    width: 14,
+    height: 14,
+    decoration: const BoxDecoration(
+      color: _white,
+      shape: BoxShape.circle,
+      boxShadow: [BoxShadow(color: Color(0x40000000), blurRadius: 6)],
+    ),
+  );
+
+  /// The bottom scrim as `ChromeScrim` builds it: an eased fade over
+  /// [_fade], then the OSD fill solid behind the bar.
+  static LinearGradient _scrim() {
+    final plateau = DepthTokens.osdTint.withValues(
+      alpha: DepthTokens.osdFillOpacity,
     );
-    return SizedBox(
-      width: size,
-      height: size,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: LiquidGlassProfile.clear.shadow,
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: dry
-              ? DryLiquidGlass(
-                  borderRadius: radius,
-                  tint: const Color.fromRGBO(
-                    255,
-                    255,
-                    255,
-                    DepthTokens.liquidKnobFillOpacity,
-                  ),
-                  profile: LiquidGlassProfile.clear,
-                )
-              : const LiquidGlassFilter(
-                  radius: size / 2,
-                  tint: Color(0x00FFFFFF),
-                  profile: LiquidGlassProfile.clear,
-                  child: fill,
-                ),
-        ),
-      ),
+    const steps = 12;
+    const plateauStart = _fade / (_plateau + _fade);
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        for (var i = 0; i <= steps; i++)
+          plateau.withValues(
+            alpha: plateau.a * Curves.easeInOut.transform(i / steps),
+          ),
+        plateau,
+      ],
+      stops: [for (var i = 0; i <= steps; i++) i / steps * plateauStart, 1],
     );
   }
 
+  static const double _plateau = 96;
+  static const double _fade = 40;
+
+  static const _timecode = TextStyle(
+    color: _white,
+    fontSize: 12,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
   @override
   Widget build(BuildContext context) {
-    final edge = DepthTokens.osdTint.withValues(
-      alpha: DepthTokens.osdLiquidScrimOpacity,
-    );
-    final clear = edge.withValues(alpha: 0);
     return ClipRect(
       child: Stack(
         children: [
           Positioned.fill(child: _Frame(bright: bright)),
-          // The glass-mode scrim: edge opacity fading to nothing, no plateau.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 110,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [edge, clear],
-                ),
-              ),
-            ),
-          ),
+          // The scrim: bottom band only, solid behind the bar in every mode.
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            height: 130,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [edge, clear],
-                ),
-              ),
-            ),
+            height: _plateau + _fade,
+            child: DecoratedBox(decoration: BoxDecoration(gradient: _scrim())),
           ),
+          // Back and the title share one pill.
           Positioned(
             top: 14,
             left: 14,
-            child: _pill(18, _icons(const [Icons.arrow_back])),
+            child: _pill(
+              18,
+              const SizedBox(
+                height: 36,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 40,
+                      child: Icon(
+                        Icons.chevron_left_rounded,
+                        color: _white,
+                        size: 22,
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsetsDirectional.only(start: 2, end: 14),
+                      child: Text(
+                        'Harbor Lights',
+                        style: TextStyle(
+                          color: _white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           Positioned(
             top: 14,
             right: 14,
             child: _pill(
               18,
-              _icons(const [
-                Icons.closed_caption_outlined,
-                Icons.speed,
-                Icons.more_horiz,
-              ]),
+              _icons(const [Icons.fit_screen_rounded, Icons.cast_rounded]),
             ),
           ),
           // Touch transport: skip pills around the play disc.
@@ -267,47 +273,66 @@ class _Cell extends StatelessWidget {
               ),
             ),
           ),
-          // Scrubber: the track never takes glass; the knob does.
+          // Timeline row on the scrim: elapsed, the scrubber, remaining.
+          // Neither the track nor the thumb takes glass.
           Positioned(
-            left: 24,
-            right: 24,
-            bottom: 62,
-            height: 22,
-            child: Stack(
-              alignment: Alignment.centerLeft,
+            left: 14,
+            right: 14,
+            bottom: 56,
+            height: 28,
+            child: Row(
               children: [
-                Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: _white.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(2),
+                const Text('12:04', style: _timecode),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      Container(
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: _white.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      FractionallySizedBox(
+                        widthFactor: 0.4,
+                        child: Container(
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: _white,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Align(
+                        alignment: const Alignment(-0.2, 0),
+                        child: _thumb(),
+                      ),
+                    ],
                   ),
                 ),
-                FractionallySizedBox(
-                  widthFactor: 0.4,
-                  child: Container(
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: _white,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Align(alignment: const Alignment(-0.2, 0), child: _knob()),
+                const SizedBox(width: 12),
+                const Text('-31:56', style: _timecode),
               ],
             ),
           ),
+          // Control row on the scrim, no pill: volume left, the secondary
+          // cluster right.
           Positioned(
             left: 14,
+            right: 14,
             bottom: 12,
-            child: _pill(
-              18,
-              _icons(const [
-                Icons.skip_previous_rounded,
-                Icons.skip_next_rounded,
-                Icons.volume_up_rounded,
-                Icons.fullscreen_rounded,
-              ]),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _icons(const [Icons.volume_up_rounded]),
+                _icons(const [
+                  Icons.closed_caption_outlined,
+                  Icons.speed,
+                  Icons.fullscreen_rounded,
+                ]),
+              ],
             ),
           ),
           labTag(

@@ -244,8 +244,8 @@ flags over `mydia/native-tab-bar` (`glassAccessibility`,
 
 ## OSD
 
-The playback OSD (`GlassSurface.osd`, `GlassSurface.osdPill`, the scrim, the
-play disc and the scrubber knob) follows `OsdGlass.of(context)`, which returns
+The playback OSD's surfaces (`GlassSurface.osd`, `GlassSurface.osdPill` and
+the touch transport's play disc) follow `OsdGlass.of(context)`, which returns
 one of three `OsdGlassMode`s. Call sites do not choose; they build the same
 widgets and the surface picks the recipe.
 
@@ -274,10 +274,21 @@ them, and they would render `sampled` on macOS over a video they cannot sample.
 `OsdGlass.of` also works in the many tests that pump an OSD widget with no
 `ProviderScope`.
 
-**The scrim.** In the glass modes `ChromeScrim` is a pure gradient from
-`DepthTokens.osdLiquidScrimOpacity` (0.35, the HIG's dimming figure) at the
-screen edge to nothing, with no plateau. A glass pill over a flat dark band has
-nothing to refract and disappears. `off` keeps the plateau in the OSD fill.
+**What is glass.** Every OSD pill goes through `GlassSurface.osdPill`: the top
+bar's back and title pill and its actions pill (`ChromeTopBar`), the corner
+overlays and skip segment (`GlassPill`), the touch transport's skip pills and
+play disc, and the up next prompt's buttons. Panels (`GlassSurface.osd`) are
+up next, stats, and the OSD's sheets and dialogs. The bottom bar has no pill:
+its timecodes, scrubber, volume, transport and secondary cluster sit straight
+on the scrim, and its play/pause is `ControlButton`'s filled light disc in
+every mode.
+
+**The scrim.** `ChromeScrim` is one band at the bottom in every mode: an eased
+fade into a plateau in the OSD fill, solid behind the bar. There is no top band;
+the top bar's pills carry their own fill. The plateau stays on Liquid Glass
+because text and glyphs are drawn straight on it, so legibility outranks pills
+seeing video there. An earlier glass-mode gradient with no plateau was dropped
+for that reason (see the spec's "Revision after #1525").
 
 **Dry glass.** `DryLiquidGlass` paints a fixed tint, the top and bottom catch
 light, a rim lit at the top and bottom, and the press glow, from the same
@@ -290,17 +301,17 @@ catch light's peak, `osdDryCatchLightAlpha`, is the largest value that keeps
 those ratios. Tune the shape of the rim and light by eye; change an alpha only
 with the sweep.
 
-**The scrubber.** The track, the timecodes and the subtitles never take glass
-(Infuse removed a glass seek bar for distracting the picture). The knob is the
-`clear` profile, kept at the thumb's size so the layout does not move. Where
-there is no shader to refract with (dry, or the program is missing) it is a
-white fill at `liquidKnobFillOpacity`, as in `GlassSlider`.
+**The scrubber.** The track, the thumb, the timecodes and the subtitles never
+take glass (Apple's player and Infuse keep the seek bar off glass; Infuse
+removed one for distracting the picture). The scrubber and the volume slider
+keep Material's white thumb in every mode: a clear knob over the white played
+track refracts white into white and vanishes.
 
 The touch transport's play disc is a circular `osdPill` with a white glyph on
-glass: the dark glyph it has on the opaque disc would vanish. Each bar's
-adjacent buttons already share one `osdPill` around a `Row`, which keeps a
-phone's visible glass to a handful of surfaces (each lens costs two backdrop
-passes, see "Two backdrop passes").
+glass: the dark glyph it has on the opaque disc would vanish. Adjacent buttons
+share one `osdPill` around a `Row`, which keeps a phone's visible glass to a
+handful of surfaces (each lens costs two backdrop passes, see "Two backdrop
+passes").
 
 The `osd` lab scene shows both modes over a bright and a dark frame (see
 "Visual diff"). White glyphs must clear 4.5:1 and icons 3:1 over greys 0 to 1
