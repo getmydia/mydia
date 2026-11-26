@@ -278,7 +278,7 @@ Tune `DryLiquidGlass`'s light and rim by eye until it reads as the same system a
 - [ ] **Step 3: Update `docs/liquid-glass.md`**
 
 - Replace the sentence at line 17 (the OSD never uses Liquid Glass).
-- Add an "OSD" section: the three modes and their gate, the app-level host and why (sheets and dialogs are separate routes), the gradient-only scrim at 0.35, dry glass, and the clear scrubber knob kept at the thumb's size.
+- Add an "OSD" section: the three modes and their gate, the app-level host and why (sheets and dialogs are separate routes), the bottom scrim keeping its plateau in every mode, dry glass, and the scrubber and volume thumbs staying white (per the spec's "Revision after #1525").
 - Add the two new files to the piece table.
 
 - [ ] **Step 4: Check on devices (manual; record results in the PR)**
