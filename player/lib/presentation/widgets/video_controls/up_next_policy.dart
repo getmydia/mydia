@@ -27,7 +27,11 @@ const upNextFallbackWindow = Duration(seconds: 60);
 /// Scenes have no credits segment, and many run under a minute, so the
 /// fixed 60s window would put the prompt up at the start of a short clip
 /// and the countdown would leave it while still playing. The lower bound
-/// keeps the countdown able to finish on a clip of any length.
+/// keeps the prompt up long enough to read on a clip of any length.
+///
+/// The window only decides when the prompt appears. A scene never leaves on
+/// a timer: its ring tracks the scene's own time left, and the next scene
+/// starts when the file actually ends (UpNextController.onPlaybackCompleted).
 Duration sceneUpNextWindow(Duration duration) {
   final tenth = duration * 0.1;
   if (tenth < kUpNextCountdown) return kUpNextCountdown;

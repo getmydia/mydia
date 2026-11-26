@@ -39,7 +39,22 @@ class UpNextCountdown extends ChangeNotifier {
     this.raceGuard = const Duration(seconds: 1),
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now,
-       _remaining = total;
+       _remaining = total,
+       _tracking = false;
+
+  /// A countdown that mirrors time left in the media instead of keeping its
+  /// own: [setRemaining] moves it, it runs no timer, and it never fires
+  /// [onElapsed]. For a scene of a sequence, where auto-play waits for the
+  /// file to actually end, so a pause, seek or buffer stall moves the ring
+  /// with the video rather than a wall-clock timer leaving early.
+  UpNextCountdown.tracking({required this.total})
+    : onElapsed = _never,
+      raceGuard = Duration.zero,
+      _clock = DateTime.now,
+      _remaining = total,
+      _tracking = true;
+
+  static void _never() {}
 
   final Duration total;
 
@@ -55,6 +70,7 @@ class UpNextCountdown extends ChangeNotifier {
   final Duration raceGuard;
 
   final DateTime Function() _clock;
+  final bool _tracking;
   final Set<UpNextHold> _holds = <UpNextHold>{};
 
   Timer? _ticker;
@@ -74,6 +90,7 @@ class UpNextCountdown extends ChangeNotifier {
   bool get isHeld => _holds.isNotEmpty;
 
   void start() {
+    if (_tracking) return;
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
   }
@@ -86,6 +103,18 @@ class UpNextCountdown extends ChangeNotifier {
     if (!_holds.remove(reason)) return;
     notifyListeners();
     if (_remaining <= Duration.zero) _maybeElapse();
+  }
+
+  /// Sets the time left, for a [UpNextCountdown.tracking] countdown, clamped
+  /// to zero and [total].
+  void setRemaining(Duration remaining) {
+    assert(_tracking, 'setRemaining is for a tracking countdown');
+    final clamped = remaining < Duration.zero
+        ? Duration.zero
+        : (remaining > total ? total : remaining);
+    if (clamped == _remaining) return;
+    _remaining = clamped;
+    notifyListeners();
   }
 
   /// Records that the viewer did something. Resets the [raceGuard] window.
@@ -119,7 +148,7 @@ class UpNextCountdown extends ChangeNotifier {
   }
 
   void _maybeElapse() {
-    if (_finished || isHeld) return;
+    if (_tracking || _finished || isHeld) return;
     final last = _lastInput;
     if (last != null && _clock().difference(last) <= raceGuard) {
       // Inside the guard. Leave the ticker running; the next tick retries.

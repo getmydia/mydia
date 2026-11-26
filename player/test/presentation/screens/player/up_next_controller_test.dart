@@ -39,6 +39,7 @@ class _Harness {
     this.downloadedSource = false,
     this.playing,
     this.episode = true,
+    this.sceneNavigation,
   }) {
     controller = UpNextController(
       fetchSeason: (season) async {
@@ -49,7 +50,10 @@ class _Harness {
       navigate: (episodeId, fileId, title, {required seasonNumber}) async {
         navigations.add((episodeId, fileId, title, seasonNumber));
       },
-      navigateSequence: (n) async => sceneNavigations.add(n),
+      navigateSequence: (n) async {
+        sceneNavigations.add(n);
+        await sceneNavigation?.call();
+      },
       playingSignal: () => playing,
       isEpisode: () => episode,
       hasShow: () => true,
@@ -65,6 +69,9 @@ class _Harness {
   final bool downloadedSource;
   final PlayingSignal? playing;
   final bool episode;
+
+  /// Awaited by each sequence navigation, to hold one in flight.
+  final Future<void> Function()? sceneNavigation;
   late final UpNextController controller;
   final sceneNavigations = <SequenceNeighbour>[];
   final fetchedSeasons = <int>[];
@@ -150,6 +157,13 @@ void main() {
       expect(h.navigations.single.$4, 1);
       h.controller.dispose();
     });
+  });
+
+  test('completion does nothing for an episode', () {
+    final h = _Harness();
+    h.controller.setSeason(season, currentEpisodeId: 's1e1');
+    h.controller.onPlaybackCompleted();
+    expect(h.navigations, isEmpty);
   });
 
   test('cancel stops the countdown synchronously and blocks auto-play', () {
@@ -287,30 +301,175 @@ void main() {
       h.controller.dispose();
     });
 
-    test('the countdown navigates to the next scene', () {
+    test('no amount of wall-clock time advances before the scene ends', () {
       fakeAsync((async) {
         final h = _Harness(episode: false);
         h.controller.setSequence(SequenceNeighbours(next: next));
+        h.controller.trackScene(
+          position: const Duration(seconds: 270),
+          duration: const Duration(seconds: 300),
+        );
         h.controller.onPositionTick();
-        async.elapse(kUpNextCountdown + const Duration(seconds: 2));
-        expect(h.sceneNavigations, [next]);
+        expect(h.controller.showing, isTrue);
+        async.elapse(const Duration(minutes: 5));
+        async.flushMicrotasks();
+        expect(h.sceneNavigations, isEmpty);
         h.controller.dispose();
       });
     });
 
-    test('after a cancel the countdown does not navigate, a manual next '
+    test('the ring tracks the scene remaining over its window', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      // 300s scene: a 30s window.
+      h.controller.trackScene(
+        position: const Duration(seconds: 270),
+        duration: const Duration(seconds: 300),
+      );
+      h.controller.onPositionTick();
+      expect(h.controller.countdown?.fraction, 1.0);
+      h.controller.trackScene(
+        position: const Duration(seconds: 285),
+        duration: const Duration(seconds: 300),
+      );
+      expect(h.controller.countdown?.fraction, closeTo(0.5, 0.001));
+      expect(h.controller.countdown?.remaining, const Duration(seconds: 15));
+      h.controller.dispose();
+    });
+
+    test('completion advances to the next scene, once', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      h.controller.onPositionTick();
+      h.controller.onPlaybackCompleted();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [next]);
+      h.controller.dispose();
+    });
+
+    test('completion advances even when the prompt never showed', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [next]);
+    });
+
+    test('after a cancel completion does not navigate, a manual next '
         'does', () {
-      fakeAsync((async) {
-        final h = _Harness(episode: false);
-        h.controller.setSequence(SequenceNeighbours(next: next));
-        h.controller.onPositionTick();
-        h.controller.cancel();
-        async.elapse(kUpNextCountdown + const Duration(seconds: 2));
-        expect(h.sceneNavigations, isEmpty);
-        h.controller.playNext();
-        expect(h.sceneNavigations, [next]);
-        h.controller.dispose();
-      });
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      h.controller.onPositionTick();
+      h.controller.cancel();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, isEmpty);
+      h.controller.playNext();
+      expect(h.sceneNavigations, [next]);
+      h.controller.dispose();
+    });
+
+    test('reset lets a new file advance on completion again', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      h.controller.onPlaybackCompleted();
+      h.controller.reset();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [next, next]);
+    });
+
+    test('a completion well before the end is a dead stream, not an end', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(next: next));
+      h.controller.trackScene(
+        position: const Duration(seconds: 120),
+        duration: const Duration(seconds: 300),
+      );
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, isEmpty);
+
+      h.controller.trackScene(
+        position: const Duration(milliseconds: 298500),
+        duration: const Duration(seconds: 300),
+      );
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [next]);
+    });
+
+    test('completion does not start a second navigation while a manual '
+        'one is in flight', () async {
+      final inFlight = Completer<void>();
+      var fail = false;
+      final h = _Harness(
+        episode: false,
+        sceneNavigation: () async {
+          await inFlight.future;
+          if (fail) throw StateError('route failed');
+        },
+      );
+      h.controller.setSequence(
+        SequenceNeighbours(previous: previous, next: next),
+      );
+      h.controller.playPrevious();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous]);
+
+      // The previous navigation fails without leaving: auto-advance is
+      // available again for this file.
+      fail = true;
+      inFlight.complete();
+      await pumpEventQueue();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous, next]);
+    });
+
+    test('after a manual navigation succeeds, completion stays blocked '
+        'until the next file', () async {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(
+        SequenceNeighbours(previous: previous, next: next),
+      );
+      h.controller.playPrevious();
+      await pumpEventQueue();
+      // Routed, but the old file is still up until the switch lands.
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous]);
+
+      h.controller.reset();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous, next]);
+    });
+
+    test(
+      'a navigation failing after a reset does not unblock a newer one',
+      () async {
+        final first = Completer<void>();
+        final second = Completer<void>();
+        final gates = [first, second];
+        var calls = 0;
+        final h = _Harness(
+          episode: false,
+          sceneNavigation: () => gates[calls++].future,
+        );
+        h.controller.setSequence(
+          SequenceNeighbours(previous: previous, next: next),
+        );
+        h.controller.playPrevious();
+        h.controller.reset();
+        h.controller.playPrevious();
+
+        first.completeError(StateError('stale route failed'));
+        await pumpEventQueue();
+        h.controller.onPlaybackCompleted();
+        expect(h.sceneNavigations, [previous, previous]);
+        second.complete();
+        await pumpEventQueue();
+      },
+    );
+
+    test('without a next scene, completion does nothing', () {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(SequenceNeighbours(previous: previous));
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, isEmpty);
     });
 
     test('clearSequence returns to season mode', () {

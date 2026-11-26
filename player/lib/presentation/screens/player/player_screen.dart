@@ -3299,6 +3299,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _mediaSessionSubscriptions.addAll([
       player.stream.buffering.listen(announce),
       player.stream.completed.listen(announce),
+      // A scene of a sequence moves on only here, at the real end of the
+      // file; see [UpNextController.onPlaybackCompleted].
+      player.stream.completed.listen((completed) {
+        if (!completed || !mounted || _switchingSource) return;
+        // Fresh from the player: a position event still queued behind this
+        // one must not leave the controller judging a stale position.
+        _trackScene(player);
+        _upNext.onPlaybackCompleted();
+      }),
       player.stream.volume.listen(announce),
       player.stream.duration.listen(announce),
     ]);
@@ -3992,6 +4001,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _publishNowPlaying();
   }
 
+  void _trackScene(Player player) {
+    if (!_upNext.hasSequence) return;
+    _upNext.trackScene(
+      position: _timeline.toReal(player.state.position),
+      duration: _timeline.resolveDuration(player.state.duration),
+    );
+  }
+
   void _onPlaybackProgress() {
     final player = _player;
     if (player == null || !mounted) return;
@@ -4012,6 +4029,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _timeline.toReal(player.state.position),
       seekToReal,
     );
+
+    _trackScene(player);
 
     // Offer the next episode once real credits are known to have started;
     // only a file with no detected credits segment falls back to a fixed
@@ -4322,14 +4341,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
+  /// Counts [_navigateToSequence] calls; see the last-wins check there.
+  int _sequenceNavigationRequest = 0;
+
   /// Same shape as [_navigateToEpisode], for a neighbour of the sequence.
   Future<void> _navigateToSequence(SequenceNeighbour neighbour) async {
     // Captured before the await: a file switch during the save rebinds
     // [_session], and the neighbour belongs to the session it came from.
     final session = _session;
     final generation = _loadGeneration;
+    // Last request wins: two started close together (an end of scene and a
+    // tap, or a double tap) both pass the generation check, and the one whose
+    // save resolves last would otherwise decide the route.
+    final request = ++_sequenceNavigationRequest;
     await _saveProgress();
-    if (!mounted || generation != _loadGeneration) return;
+    if (!mounted ||
+        generation != _loadGeneration ||
+        request != _sequenceNavigationRequest) {
+      return;
+    }
     context.go(session.sequenceLocation(neighbour));
   }
 
