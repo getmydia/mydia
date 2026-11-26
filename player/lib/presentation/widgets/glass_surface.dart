@@ -9,10 +9,16 @@ import '../../core/theme/liquid_glass/glass_style.dart';
 import '../../core/theme/liquid_glass/liquid_glass_profile.dart';
 import '../../core/theme/liquid_glass/liquid_glass_support.dart';
 import '../../core/theme/palette.dart';
+import 'glass/dry_liquid_glass.dart';
 import 'glass/liquid_glass_filter.dart';
+import 'glass/osd_glass.dart';
 
 /// Which ambient tint colour a glass surface fills with.
 enum GlassTint { ground, surface }
+
+/// The OSD surface's Liquid Glass role: a pill takes the lens and the control
+/// tokens, a panel (card, sheet, dialog) the panel profile and modal tokens.
+enum OsdRole { pill, panel }
 
 /// A single reusable frosted-glass surface that subsumes the player's three
 /// ad-hoc `BackdropFilter` variants (app bar, modal, card hover overlay), plus
@@ -56,6 +62,11 @@ enum GlassTint { ground, surface }
 /// [shadows] casts its profile's shadow ([LiquidGlassProfile.shadow]). The
 /// app bar is not glass but Apple's scroll edge: a plain blur under a ground
 /// gradient ([liquidScrollEdge]).
+///
+/// [GlassSurface.osd] and [GlassSurface.osdPill] follow `OsdGlass.of`: off
+/// keeps the dark card, sampled takes the Liquid Glass recipe, and dry (macOS
+/// surface output, no shader) paints `DryLiquidGlass`. Their shadows are kept
+/// in every mode.
 /// See `player/docs/liquid-glass.md`.
 class GlassSurface extends StatelessWidget {
   /// Gaussian blur sigma applied behind the surface. Ignored when [live] is
@@ -102,7 +113,8 @@ class GlassSurface extends StatelessWidget {
   /// Tint opacity on the Liquid Glass recipe. Null means this surface never
   /// takes it: only [GlassSurface.appBar], [GlassSurface.chrome],
   /// [GlassSurface.sidebar], [GlassSurface.modal] and [GlassSurface.control]
-  /// set it, so the OSD, faux and hover overlay are excluded by construction.
+  /// set it, so faux and the hover overlay are excluded by construction. The
+  /// OSD takes glass through [osdRole] instead.
   final double? liquidTintOpacity;
 
   /// Upper bound the Liquid Glass tint may adapt to; null keeps it fixed.
@@ -115,6 +127,10 @@ class GlassSurface extends StatelessWidget {
   /// The Liquid Glass material: the lens for controls and pills, the panel
   /// for dialogs, sheets and the floating sidebar. Ignored off Liquid Glass.
   final LiquidGlassProfile liquidProfile;
+
+  /// Set by [GlassSurface.osd] and [GlassSurface.osdPill]; picks the glass
+  /// tokens and profile when `OsdGlass.of` is not off.
+  final OsdRole? osdRole;
 
   final Widget? child;
 
@@ -135,6 +151,7 @@ class GlassSurface extends StatelessWidget {
     this.liquidAdaptiveMax,
     this.liquidScrollEdge = false,
     this.liquidProfile = LiquidGlassProfile.lens,
+    this.osdRole,
     this.child,
   });
 
@@ -324,8 +341,10 @@ class GlassSurface extends StatelessWidget {
   ///
   /// A dense dark card ([DepthTokens.osdFillOpacity]) over a light backdrop
   /// blur, with a uniform hairline and a drop shadow sized by [elevation].
-  /// It renders the same on every platform: no quality tiers and no package
-  /// shaders.
+  /// Without Liquid Glass (see `OsdGlass.of`) it renders this card on every
+  /// platform: no quality tiers and no package shaders. On iOS and macOS in
+  /// the liquid style it is panel glass instead: the shader over the video,
+  /// or `DryLiquidGlass` where the video cannot be sampled. The shadow stays.
   ///
   /// The shadow sits outside the clip and also beneath the translucent fill,
   /// so it darkens the video the blur samples. That is part of the look;
@@ -354,6 +373,9 @@ class GlassSurface extends StatelessWidget {
            width: DepthTokens.rimWidth,
          ),
          shadows: elevation.shadows,
+         liquidProfile: LiquidGlassProfile.panel,
+         liquidAdaptiveMax: DepthTokens.liquidModalAdaptiveMax,
+         osdRole: OsdRole.panel,
          child: child,
        );
 
@@ -362,7 +384,8 @@ class GlassSurface extends StatelessWidget {
   ///
   /// The scrim behind the bars (`ChromeScrim`) already darkens the video, so
   /// a [BackdropFilter] per pill would cost a blur pass for no visible gain.
-  /// Sits at the pill elevation ([OsdElevation.pill]).
+  /// Sits at the pill elevation ([OsdElevation.pill]). On Liquid Glass it is
+  /// lens glass (sampled or dry) with the same pill shadow.
   GlassSurface.osdPill({Key? key, BorderRadius? borderRadius, Widget? child})
     : this(
         key: key,
@@ -379,11 +402,20 @@ class GlassSurface extends StatelessWidget {
           width: DepthTokens.rimWidth,
         ),
         shadows: OsdElevation.pill.shadows,
+        liquidAdaptiveMax: DepthTokens.liquidControlAdaptiveMax,
+        osdRole: OsdRole.pill,
         child: child,
       );
 
   @override
   Widget build(BuildContext context) {
+    final role = osdRole;
+    if (role != null) {
+      final mode = OsdGlass.of(context);
+      if (mode != OsdGlassMode.off) {
+        return _withShadow(_osdGlass(context, role, mode), shadows);
+      }
+    }
     final base = _baseColor(context);
     final liquidOpacity = liquidTintOpacity;
     final alpha = paletteBorderAlpha;
@@ -416,6 +448,33 @@ class GlassSurface extends StatelessWidget {
         fillColor ??
         (gradient != null ? null : base?.withValues(alpha: tintOpacity));
     return _withShadow(_surface(fill, resolvedBorder), cast);
+  }
+
+  Widget _osdGlass(BuildContext context, OsdRole role, OsdGlassMode mode) {
+    final access = GlassAccessibilityScope.of(context);
+    final pill = role == OsdRole.pill;
+    final profile = pill ? LiquidGlassProfile.lens : LiquidGlassProfile.panel;
+    if (mode == OsdGlassMode.dry) {
+      return RepaintBoundary(
+        child: DryLiquidGlass(
+          borderRadius: borderRadius,
+          tint: DepthTokens.osdTint.withValues(
+            alpha: DepthTokens.osdDryTintOpacity,
+          ),
+          profile: profile,
+          increaseContrast: access.increaseContrast,
+          child: child,
+        ),
+      );
+    }
+    return _liquid(
+      context,
+      DepthTokens.osdTint,
+      pill
+          ? DepthTokens.liquidControlTintOpacity
+          : DepthTokens.liquidModalTintOpacity,
+      access,
+    );
   }
 
   /// The shadows this surface casts. A Liquid Glass styled surface with no

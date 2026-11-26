@@ -220,6 +220,41 @@ void main() {
     }
   });
 
+  group('OSD sampled', () {
+    // The OSD tints with osdTint, not the ambient surface, and its labels are
+    // white. The scrim gets no credit: this is the conservative case.
+    final osdRoles = <String, (double, double, double)>{
+      'pill': (
+        DepthTokens.liquidControlTintOpacity,
+        DepthTokens.liquidControlAdaptiveMax,
+        LiquidGlassProfile.lens.brightness,
+      ),
+      'panel': (
+        DepthTokens.liquidModalTintOpacity,
+        DepthTokens.liquidModalAdaptiveMax,
+        LiquidGlassProfile.panel.brightness,
+      ),
+    };
+    osdRoles.forEach((name, role) {
+      final (base, max, lift) = role;
+      test('$name: white labels clear 4.5:1 and icons 3:1 at every grey', () {
+        for (final v in greys) {
+          final alpha = liquidAdaptiveAlpha(
+            base: base,
+            max: max,
+            backdropLuma: v,
+          );
+          final bg = _overGrey(DepthTokens.osdTint, alpha, v, lift);
+          expect(
+            contrastRatio(Colors.white, bg),
+            greaterThanOrEqualTo(4.5),
+            reason: '$name label at grey $v',
+          );
+        }
+      });
+    });
+  });
+
   group('OSD dry', () {
     // Dry glass has no backdrop to adapt to, so one fixed tint must hold over
     // every grey the video can show.
