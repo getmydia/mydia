@@ -78,6 +78,7 @@ import '../../../core/cast/cast_session_manager.dart';
 import '../../../core/cast/cast_target.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../l10n/l10n.dart';
+import '../../widgets/glass/osd_glass.dart';
 import '../../widgets/resume_dialog.dart';
 import '../../widgets/subtitle_track_selector.dart';
 import '../../widgets/audio_track_selector.dart';
@@ -374,6 +375,36 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [VideoOutputPath.surface]. Null on the texture path, which has
   /// `_videoController` instead; never both.
   MpvSurfaceBinding? _surfaceBinding;
+
+  /// Captured in [initState], where `ref` is still safe: [dispose] cannot read
+  /// it.
+  late final VideoSurfaceOutputNotifier _surfaceOutput;
+
+  /// The only writer of [_surfaceBinding] outside [dispose]: the OSD's glass
+  /// mode follows whether the macOS surface, which the shader cannot sample,
+  /// holds the video.
+  void _setSurfaceBinding(MpvSurfaceBinding? binding) {
+    _surfaceBinding = binding;
+    if (binding != null) {
+      _surfaceOutputOwner = this;
+    } else if (identical(_surfaceOutputOwner, this)) {
+      _surfaceOutputOwner = null;
+    }
+    _publishSurfaceOutput();
+  }
+
+  /// The screen whose surface the OSD flag describes. A newer screen can
+  /// publish before an older one finishes disposing, so a screen only
+  /// retracts what it owns.
+  static _PlayerScreenState? _surfaceOutputOwner;
+
+  /// Deferred: this runs from `didUpdateWidget` and `dispose`, which Riverpod
+  /// refuses provider writes from (`player/docs/riverpod.md`). The value is
+  /// read when the microtask runs, so a later change always wins.
+  void _publishSurfaceOutput() {
+    final surfaceOutput = _surfaceOutput;
+    Future.microtask(() => surfaceOutput.set(_surfaceOutputOwner != null));
+  }
 
   /// This screen's place in [PlayerExitGuard]: quitting the app disposes the
   /// current player first. See that class for the crash it prevents.
@@ -1281,6 +1312,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     super.initState();
     unawaited(_loadScaling());
     _invalidator = ref.read(invalidatorProvider);
+    _surfaceOutput = ref.read(videoSurfaceOutputProvider.notifier);
     _mediaProxy = ref.read(mediaProxyProvider);
     // The SMB loopback listener heals independently of the media proxy, and
     // each heal only concerns playback through its own listener: any other
@@ -3050,7 +3082,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _player = null;
       _videoController = null;
       final binding = _surfaceBinding;
-      _surfaceBinding = null;
+      _setSurfaceBinding(null);
       releaseHlsEngine(player);
       await binding?.detach();
       await player.dispose();
@@ -3168,7 +3200,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
       _surfaceStarting = player;
       _fallbackAfterSurfaceStart = null;
-      if (mounted) setState(() => _surfaceBinding = surfaceBinding);
+      if (mounted) setState(() => _setSurfaceBinding(surfaceBinding));
     } else {
       _videoController = VideoController(
         player,
@@ -5742,6 +5774,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _videoController = null;
     final surfaceBinding = _surfaceBinding;
     _surfaceBinding = null;
+    if (identical(_surfaceOutputOwner, this)) {
+      _surfaceOutputOwner = null;
+      _publishSurfaceOutput();
+    }
     // Before `dispose()`, or the hls.js media_kit leaks restarts playback on
     // the detached element, and again once it completes, because an `open()`
     // queued on media_kit's lock can attach a new hls.js after the first
@@ -6165,7 +6201,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player = null;
     _videoController = null;
     final surfaceBinding = _surfaceBinding;
-    _surfaceBinding = null;
+    _setSurfaceBinding(null);
     if (player != null) _endSurfaceStart(player);
 
     await _positionSubscription?.cancel();
