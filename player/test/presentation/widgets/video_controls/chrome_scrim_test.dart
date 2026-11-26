@@ -1,6 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:player/core/theme/app_theme.dart';
 import 'package:player/core/theme/depth_tokens.dart';
+import 'package:player/core/theme/liquid_glass/liquid_glass_support.dart';
+import 'package:player/core/theme/palette.dart';
+import 'package:player/presentation/widgets/glass/osd_glass.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
 
 const _size = Size(800, 450);
@@ -96,4 +101,59 @@ void main() {
     await tester.tapAt(origin + const Offset(10, 440));
     expect(taps, 2);
   });
+
+  for (final entry in const {
+    'sampled': (TargetPlatform.iOS, false),
+    'dry': (TargetPlatform.macOS, true),
+  }.entries) {
+    testWidgets('${entry.key} glass: pure gradient, no plateau', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = entry.value.$1;
+      LiquidGlassSupport.debugOverride = true;
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+            home: OsdGlassScope(
+              surfaceOutput: entry.value.$2,
+              child: Center(
+                child: SizedBox(
+                  width: _size.width,
+                  height: _size.height,
+                  child: const Stack(
+                    children: [ChromeScrim(topHeight: 60, bottomHeight: 120)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final edge = DepthTokens.osdTint.withValues(
+          alpha: DepthTokens.osdLiquidScrimOpacity,
+        );
+        final fade = ChromeScrim.fadeExtentFor(_size.height);
+
+        final top = _gradient(tester, ChromeScrim.topKey);
+        expect(top.colors, [edge, transparent]);
+        expect(top.stops, [0, 1]);
+        expect(
+          tester.getRect(find.byKey(ChromeScrim.topKey)).height,
+          60 + fade,
+        );
+
+        final bottom = _gradient(tester, ChromeScrim.bottomKey);
+        expect(bottom.colors, [transparent, edge]);
+        expect(bottom.stops, [0, 1]);
+        expect(
+          tester.getRect(find.byKey(ChromeScrim.bottomKey)).height,
+          120 + fade,
+        );
+        expect(DepthTokens.osdLiquidScrimOpacity, 0.35);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        LiquidGlassSupport.debugOverride = null;
+      }
+    });
+  }
 }

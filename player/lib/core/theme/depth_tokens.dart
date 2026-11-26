@@ -175,6 +175,11 @@ abstract final class DepthTokens {
   /// Opacity of the OSD fill.
   static const double osdFillOpacity = 0.85;
 
+  /// Opacity of [osdTint] at the screen edge of the playback scrim when the OSD
+  /// is on Liquid Glass (the HIG's figure). The scrim is a pure gradient from
+  /// here to nothing, so glass pills have real video under them.
+  static const double osdLiquidScrimOpacity = 0.35;
+
   /// Opacity of [osdTint] on dry glass (the macOS native video surface, where
   /// no backdrop can be sampled). Fixed: there is no luma to adapt to, so it
   /// must hold over every grey the video can show. Smallest multiple of 0.05

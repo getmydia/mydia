@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/depth_tokens.dart';
+import '../glass/osd_glass.dart';
 
 /// The darkening behind the playback bars: one band at the top, one at the
 /// bottom, each solid behind its bar and fading to nothing beyond it.
@@ -50,16 +51,55 @@ class ChromeScrim extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final glass = OsdGlass.of(context) != OsdGlassMode.off;
     final plateau = DepthTokens.osdTint.withValues(
       alpha: DepthTokens.osdFillOpacity,
     );
     return Positioned.fill(
       child: IgnorePointer(
         child: LayoutBuilder(
-          builder: (context, constraints) =>
-              _bands(plateau, fadeExtentFor(constraints.maxHeight)),
+          builder: (context, constraints) => glass
+              ? _glassBands(fadeExtentFor(constraints.maxHeight))
+              : _bands(plateau, fadeExtentFor(constraints.maxHeight)),
         ),
       ),
+    );
+  }
+
+  /// Liquid Glass modes: no plateau, just the edge opacity fading to nothing
+  /// over each bar's height plus [fadeExtent].
+  Widget _glassBands(double fadeExtent) {
+    final edge = DepthTokens.osdTint.withValues(
+      alpha: DepthTokens.osdLiquidScrimOpacity,
+    );
+    Widget band(Key key, List<Color> colors) => DecoratedBox(
+      key: key,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: colors,
+          stops: const [0, 1],
+        ),
+      ),
+    );
+    return Stack(
+      children: [
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: topHeight + fadeExtent,
+          child: band(topKey, [edge, _transparent]),
+        ),
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: bottomHeight + fadeExtent,
+          child: band(bottomKey, [_transparent, edge]),
+        ),
+      ],
     );
   }
 
