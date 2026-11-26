@@ -326,3 +326,20 @@ test('assertFeedInvariants rejects an item of unknown kind', async () => {
 
   assert.throws(() => assertFeedInvariants(items), /unknown kind/)
 })
+
+test('buildDevItems keeps the newest of two entries sharing a build number', () => {
+  // build-number.sh lowercases the prerelease and makes its dot optional, so
+  // 1.2.3-rc13 and 1.2.3-rc.13 are different index rows with one build
+  // number. Both reaching the feed would fail assertFeedInvariants and stop
+  // every feed deploy until five newer builds pruned them.
+  const { items, warnings } = buildDevItems([
+    devBuild({ version: '1.2.3-rc13', file: 'macos/old.dmg', published_at: '2026-11-25T10:00:00Z' }),
+    devBuild({ version: '1.2.3-rc.13', file: 'macos/new.dmg', published_at: '2026-11-26T10:00:00Z' }),
+  ])
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].enclosure.url, 'https://dl.mydia.dev/macos/new.dmg')
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /macos\/old\.dmg/)
+  assert.doesNotThrow(() => assertFeedInvariants(items))
+})

@@ -198,6 +198,8 @@ export function buildDevItems(devBuilds) {
     }
 
     items.push({
+      file,
+      publishedAt: devBuild.published_at,
       title: `Dev build ${devBuild.version}`,
       version: String(devBuild.build),
       shortVersionString: devBuild.version,
@@ -214,7 +216,26 @@ export function buildDevItems(devBuilds) {
     })
   }
 
-  return { items, warnings }
+  // build-number.sh lowercases the prerelease and makes its dot optional, so
+  // two index rows with different version strings can share a build number.
+  // Keep the newest and warn about the rest: two items with one
+  // sparkle:version would fail assertFeedInvariants and stop every feed
+  // deploy until newer builds pruned them from the index.
+  const newestByVersion = new Map()
+  for (const item of items) {
+    const held = newestByVersion.get(item.version)
+    if (!held || Date.parse(item.publishedAt) > Date.parse(held.publishedAt)) {
+      if (held) warnings.push(`dev build ${held.file}: skipped, build ${held.version} is also ${item.file}, which is newer`)
+      newestByVersion.set(item.version, item)
+    } else {
+      warnings.push(`dev build ${item.file}: skipped, build ${item.version} is also ${held.file}, which is newer`)
+    }
+  }
+
+  return {
+    items: [...newestByVersion.values()].map(({ file, publishedAt, ...item }) => item),
+    warnings,
+  }
 }
 
 /**
