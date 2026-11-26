@@ -183,6 +183,16 @@ abstract final class DepthTokens {
   /// "OSD dry" sweep in `liquid_glass_legibility_test.dart`, not by eye.
   static const double osdDryTintOpacity = 0.60;
 
+  /// Opacity of [osdTint] on dry OSD panels (cards, sheets, dialogs, stats).
+  /// Panels draw `textSecondary` as well as white, and no backdrop adapts, so
+  /// the fixed tint must clear every preset's `textSecondary` at 3:1 and
+  /// white at 4.5:1 over every grey from 0 to 1 with the catch light
+  /// composited. Smallest multiple of 0.05 that does: 0.75 leaves the worst
+  /// preset at 2.67:1, 0.80 at 3.20:1 (white 9.2:1). Set by the "OSD dry
+  /// panel" sweep in `liquid_glass_legibility_test.dart`. Pills draw only
+  /// white glyphs and keep [osdDryTintOpacity].
+  static const double osdDryPanelTintOpacity = 0.80;
+
   /// Peak alpha of the white top and bottom catch light on dry glass, painted
   /// under the content. Worst case is white video: the 0.60 tint gives
   /// ~#6D6C6C, and the catch light lightens that at the glass ends. White

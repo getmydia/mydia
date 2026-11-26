@@ -255,6 +255,58 @@ void main() {
     });
   });
 
+  group('OSD panel secondary text', () {
+    // Panels (dialogs, pickers, stats) draw textSecondary, so every preset's
+    // must hold 3:1 and white 4.5:1 across the sweep.
+    for (final preset in ThemePreset.values) {
+      final palette = preset.palette(systemAccent: Palettes.macosDefaultAccent);
+      test('${preset.name}: sampled', () {
+        for (final v in greys) {
+          final alpha = liquidAdaptiveAlpha(
+            base: DepthTokens.liquidModalTintOpacity,
+            max: DepthTokens.liquidModalAdaptiveMax,
+            backdropLuma: v,
+          );
+          final bg = _overGrey(
+            DepthTokens.osdTint,
+            alpha,
+            v,
+            LiquidGlassProfile.panel.brightness,
+          );
+          expect(
+            contrastRatio(palette.textSecondary, bg),
+            greaterThanOrEqualTo(3.0),
+            reason: 'secondary at grey $v',
+          );
+        }
+      });
+
+      test('${preset.name}: dry', () {
+        for (final v in greys) {
+          final bg = Color.alphaBlend(
+            Colors.white.withValues(alpha: DepthTokens.osdDryCatchLightAlpha),
+            _overGrey(
+              DepthTokens.osdTint,
+              DepthTokens.osdDryPanelTintOpacity,
+              v,
+              0,
+            ),
+          );
+          expect(
+            contrastRatio(palette.textSecondary, bg),
+            greaterThanOrEqualTo(3.0),
+            reason: 'secondary at grey $v',
+          );
+          expect(
+            contrastRatio(Colors.white, bg),
+            greaterThanOrEqualTo(4.5),
+            reason: 'label at grey $v',
+          );
+        }
+      });
+    }
+  });
+
   group('OSD dry', () {
     // Dry glass has no backdrop to adapt to, so one fixed tint must hold over
     // every grey the video can show.

@@ -459,7 +459,9 @@ class GlassSurface extends StatelessWidget {
         child: DryLiquidGlass(
           borderRadius: borderRadius,
           tint: DepthTokens.osdTint.withValues(
-            alpha: DepthTokens.osdDryTintOpacity,
+            alpha: pill
+                ? DepthTokens.osdDryTintOpacity
+                : DepthTokens.osdDryPanelTintOpacity,
           ),
           profile: profile,
           increaseContrast: access.increaseContrast,

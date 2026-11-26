@@ -136,6 +136,12 @@ void main() {
         );
         d = tester.widget<DryLiquidGlass>(find.byType(DryLiquidGlass));
         expect(d.profile, LiquidGlassProfile.panel);
+        expect(
+          d.tint,
+          DepthTokens.osdTint.withValues(
+            alpha: DepthTokens.osdDryPanelTintOpacity,
+          ),
+        );
         expect(find.byType(LiquidGlassFilter), findsNothing);
         expect(_shadows(tester), DepthTokens.osdShadowPanel);
       });
