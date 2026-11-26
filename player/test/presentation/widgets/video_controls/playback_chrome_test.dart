@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/focus/focus_memory.dart';
 import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/core/player/subtitle_position.dart';
@@ -14,6 +15,7 @@ import 'package:player/presentation/widgets/video_controls/buffering_indicator.d
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_subtitle_lift.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
@@ -1182,7 +1184,10 @@ void main() {
       expect(350 - lift.bottoms.last, lessThanOrEqualTo(bar.top));
       expect(
         lift.bottoms.last,
-        closeTo(56 + ChromeSubtitleLift.compactGap, 0.5),
+        closeTo(
+          CompactChromeBottomBar.height + ChromeSubtitleLift.compactGap,
+          0.5,
+        ),
       );
     });
   });
@@ -1273,7 +1278,7 @@ void main() {
         expect(find.byType(TouchTransport), findsOneWidget);
         expect(
           tester.getSize(find.byType(CompactChromeBottomBar)).height,
-          closeTo(56, 0.5),
+          closeTo(CompactChromeBottomBar.height, 0.5),
         );
       });
 
@@ -1570,4 +1575,141 @@ void main() {
               'playback_chrome_tv_test.dart covers the remote one'
         : false,
   );
+
+  group('PlaybackChrome title block', () {
+    late Player player;
+    late _RecordingSubtitleLift lift;
+
+    setUp(() {
+      player = Player(platformPlayer: _FakePlatformPlayer());
+    });
+
+    tearDown(() {
+      InputCapabilities.debugTouchPrimaryOverride = null;
+      return player.dispose();
+    });
+
+    Widget chrome({String? title, String? kicker}) => _host(
+      PlaybackChrome(
+        player: player,
+        timeline: StreamTimeline.zero,
+        onSeekToReal: (_) async {},
+        title: title,
+        kicker: kicker,
+        subtitleLift: lift,
+      ),
+    );
+
+    Future<void> pumpChrome(
+      WidgetTester tester, {
+      required bool touch,
+      required Size size,
+      String? title = 'The Lantern Coast',
+      String? kicker,
+    }) async {
+      InputCapabilities.debugTouchPrimaryOverride = touch;
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      lift = _RecordingSubtitleLift();
+      await tester.pumpWidget(chrome(title: title, kicker: kicker));
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    testWidgets('renders one title inside the bottom bar region', (
+      tester,
+    ) async {
+      await pumpChrome(
+        tester,
+        touch: false,
+        size: const Size(1280, 720),
+        kicker: 'S2, E4 · Low Tide',
+      );
+
+      expect(find.byKey(ChromeTopBar.titleKey), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(FocusMemoryRegion),
+          matching: find.byKey(ChromeTopBar.titleKey),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ChromeBottomBar),
+          matching: find.byKey(ChromeTitleBlock.kickerKey),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a kicker arriving does not move the bar', (tester) async {
+      await pumpChrome(tester, touch: false, size: const Size(1280, 720));
+      final before = tester.getRect(find.byType(ChromeBottomBar));
+
+      await tester.pumpWidget(
+        chrome(title: 'The Lantern Coast', kicker: 'S2, E4 · Low Tide'),
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(tester.getRect(find.byType(ChromeBottomBar)), before);
+      expect(find.byKey(ChromeTitleBlock.kickerKey), findsOneWidget);
+    });
+
+    testWidgets('the bar is the same height with and without a title', (
+      tester,
+    ) async {
+      await pumpChrome(
+        tester,
+        touch: false,
+        size: const Size(1280, 720),
+        title: null,
+      );
+      final without = tester.getRect(find.byType(ChromeBottomBar));
+      expect(find.byKey(ChromeTopBar.titleKey), findsNothing);
+
+      await tester.pumpWidget(chrome(title: 'The Lantern Coast'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.getRect(find.byType(ChromeBottomBar)), without);
+    });
+
+    testWidgets('the caption lift grows by exactly the title block extent', (
+      tester,
+    ) async {
+      await pumpChrome(tester, touch: false, size: const Size(1280, 720));
+      final metrics = ChromeMetrics.resolve(
+        width: 1280,
+        height: 720,
+        touchPrimary: false,
+      );
+      final bar = tester.getRect(find.byType(ChromeBottomBar));
+      expect(bar.height, closeTo(metrics.barHeight, 0.01));
+      expect(
+        lift.bottoms.last,
+        closeTo(bar.height + ChromeSubtitleLift.defaultGap, 0.5),
+      );
+      // Without the block the bar would be this much shorter.
+      expect(
+        metrics.barHeight - metrics.titleBlockExtent,
+        closeTo(bar.height - (46 + 6), 0.01),
+      );
+    });
+
+    testWidgets('a phone lands the corner overlays above the taller bar', (
+      tester,
+    ) async {
+      await pumpChrome(tester, touch: true, size: const Size(760, 350));
+      final metrics = ChromeMetrics.resolve(
+        width: 760,
+        height: 350,
+        touchPrimary: true,
+      );
+      final bar = tester.getRect(find.byType(CompactChromeBottomBar));
+      expect(bar.height, closeTo(94, 0.01));
+      expect(
+        metrics.cornerInsetBottom,
+        closeTo(bar.height + ChromeMetrics.cornerGap, 0.01),
+      );
+    });
+  });
 }

@@ -92,6 +92,7 @@ import '../../widgets/video_controls/chrome_subtitle_lift.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_surface/player_video_surface.dart';
 import '../../widgets/video_controls/playback_chrome.dart';
+import '../../widgets/video_controls/playback_title.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/video_controls/chrome_bottom_bar.dart';
 import '../../widgets/tap_to_play_overlay.dart';
@@ -256,6 +257,27 @@ class PlayerScreen extends ConsumerStatefulWidget {
   static Widget playerFrame({required Widget child}) => Scaffold(
     backgroundColor: Colors.black,
     body: SafeArea(top: false, child: child),
+  );
+
+  /// The loading/error state's top bar: the cast capsule alone.
+  ///
+  /// Public and `@visibleForTesting` so a test can hold its size against the
+  /// playing state's bar without mounting the full screen.
+  @visibleForTesting
+  static Widget castOnlyTopBar(
+    BuildContext context, {
+    required Widget? castAction,
+    required VoidCallback onCastTap,
+  }) => ChromeTopBar(
+    showBack: false,
+    // The same size `PlaybackChrome` gives the bar, so the capsule does not
+    // resize when loading finishes.
+    compact: ChromeMetrics.isCompactTouch(
+      MediaQuery.sizeOf(context),
+      touchPrimary: InputCapabilities.touchPrimary,
+    ),
+    castAction: castAction,
+    onCastTap: onCastTap,
   );
 
   /// Stands in for the platform fullscreen backend while a test is mounted.
@@ -615,6 +637,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// just after `open()` left an empty list with the server's tracks already
   /// discarded, and nothing could rebuild it.
   List<app_models.SubtitleTrack> _serverSubtitleTracks = [];
+
+  /// The detail the OSD's two-line title is resolved from, at build time so
+  /// the wording follows the widget's locale. Null until the detail answers;
+  /// the chrome then falls back to the route string.
+  PlaybackDetail? _osdDetail;
 
   /// The tracks actually offered to the viewer in the subtitle sheet.
   /// Derived: never assigned outside [_applySubtitleTracks].
@@ -1779,6 +1806,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _savedDurationSeconds = null;
     _serverLastWatchedAt = null;
     _runtimeMinutes = null;
+    _osdDetail = null;
     _totalDuration = null;
     _serverSubtitleTracks = [];
     _showId = widget.showId;
@@ -3597,6 +3625,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _refreshSubtitleTracks();
         debugPrint('Extracted ${tracks.length} subtitle tracks from GraphQL');
       }
+      if (mounted) setState(() => _osdDetail = detail);
     } catch (e) {
       debugPrint('Error fetching progress: $e');
     }
@@ -6348,7 +6377,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// when it is most useful.
   ///
   /// Built through `PlayerTopBarSlot`, the same seam `PlaybackChrome` places
-  /// its back/title/cast pills through, so this state's cast pill lands at
+  /// its back disc and action capsules through, so this state's cast pill lands at
   /// the exact spot the playing state's does: level with the window controls
   /// on a windowed desktop, or 16px below the safe area everywhere else. A
   /// second, independently-positioned pill here would drift from that the
@@ -6358,8 +6387,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       children: [
         Positioned.fill(child: child),
         PlayerTopBarSlot(
-          child: ChromeTopBar(
-            showBack: false,
+          child: PlayerScreen.castOnlyTopBar(
+            context,
             castAction: _castSupported ? castChromeActionFor(ref) : null,
             onCastTap: _showCastDevicePicker,
           ),
@@ -6404,10 +6433,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
     }
 
+    // The OSD never shows the "Untitled" fallback: with no usable route
+    // title only a show title (episode) can name the block, and otherwise
+    // it stays empty, as it was before the detail landed.
+    final osdDetail = _osdDetail;
+    final resolvedTitle = osdDetail == null
+        ? null
+        : PlaybackTitle.resolve(
+            routeTitle: widget.title?.trim() ?? '',
+            isEpisode: widget.mediaType == 'episode',
+            detail: osdDetail,
+            l10n: context.l10n,
+          );
+    final osdTitle = resolvedTitle == null || resolvedTitle.title.isEmpty
+        ? null
+        : resolvedTitle;
     final chrome = playbackChromeBuilder(
       timeline: _timeline,
       onSeekToReal: seekToReal,
-      title: widget.title,
+      title: osdTitle?.title ?? widget.title,
+      kicker: osdTitle?.kicker,
       chromeVisibility: _chromeVisibility,
       playPauseFocusNode: _osdPlayPauseFocus,
       chromeFocusNode: _chromeFocusNode,
@@ -6505,6 +6550,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       width: MediaQuery.sizeOf(context).width,
       height: MediaQuery.sizeOf(context).height,
       touchPrimary: InputCapabilities.touchPrimary,
+      remote: InputCapabilities.directionalPrimary,
     );
 
     return Stack(

@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:player/presentation/widgets/glass_surface.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
 
 class _InitProbe extends StatefulWidget {
   const _InitProbe({required this.onInit});
@@ -32,6 +35,7 @@ Widget _host(
   double transportWidth = 48,
   Widget secondary = _secondary,
   bool controlsFirst = false,
+  Widget? title,
 }) => MaterialApp(
   home: Scaffold(
     body: Align(
@@ -49,9 +53,31 @@ Widget _host(
         volume: volume,
         secondary: secondary,
         controlsFirst: controlsFirst,
+        title: title,
       ),
     ),
   ),
+);
+
+Widget _compactHost(ChromeMetrics metrics, {Widget? title}) => MaterialApp(
+  home: Scaffold(
+    body: Align(
+      alignment: Alignment.bottomCenter,
+      child: CompactChromeBottomBar(
+        metrics: metrics,
+        elapsed: const Text('00:05', key: Key('e')),
+        remaining: const Text('-24:50', key: Key('r')),
+        scrubber: const SizedBox(key: Key('s')),
+        title: title,
+      ),
+    ),
+  ),
+);
+
+ChromeTitleBlock _block(ChromeMetrics metrics) => ChromeTitleBlock(
+  title: 'The Lantern Coast',
+  kicker: 'S2, E4 · Low Tide',
+  tier: metrics.titleTier,
 );
 
 void _setView(WidgetTester tester, double width, [double height = 600]) {
@@ -116,7 +142,7 @@ void main() {
       );
       expect(m.showVolume, isFalse);
       expect(m.horizontalPadding, 12);
-      expect(m.barHeight, 56);
+      expect(m.barHeight, 94);
       expect(
         m.barHeight,
         ChromeBottomBar.heightFor(touchTargets: true, compactTouch: true),
@@ -137,6 +163,101 @@ void main() {
     test('cornerInsetBottom is barHeight plus the gap', () {
       final m = ChromeMetrics.forWidth(1280);
       expect(m.cornerInsetBottom, m.barHeight + ChromeMetrics.cornerGap);
+    });
+  });
+
+  group('ChromeBottomBar title block', () {
+    // (label, width, height, touch, remote)
+    const tiers = <(String, double, double, bool, bool)>[
+      ('pointer', 1280, 800, false, false),
+      ('touch tablet', 800, 800, true, false),
+      ('remote', 1280, 720, false, true),
+    ];
+    for (final t in tiers) {
+      for (final withTitle in [false, true]) {
+        testWidgets('${t.$1}: rendered height is barHeight, title: '
+            '$withTitle', (tester) async {
+          _setView(tester, t.$2, t.$3);
+          final metrics = ChromeMetrics.resolve(
+            width: t.$2,
+            height: t.$3,
+            touchPrimary: t.$4,
+            remote: t.$5,
+          );
+          await tester.pumpWidget(
+            _host(
+              metrics,
+              controlsFirst: t.$5,
+              title: withTitle ? _block(metrics) : null,
+            ),
+          );
+          expect(
+            tester.getSize(find.byType(ChromeBottomBar)).height,
+            closeTo(metrics.barHeight, 0.01),
+          );
+          expect(
+            metrics.titleTier,
+            t.$5 ? ChromeTitleTier.remote : ChromeTitleTier.pointer,
+          );
+        });
+      }
+
+      testWidgets('${t.$1}: block shares the timecode left edge and the '
+          'vertical order is right', (tester) async {
+        _setView(tester, t.$2, t.$3);
+        final metrics = ChromeMetrics.resolve(
+          width: t.$2,
+          height: t.$3,
+          touchPrimary: t.$4,
+          remote: t.$5,
+        );
+        await tester.pumpWidget(
+          _host(metrics, controlsFirst: t.$5, title: _block(metrics)),
+        );
+        final block = tester.getRect(find.byType(ChromeTitleBlock));
+        final elapsed = tester.getRect(find.byKey(const Key('e')));
+        final timeline = tester.getRect(find.byKey(const Key('s')));
+        final control = tester.getRect(find.byKey(const Key('t')));
+        expect(block.left, closeTo(elapsed.left, 0.01));
+        expect(block.bottom, lessThan(math.min(timeline.top, control.top)));
+        if (t.$5) {
+          expect(control.top, lessThan(timeline.top));
+        } else {
+          expect(timeline.top, lessThan(control.top));
+        }
+      });
+    }
+
+    for (final withTitle in [false, true]) {
+      testWidgets('compact: rendered height is barHeight, title: $withTitle', (
+        tester,
+      ) async {
+        _setView(tester, 760, 350);
+        final metrics = ChromeMetrics.resolve(
+          width: 760,
+          height: 350,
+          touchPrimary: true,
+        );
+        await tester.pumpWidget(
+          _compactHost(metrics, title: withTitle ? _block(metrics) : null),
+        );
+        expect(
+          tester.getSize(find.byType(CompactChromeBottomBar)).height,
+          closeTo(metrics.barHeight, 0.01),
+        );
+        expect(metrics.titleTier, ChromeTitleTier.compact);
+        if (withTitle) {
+          expect(
+            tester.getRect(find.byType(ChromeTitleBlock)).left,
+            closeTo(tester.getRect(find.byKey(const Key('e'))).left, 0.01),
+          );
+        }
+      });
+    }
+
+    test('titleBlockExtent is the block plus its gap', () {
+      final m = ChromeMetrics.forWidth(1280);
+      expect(m.titleBlockExtent, 46 + 6);
     });
   });
 

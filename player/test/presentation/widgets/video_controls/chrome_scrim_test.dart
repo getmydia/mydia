@@ -84,10 +84,11 @@ void main() {
     expect(slope(fadeEnd ~/ 2), greaterThan(linearSlope));
   });
 
-  test('the fade is 120 px, or 12 % of the height when that is shorter', () {
-    expect(ChromeScrim.maxFadeExtent, 120);
-    expect(ChromeScrim.fadeExtentFor(1080), 120);
-    expect(ChromeScrim.fadeExtentFor(1000), 120);
+  test('the fade is 160 px, or 12 % of the height when that is shorter', () {
+    expect(ChromeScrim.maxFadeExtent, 160);
+    expect(ChromeScrim.fadeExtentFor(1400), 160);
+    expect(ChromeScrim.fadeExtentFor(1080), closeTo(129.6, 1e-9));
+    expect(ChromeScrim.fadeExtentFor(1000), closeTo(120, 1e-9));
     expect(ChromeScrim.fadeExtentFor(390), closeTo(46.8, 1e-9));
     expect(ChromeScrim.fadeExtentFor(320), closeTo(38.4, 1e-9));
   });
@@ -119,5 +120,117 @@ void main() {
     await tester.tapAt(origin + Offset(_size.width / 2, _size.height / 2));
     await tester.tapAt(origin + const Offset(10, 440));
     expect(taps, 2);
+  });
+
+  group('alphaAt', () {
+    const cases = [
+      (height: 1080.0, title: 52.0, plateau: 140.0),
+      (height: 800.0, title: 52.0, plateau: 140.0),
+      (height: 350.0, title: 38.0, plateau: 110.0),
+      (height: 2160.0, title: 68.0, plateau: 200.0),
+    ];
+
+    for (final c in cases) {
+      test(
+        'one non-increasing curve at ${c.height} with a ${c.title} title',
+        () {
+          double at(double y) => ChromeScrim.alphaAt(
+            y,
+            plateau: c.plateau,
+            titleHeight: c.title,
+            height: c.height,
+          );
+          final top =
+              c.plateau +
+              ChromeScrim.extentAbovePlateau(
+                height: c.height,
+                titleHeight: c.title,
+              );
+          var previous = at(0);
+          expect(previous, DepthTokens.osdFillOpacity);
+          for (var y = 2.0; y <= c.height; y += 2) {
+            final a = at(y);
+            expect(a, lessThanOrEqualTo(previous + 1e-12), reason: 'y=$y');
+            previous = a;
+          }
+          expect(at(c.plateau), DepthTokens.osdFillOpacity);
+          expect(
+            at(c.plateau + c.title),
+            greaterThanOrEqualTo(DepthTokens.osdTitleScrimOpacity - 1e-9),
+          );
+          expect(at(top), 0);
+          expect(at(top + 10), 0);
+        },
+      );
+    }
+
+    test('without a title it is today\'s band: plateau, then the fade', () {
+      const height = 800.0;
+      final fade = ChromeScrim.fadeExtentFor(height);
+      expect(
+        ChromeScrim.extentAbovePlateau(height: height, titleHeight: 0),
+        fade,
+      );
+      double at(double y) =>
+          ChromeScrim.alphaAt(y, plateau: 120, titleHeight: 0, height: height);
+      expect(at(120), DepthTokens.osdFillOpacity);
+      expect(at(120 + fade), 0);
+      expect(
+        at(120 + fade / 2),
+        closeTo(DepthTokens.osdFillOpacity * 0.5, 1e-9),
+      );
+    });
+
+    test('the ease fraction lands on the title opacity', () {
+      final t = ChromeScrim.titleEaseFraction;
+      expect(
+        DepthTokens.osdFillOpacity * (1 - Curves.easeInOut.transform(t)),
+        closeTo(DepthTokens.osdTitleScrimOpacity, 5e-3),
+      );
+    });
+
+    testWidgets('the painted gradient samples alphaAt at every stop', (
+      tester,
+    ) async {
+      const plateauHeight = 140.0;
+      const titleHeight = 52.0;
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 800,
+              height: 450,
+              child: Stack(
+                children: [
+                  ChromeScrim(
+                    bottomHeight: plateauHeight,
+                    titleHeight: titleHeight,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      final gradient = _gradient(tester);
+      final total = tester.getRect(find.byKey(ChromeScrim.bottomKey)).height;
+      expect(gradient.colors.length, ChromeScrim.fadeSteps + 2);
+      for (var i = 0; i < gradient.colors.length; i++) {
+        final fromBottom = total * (1 - gradient.stops![i]);
+        expect(
+          gradient.colors[i].a,
+          closeTo(
+            ChromeScrim.alphaAt(
+              fromBottom,
+              plateau: plateauHeight,
+              titleHeight: titleHeight,
+              height: 450,
+            ),
+            1e-6,
+          ),
+          reason: 'stop $i',
+        );
+      }
+    });
   });
 }

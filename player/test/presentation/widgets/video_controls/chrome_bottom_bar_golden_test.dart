@@ -8,8 +8,9 @@
 //
 // LIMITATION: there is no `flutter_test_config.dart` in this project, so
 // `MaterialIcons` never loads in the test binding and every glyph renders as
-// its fallback "tofu" box. These goldens freeze bar geometry, the pill
-// material and the scrim; glyph identity is `icon_family_test.dart`'s job.
+// its fallback "tofu" box. These goldens freeze bar geometry, the title
+// block, the pill material and the scrim; glyph identity is
+// `icon_family_test.dart`'s job.
 
 @TestOn('mac-os')
 // Out of very_good's bundle, where @TestOn no longer applies and these
@@ -25,6 +26,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 import 'package:player/presentation/widgets/video_controls/video_progress_bar.dart';
@@ -59,7 +61,12 @@ Widget _bar(double width) {
                 ),
               ),
             ),
-            ChromeScrim(bottomHeight: metrics.barHeight),
+            // As `PlaybackChrome` builds it: solid behind the bar without its
+            // title block, eased across the block.
+            ChromeScrim(
+              bottomHeight: metrics.barHeight - metrics.titleBlockExtent,
+              titleHeight: metrics.titleBlockExtent,
+            ),
             Positioned(
               left: 0,
               right: 0,
@@ -71,6 +78,11 @@ Widget _bar(double width) {
               // passes them, and the scrubber at `metrics.touchTargets`.
               child: ChromeBottomBar(
                 metrics: metrics,
+                title: ChromeTitleBlock(
+                  title: 'The Lantern Coast',
+                  kicker: 'S2, E4 \u00b7 Low Tide',
+                  tier: metrics.titleTier,
+                ),
                 elapsed: const Text(
                   '12:34',
                   style: TextStyle(color: Colors.white),

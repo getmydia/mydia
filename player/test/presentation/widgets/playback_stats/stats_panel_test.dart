@@ -278,13 +278,16 @@ void main() {
       width: width,
       height: 1080,
       touchPrimary: false,
+      remote: true,
     ).cornerInsetBottom;
     final viewport = Size(
       width,
-      StatsMetrics.tvMinHeight + StatsMetrics.topInset + cornerInsetBottom,
+      StatsMetrics.tvMinHeight +
+          StatsMetrics.topInsetFor(compactTouch: false) +
+          cornerInsetBottom,
     );
 
-    await pumpPanel(
+    final metrics = await pumpPanel(
       tester,
       viewport: viewport,
       tv: true,
@@ -293,6 +296,11 @@ void main() {
       onClose: () {},
     );
 
+    expect(
+      metrics.density,
+      StatsDensity.tv,
+      reason: 'the fixture must land on the tv tier, not fall back',
+    );
     expect(tester.takeException(), isNull);
     expect(panelScrollable(tester).position.maxScrollExtent, 0);
   });

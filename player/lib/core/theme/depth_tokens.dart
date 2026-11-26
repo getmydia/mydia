@@ -175,10 +175,19 @@ abstract final class DepthTokens {
   /// Opacity of the OSD fill.
   static const double osdFillOpacity = 0.85;
 
+  /// Opacity of [osdTint] the bottom scrim still has at the top edge of the
+  /// title block, the lightest scrim any title text overlaps. Set by the
+  /// "title block on the scrim" cases in `osd_legibility_test.dart` and the
+  /// "OSD title on the scrim" sweep in `liquid_glass_legibility_test.dart`.
+  /// Smallest multiple of 0.02 from 0.60 that clears them: at 0.64 the kicker
+  /// (white at 0.78) misses 4.5:1 over pure white, at 0.66 it measures 4.71:1
+  /// and the title (white at 0.95) 6.05:1.
+  static const double osdTitleScrimOpacity = 0.66;
+
   /// Opacity of [osdTint] on dry glass (the macOS native video surface, where
   /// no backdrop can be sampled). Fixed: there is no luma to adapt to, so it
   /// must hold over every grey the video can show. Pills draw white at
-  /// 0.80 to 1.0 alpha (the back chevron and top-bar text are the faintest)
+  /// 0.80 to 1.0 alpha (the back chevron and the top bar's glyphs are the faintest)
   /// and `textPrimary`, so the limit is white at 0.80 over pure white video.
   /// Smallest multiple of 0.05 that keeps every one at 4.5:1: at 0.65 the
   /// 0.80 white measures 4.14:1, at 0.70 4.82:1 (full white 6.4:1). Set by the

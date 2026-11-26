@@ -29,9 +29,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
+import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -228,11 +230,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      // The playing state: back pill, a title, and a cast pill.
+      // The playing state: back disc and a cast pill.
       final playing = await castRectFor(
         tester,
         chromeTopBar: ChromeTopBar(
-          title: 'Fictional Show S01E02',
           onBack: () {},
           castAction: const Icon(Icons.cast),
           onCastTap: () {},
@@ -241,7 +242,7 @@ void main() {
         paddingTop: kMacTitleBarOverlap,
       );
 
-      // `_withCastAffordance`'s exact shape: no back pill, no title, cast
+      // `_withCastAffordance`'s exact shape: no back disc, cast
       // only.
       final loadingOrError = await castRectFor(
         tester,
@@ -257,11 +258,56 @@ void main() {
       expect(loadingOrError, playing);
     });
 
+    testWidgets('matches on a touch phone, where the bar is compact', (
+      tester,
+    ) async {
+      InputCapabilities.debugTouchPrimaryOverride = true;
+      addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+      tester.view.physicalSize = const Size(760, 350);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      // The playing state, as `PlaybackChrome` builds it on a phone.
+      final playing = await castRectFor(
+        tester,
+        chromeTopBar: ChromeTopBar(
+          onBack: () {},
+          compact: true,
+          castAction: const Icon(Icons.cast),
+          onCastTap: () {},
+        ),
+        insets: WindowChromeInsets.zero,
+        paddingTop: 0,
+      );
+
+      // The loading/error state, built by the real production seam.
+      late Widget loadingBar;
+      await tester.pumpWidget(
+        Builder(
+          builder: (context) {
+            loadingBar = PlayerScreen.castOnlyTopBar(
+              context,
+              castAction: const Icon(Icons.cast),
+              onCastTap: () {},
+            );
+            return const SizedBox();
+          },
+        ),
+      );
+      final loadingOrError = await castRectFor(
+        tester,
+        chromeTopBar: loadingBar,
+        insets: WindowChromeInsets.zero,
+        paddingTop: 0,
+      );
+
+      expect(loadingOrError, playing);
+    });
+
     testWidgets('matches with no window chrome to clear', (tester) async {
       final playing = await castRectFor(
         tester,
         chromeTopBar: ChromeTopBar(
-          title: 'Fictional Show S01E02',
           onBack: () {},
           castAction: const Icon(Icons.cast),
           onCastTap: () {},
@@ -366,6 +412,43 @@ void main() {
           expect(bar.bottom, height - padding.bottom);
         },
       );
+
+      for (final (label, touch, size) in <(String, bool, Size)>[
+        ('pointer', false, const Size(1200, 700)),
+        ('touch tablet', true, const Size(1200, 800)),
+        ('phone', true, const Size(760, 350)),
+      ]) {
+        testWidgets('corner overlays sit above the taller bar: $label', (
+          tester,
+        ) async {
+          InputCapabilities.debugTouchPrimaryOverride = touch;
+          addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(chromeHost());
+          await tester.pumpAndSettle();
+
+          final metrics = ChromeMetrics.resolve(
+            width: size.width,
+            height: size.height,
+            touchPrimary: touch,
+          );
+          final bar = tester.getRect(
+            find.byWidgetPredicate(
+              (w) => w is ChromeBottomBar || w is CompactChromeBottomBar,
+            ),
+          );
+          // What `SkipSegmentButton` and `UpNextPrompt` pad by, resolved
+          // against the safe-area bottom this host adds.
+          final overlayBottom =
+              size.height - (metrics.cornerInsetBottom + padding.bottom);
+          expect(
+            overlayBottom,
+            closeTo(bar.top - ChromeMetrics.cornerGap, 0.01),
+          );
+        });
+      }
 
       testWidgets(
         'the top bar still clears the same left inset the old SafeArea gave '

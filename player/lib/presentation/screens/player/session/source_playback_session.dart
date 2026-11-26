@@ -187,6 +187,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
               format: s.codec ?? 'srt',
             ),
       ];
+      final isEpisode = item.kind == ItemKind.episode;
       return PlaybackDetail(
         savedPositionSeconds: detail.summary.userState.progressSeconds,
         savedDurationSeconds: duration,
@@ -194,10 +195,12 @@ abstract class SourcePlaybackSession implements PlaybackSession {
         // Embedded tracks come from the container through mpv; only
         // sidecars need the server.
         serverSubtitleTracks: external.isEmpty ? null : external,
-        showId: item.kind == ItemKind.episode ? detail.show?.externalId : null,
-        seasonNumber: item.kind == ItemKind.episode
-            ? detail.summary.parentIndex
-            : null,
+        showId: isEpisode ? detail.show?.externalId : null,
+        seasonNumber: isEpisode ? detail.summary.parentIndex : null,
+        showTitle: isEpisode ? detail.summary.showTitle : null,
+        episodeNumber: isEpisode ? detail.summary.index : null,
+        episodeTitle: isEpisode ? detail.summary.title : null,
+        year: detail.summary.year,
       );
     } catch (_) {
       return null;

@@ -275,17 +275,23 @@ them, and they would render `sampled` on macOS over a video they cannot sample.
 `ProviderScope`.
 
 **What is glass.** Every OSD pill goes through `GlassSurface.osdPill`: the top
-bar's back and title pill and its actions pill (`ChromeTopBar`), the corner
+bar's back disc (a circular pill) and its actions capsule (`ChromeTopBar`), the corner
 overlays and skip segment (`GlassPill`), the touch transport's skip pills and
 play disc, and the up next prompt's buttons. Panels (`GlassSurface.osd`) are
 up next, stats, and the OSD's sheets and dialogs. The bottom bar has no pill:
 its timecodes, scrubber, volume, transport and secondary cluster sit straight
 on the scrim, and its play/pause is `ControlButton`'s filled light disc in
-every mode.
+every mode. The title (`ChromeTitleBlock`: a small line over the title, above
+the scrubber) is bare text on the scrim: no glass, no shadow.
 
-**The scrim.** `ChromeScrim` is one band at the bottom in every mode: an eased
-fade into a plateau in the OSD fill, solid behind the bar. There is no top band;
-the top bar's pills carry their own fill. The plateau stays on Liquid Glass
+**The scrim.** `ChromeScrim` is one band at the bottom in every mode: a plateau
+in the OSD fill, solid behind the timeline and control rows, then one
+`Curves.easeInOut` fall to nothing that starts at the plateau's top edge and
+runs across the title block. The ease is stretched so the scrim is still
+`DepthTokens.osdTitleScrimOpacity` (0.66, set by the legibility sweep: 4.71:1
+for the small line, 6.05:1 for the title, over pure white) at the block's top
+edge. `ChromeScrim.alphaAt` is the profile. There is no top band; the top bar's
+pills carry their own fill. The plateau stays on Liquid Glass
 because text and glyphs are drawn straight on it, so legibility outranks pills
 seeing video there. An earlier glass-mode gradient with no plateau was dropped
 for that reason (see the spec's "Revision after #1525").
@@ -308,7 +314,8 @@ with the sweep.
 take glass (Apple's player and Infuse keep the seek bar off glass; Infuse
 removed one for distracting the picture). The scrubber and the volume slider
 keep Material's white thumb in every mode: a clear knob over the white played
-track refracts white into white and vanishes.
+track refracts white into white and vanishes. The scrubber shows no thumb at
+rest (a 4 px track); hover, drag and focus bring the thumb and a 6 px track.
 
 The touch transport's play disc is a circular `osdPill` with a white glyph on
 glass: the dark glyph it has on the opaque disc would vanish. Adjacent buttons
@@ -316,7 +323,8 @@ share one `osdPill` around a `Row`, which keeps a phone's visible glass to a
 handful of surfaces (each lens costs two backdrop passes, see "Two backdrop
 passes").
 
-The `osd` lab scene shows both glass modes over a bright and a dark frame (see
+The `osd` lab scene shows both glass modes over a bright and a dark frame, with
+the real `ChromeScrim`, the title block and the scrubber at rest (see
 "Visual diff"). White glyphs must clear 4.5:1 and icons 3:1 over greys 0 to 1
 in every glass mode; fix tokens, never thresholds. The design is in
 `design/specs/2026-11-25-player-osd-liquid-glass-design.md`.
@@ -433,8 +441,8 @@ renders the lab twice, at `--base` (default: the merge base with
 white strip and the scroll edge), `artwork` (the detail screen's controls over
 painted poster-like art), `panel` (a dialog and the floating sidebar) and
 `osd` (the playback OSD over a bright and a dark frame, each as sampled and as
-dry glass). The `osd` scene is built from the OSD's glass pieces, not the real
-bars, because the scratch project has no Riverpod and no plugins. It
+dry glass). The `osd` scene is built from the OSD's glass pieces and the real
+`ChromeScrim`, not the real bars, because the scratch project has no Riverpod and no plugins. It
 prints a side-by-side per scene and a changed-pixel count. Both sides run the
 staged lab, so the counts compare like with like; when the base cannot compile
 the staged lab (or lacks a file it imports), it falls back to its own lab and

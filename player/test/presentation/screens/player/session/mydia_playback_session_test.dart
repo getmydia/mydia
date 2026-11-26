@@ -291,13 +291,25 @@ void main() {
       final detail = (await _session(server, item: _episode).detail())!;
       expect(detail.showId, 's-1');
       expect(detail.seasonNumber, 4);
+      expect(detail.showTitle, 'Lantern Street s-1');
+      expect(detail.episodeNumber, 2);
+      expect(detail.episodeTitle, 'Low Tide');
+      expect(detail.year, isNull);
     });
 
     test('a movie reports no show or season', () async {
-      final server = _answering(movieDetailResponse(positionSeconds: 1));
+      final base = movieDetailResponse(positionSeconds: 1);
+      final server = _answering({
+        ...base,
+        'movie': {...(base['movie'] as Map<String, dynamic>), 'year': 2024},
+      });
       final detail = (await _session(server).detail())!;
       expect(detail.showId, isNull);
       expect(detail.seasonNumber, isNull);
+      expect(detail.showTitle, isNull);
+      expect(detail.episodeNumber, isNull);
+      expect(detail.episodeTitle, isNull);
+      expect(detail.year, 2024);
     });
   });
 

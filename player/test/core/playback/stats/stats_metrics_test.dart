@@ -1,8 +1,11 @@
-import 'dart:ui' show Size;
-
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:player/core/player/input_capabilities.dart';
+import 'package:player/l10n/l10n.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_bottom_bar.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
+import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 void main() {
   StatsMetrics? resolve(double w, double h, {bool tv = false}) =>
@@ -27,12 +30,33 @@ void main() {
       touchPrimary: true,
     );
 
-    final panelBottom = StatsMetrics.topInset + touch.maxHeight;
+    final panelBottom = touch.top + touch.maxHeight;
     expect(
       viewport.height - touchBar.barHeight - panelBottom,
       greaterThanOrEqualTo(ChromeMetrics.cornerGap),
     );
     expect(touch.maxHeight, lessThan(pointer.maxHeight));
+  });
+
+  // The remote tier's title block is taller, so its bar is too.
+  test('on the remote tier the panel clears the taller remote bar', () {
+    const viewport = Size(1280, 540);
+    final tv = StatsMetrics.resolve(
+      viewport: viewport,
+      directionalPrimary: true,
+    )!;
+    final remoteBar = ChromeMetrics.resolve(
+      width: viewport.width,
+      height: viewport.height,
+      touchPrimary: false,
+      remote: true,
+    );
+    expect(remoteBar.cornerInsetBottom, remoteBar.barHeight + 12);
+    final panelBottom = tv.top + tv.maxHeight;
+    expect(
+      viewport.height - remoteBar.barHeight - panelBottom,
+      greaterThanOrEqualTo(ChromeMetrics.cornerGap),
+    );
   });
 
   // The panel and the bar both sit inside the safe area, so a home
@@ -97,8 +121,8 @@ void main() {
   // the panel would still join D-pad traversal and fight the OSD's focus
   // scope, and that hazard does not care which density branch was taken.
   test('a D-pad viewport that falls through to full still hides buttons', () {
-    // 650 tall, minus the 64px top inset, minus the desktop tier's 174px
-    // corner inset, leaves 412: enough for the full panel, not the tv one.
+    // 650 tall, minus the 68px top inset, minus the desktop tier's 188px
+    // corner inset, leaves 394: enough for the full panel, not the tv one.
     final metrics = resolve(1280, 650, tv: true);
 
     expect(metrics!.density, StatsDensity.full);
@@ -108,18 +132,60 @@ void main() {
   test(
     'a D-pad viewport that falls through to compact still hides buttons',
     () {
-      final metrics = resolve(844, 390, tv: true);
+      // Taller than a landscape phone: the remote bar now carries a
+      // 62px title block, so 390 no longer leaves the compact minimum.
+      final metrics = resolve(844, 440, tv: true);
 
       expect(metrics!.density, StatsDensity.compact);
       expect(metrics.showButtons, isFalse);
     },
   );
 
-  // The panel hangs below the chrome's top pill row, which sits at
-  // `Positioned(top: 16)` inside a SafeArea and is GlassPill.defaultHeight
-  // (36) tall. Anything smaller draws the panel over the title pill.
-  test('the top inset clears the chrome top bar', () {
-    expect(StatsMetrics.topInset, 64.0);
-    expect(resolve(1280, 720)!.top, 64.0);
-  });
+  // The panel hangs 12px below the top bar as the chrome really places it:
+  // the back disc is 40 tall off the phone and 36 on it, and the slot's top
+  // inset differs too. Measured from a real bar rather than from constants.
+  for (final (label, touch, size) in [
+    ('pointer', false, const Size(1280, 720)),
+    ('touch tablet', true, const Size(1200, 800)),
+    ('phone', true, const Size(760, 350)),
+  ]) {
+    testWidgets('the panel sits 12px below the top bar: $label', (
+      tester,
+    ) async {
+      InputCapabilities.debugTouchPrimaryOverride = touch;
+      addTearDown(() => InputCapabilities.debugTouchPrimaryOverride = null);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Stack(
+              children: [
+                PlayerTopBarSlot(
+                  child: ChromeTopBar(
+                    onBack: () {},
+                    compact: ChromeMetrics.isCompactTouch(
+                      size,
+                      touchPrimary: touch,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final barBottom = tester.getRect(find.byKey(ChromeTopBar.backKey)).bottom;
+      final metrics = StatsMetrics.resolve(
+        viewport: size,
+        directionalPrimary: false,
+        touchPrimary: touch,
+      )!;
+      expect(metrics.top - barBottom, 12.0);
+    });
+  }
 }

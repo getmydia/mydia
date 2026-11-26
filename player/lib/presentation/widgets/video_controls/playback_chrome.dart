@@ -24,6 +24,7 @@ import 'buffering_indicator.dart';
 import 'chrome_bottom_bar.dart';
 import 'chrome_scrim.dart';
 import 'chrome_subtitle_lift.dart';
+import 'chrome_title_block.dart';
 import 'chrome_top_bar.dart';
 import 'panel_controls.dart';
 import 'playback_surface.dart';
@@ -614,7 +615,7 @@ class _ChromeToastObstructionState extends State<ChromeToastObstruction> {
 /// every edge, or 8px top and 12px sides on a touch phone, whose landscape
 /// height is short (see `ChromeMetrics.compactTouch`).
 ///
-/// Both [PlaybackChrome] (the playing state's back/title/cast pills) and
+/// Both [PlaybackChrome] (the playing state's back disc and capsules) and
 /// `player_screen.dart`'s `_withCastAffordance` (the loading and error
 /// states' cast-only pill) mount this in its own layer, a sibling of the
 /// `SafeArea` that insets their other content rather than a child inside it:
@@ -633,10 +634,7 @@ class PlayerTopBarSlot extends StatelessWidget {
   final Widget child;
 
   /// Inset from the safe area's top edge with no window chrome to clear.
-  static const double edgeInset = 16;
-
-  /// [edgeInset] on a touch phone, whose landscape height is short.
-  static const double compactTopInset = 8;
+  static const double edgeInset = ChromeTopBar.edgeInset;
 
   /// Side inset on a touch phone, matching its bottom bar's padding.
   static const double compactSideInset = 12;
@@ -650,13 +648,17 @@ class PlayerTopBarSlot extends StatelessWidget {
   static double _top(BuildContext context, WindowChromeInsets insets) =>
       insets.isZero
       ? MediaQuery.paddingOf(context).top +
-            (_compact(context) ? compactTopInset : edgeInset)
-      : (insets.height - GlassPill.defaultHeight) / 2;
+            ChromeTopBar.topInsetFor(compact: _compact(context))
+      : (insets.height - _barHeight(context)) / 2;
+
+  /// The height of the bar this slot places: the back disc's diameter.
+  static double _barHeight(BuildContext context) =>
+      ChromeTopBar.sideFor(compact: _compact(context));
 
   /// Distance from the top of the chrome to the top bar's bottom edge, as
-  /// this slot places a [GlassPill.defaultHeight]-tall bar.
+  /// this slot places it.
   static double bottomEdgeOf(BuildContext context) =>
-      _top(context, WindowChromeInsets.of(context)) + GlassPill.defaultHeight;
+      _top(context, WindowChromeInsets.of(context)) + _barHeight(context);
 
   @override
   Widget build(BuildContext context) {
@@ -682,7 +684,7 @@ class PlayerTopBarSlot extends StatelessWidget {
       );
     }
     // Windowed desktop: sit inside the reserved band, vertically centred on
-    // it (so a 36px `GlassPill` lands level with the traffic lights /
+    // it (so the back disc lands level with the traffic lights /
     // window buttons), clear of whichever corner the controls occupy.
     return PositionedDirectional(
       top: top,
@@ -726,6 +728,9 @@ class PlaybackChrome extends StatefulWidget {
   final Future<void> Function(Duration realTarget) onSeekToReal;
 
   final String? title;
+
+  /// The line above [title] in the bottom bar's title block.
+  final String? kicker;
   final VoidCallback? onBack;
   final Widget? castAction;
   final VoidCallback? onCastTap;
@@ -808,6 +813,7 @@ class PlaybackChrome extends StatefulWidget {
     required this.timeline,
     required this.onSeekToReal,
     this.title,
+    this.kicker,
     this.onBack,
     this.castAction,
     this.onCastTap,
@@ -930,6 +936,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
       width: size.width,
       height: size.height,
       touchPrimary: touch,
+      remote: InputCapabilities.directionalPrimary,
     );
     // A touch phone: one-row bottom bar, track buttons in the top bar.
     final compact = metrics.compactTouch;
@@ -940,6 +947,14 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
     // presses are also the only activity this tier produces, which is what
     // the auto-hide settings below account for.
     final remote = InputCapabilities.directionalPrimary;
+    final titleText = widget.title;
+    final Widget? titleBlock = titleText == null
+        ? null
+        : ChromeTitleBlock(
+            title: titleText,
+            kicker: widget.kicker,
+            tier: metrics.titleTier,
+          );
 
     // The track buttons. In the bottom bar, or on a touch phone in the top
     // bar (see `ChromeMetrics.compactTouch`).
@@ -1046,8 +1061,12 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                   // the home indicator the bar sits above.
                   ChromeScrim(
                     bottomHeight:
-                        metrics.barHeight +
+                        metrics.barHeight -
+                        metrics.titleBlockExtent +
                         MediaQuery.paddingOf(context).bottom,
+                    titleHeight: widget.title == null
+                        ? 0
+                        : metrics.titleBlockExtent,
                   ),
                   SafeArea(
                     child: Stack(
@@ -1124,6 +1143,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                           remaining: remaining,
                                           scrubber: scrubber,
                                           volume: volume,
+                                          title: titleBlock,
                                         )
                                       : ChromeBottomBar(
                                           metrics: metrics,
@@ -1131,6 +1151,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                           // UP from the scrubber reaches the
                                           // remembered control above it.
                                           controlsFirst: remote,
+                                          title: titleBlock,
                                           transport: touch
                                               ? null
                                               : TransportCluster(
@@ -1184,7 +1205,6 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                     child: ChromeSlide(
                       hiddenOffsetY: -6,
                       child: ChromeTopBar(
-                        title: widget.title,
                         showBack: !remote,
                         onBack: widget.onBack,
                         castAction: remote ? null : widget.castAction,

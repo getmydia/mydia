@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/core/theme/theme_preset.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_scrim.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
 import 'package:player/presentation/widgets/video_controls/touch_transport.dart';
 
 import '../../../test_utils/mac_accents.dart';
@@ -98,5 +100,51 @@ void main() {
       ),
       greaterThanOrEqualTo(4.5),
     );
+  });
+
+  // The title is bare text on the scrim. Its top edge, the kicker's too, is
+  // the lightest scrim alpha any title text overlaps, so both lines are rated
+  // there over a pure-white frame.
+  group('title block on the scrim over a pure-white frame', () {
+    const cases = [
+      (name: 'pointer', tier: ChromeTitleTier.pointer, height: 1080.0),
+      (name: 'compact', tier: ChromeTitleTier.compact, height: 350.0),
+      (name: 'remote', tier: ChromeTitleTier.remote, height: 2160.0),
+    ];
+    for (final c in cases) {
+      test('${c.name}: title 3:1, kicker 4.5:1 at the block top', () {
+        final titleHeight =
+            ChromeTitleBlock.heightFor(c.tier) +
+            ChromeTitleBlock.gapFor(c.tier);
+        const plateau = 100.0;
+        final alpha = ChromeScrim.alphaAt(
+          plateau + titleHeight,
+          plateau: plateau,
+          titleHeight: titleHeight,
+          height: c.height,
+        );
+        final bg = compositeOver(
+          DepthTokens.osdTint.withValues(alpha: alpha),
+          Colors.white,
+        );
+        expect(
+          contrastRatio(
+            compositeOver(Colors.white.withValues(alpha: 0.95), bg),
+            bg,
+          ),
+          greaterThanOrEqualTo(3.0),
+        );
+        expect(
+          contrastRatio(
+            compositeOver(
+              Colors.white.withValues(alpha: ChromeTitleBlock.kickerOpacity),
+              bg,
+            ),
+            bg,
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+    }
   });
 }

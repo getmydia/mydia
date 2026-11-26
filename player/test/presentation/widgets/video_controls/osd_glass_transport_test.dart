@@ -154,11 +154,13 @@ void main() {
     }
 
     for (final mode in [_Mode.off, _Mode.sampled, _Mode.dry]) {
-      testWidgets('$mode animates 14 to 18 when focused', (tester) async {
+      testWidgets('$mode grows from nothing to 18 when focused', (
+        tester,
+      ) async {
         await _with(mode, () async {
           await tester.pumpWidget(_host(bar(), mode));
           await tester.pumpAndSettle();
-          expect(tester.getSize(thumb()), const Size(14, 14));
+          expect(tester.getSize(thumb()), Size.zero);
           await tester.pumpWidget(
             _host(
               const ProgressBarSurface(

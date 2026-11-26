@@ -363,6 +363,7 @@ class MydiaPlaybackSession implements PlaybackSession {
           ),
           runtimeMinutes: movie?.runtime,
           serverSubtitleTracks: _subtitlesFor(movie?.files, fileId),
+          year: movie?.year,
         );
       }
       final data = Query$EpisodeDetail.fromJson(
@@ -386,6 +387,9 @@ class MydiaPlaybackSession implements PlaybackSession {
         serverSubtitleTracks: _subtitlesFor(episode?.files, fileId),
         showId: showId,
         seasonNumber: episode?.seasonNumber,
+        showTitle: episode?.$show?.title,
+        episodeNumber: episode?.episodeNumber,
+        episodeTitle: episode?.title,
       );
     } catch (e) {
       debugPrint('Error fetching progress: $e');

@@ -2,17 +2,22 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/l10n/gen/app_localizations.dart';
+import 'package:player/l10n/gen/app_localizations_es.dart';
+import 'package:player/l10n/locale_aliases.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_title_block.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
 import '../../../../test_utils/probed_tracks.dart';
@@ -297,6 +302,108 @@ void main() {
     },
   );
 
+  testWidgets('an episode shows the show name over its code and title', (
+    tester,
+  ) async {
+    final session = _TitledEpisodeSession(
+      const PlaybackDetail(
+        showTitle: 'The Lantern Coast',
+        seasonNumber: 2,
+        episodeNumber: 4,
+        episodeTitle: 'Low Tide',
+      ),
+    );
+    await _pumpEpisode(
+      tester,
+      session,
+      showId: 's1',
+      seasonNumber: 2,
+      title: 'The Lantern Coast S2E4',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      tester.widget<Text>(find.byKey(ChromeTopBar.titleKey)).data,
+      'The Lantern Coast',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(ChromeTitleBlock.kickerKey)).data,
+      'S2, E4 · Low Tide',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('the kicker wording follows a locale change', (tester) async {
+    final locale = ValueNotifier<Locale?>(const Locale('en'));
+    addTearDown(locale.dispose);
+    final session = _TitledEpisodeSession(
+      const PlaybackDetail(
+        showTitle: 'The Lantern Coast',
+        seasonNumber: 2,
+        episodeNumber: 4,
+        episodeTitle: 'Low Tide',
+      ),
+    );
+    await _pumpEpisode(
+      tester,
+      session,
+      showId: 's1',
+      seasonNumber: 2,
+      title: 'The Lantern Coast S2E4',
+      locale: locale,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    String kicker() =>
+        tester.widget<Text>(find.byKey(ChromeTitleBlock.kickerKey)).data!;
+    expect(kicker(), 'S2, E4 · Low Tide');
+
+    locale.value = const Locale('es');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(kicker(), 'T2, E4 · Low Tide');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('a missing detail keeps the route title and no kicker', (
+    tester,
+  ) async {
+    final session = _TitledEpisodeSession(null);
+    await _pumpEpisode(
+      tester,
+      session,
+      showId: 's1',
+      seasonNumber: 2,
+      title: 'The Lantern Coast S2E4',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      tester.widget<Text>(find.byKey(ChromeTopBar.titleKey)).data,
+      'The Lantern Coast S2E4',
+    );
+    expect(find.byKey(ChromeTitleBlock.kickerKey), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('a movie with no route title shows no title and no kicker, '
+      'not the untitled fallback', (tester) async {
+    final session = _TitledEpisodeSession(const PlaybackDetail(year: 2019));
+    await _pumpEpisode(tester, session, mediaType: 'movie');
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(ChromeTopBar.titleKey), findsNothing);
+    expect(find.byKey(ChromeTitleBlock.kickerKey), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
   testWidgets('the route season wins over the detail one', (tester) async {
     final session = _DetailNamesSeasonSession();
     await _pumpEpisode(tester, session, showId: 's1', seasonNumber: 3);
@@ -392,6 +499,23 @@ class _DetailNamesSeasonSession extends _SeasonSession {
   }
 }
 
+/// An episode session whose detail is whatever the test scripts.
+class _TitledEpisodeSession extends FakePlaybackSession {
+  _TitledEpisodeSession(this._detail)
+    : super(
+        item: const ItemRef(
+          sourceId: SourceId('fake'),
+          kind: ItemKind.episode,
+          externalId: 'e1',
+        ),
+      );
+
+  final PlaybackDetail? _detail;
+
+  @override
+  Future<PlaybackDetail?> detail() async => _detail;
+}
+
 class _CastableSession extends FakePlaybackSession {
   @override
   Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
@@ -404,6 +528,9 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   FakePlaybackSession session, {
   String? showId,
   int? seasonNumber,
+  String? title,
+  String mediaType = 'episode',
+  ValueListenable<Locale?>? locale,
 }) async {
   final container = buildPlayerScreenContainer(
     connectionState: HarnessLink.direct(),
@@ -419,7 +546,8 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
         path: '/',
         builder: (_, _) => PlayerScreen(
           mediaId: 'e1',
-          mediaType: 'episode',
+          mediaType: mediaType,
+          title: title,
           fileId: 'f1',
           showId: showId,
           seasonNumber: seasonNumber,
@@ -436,11 +564,18 @@ Future<_RecordingPlatformPlayer> _pumpEpisode(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp.router(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        routerConfig: router,
+      child: ValueListenableBuilder<Locale?>(
+        valueListenable: locale ?? ValueNotifier<Locale?>(null),
+        builder: (_, value, _) => MaterialApp.router(
+          locale: value,
+          localizationsDelegates: [
+            _SpanishCodeDelegate(),
+            ...appLocalizationsDelegates,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          routerConfig: router,
+        ),
       ),
     ),
   );
@@ -506,4 +641,25 @@ void castPillTests() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
+}
+
+/// Serves Spanish with a distinct episode code, so a test can tell whether
+/// the OSD kicker was worded for the current locale. The shipped Spanish
+/// catalog has no override for it and would read the same as English.
+class _SpanishCodeLocalizations extends AppLocalizationsEs {
+  @override
+  String playerEpisodeCode(int season, int episode) => 'T$season, E$episode';
+}
+
+class _SpanishCodeDelegate extends LocalizationsDelegate<AppLocalizations> {
+  @override
+  bool isSupported(Locale locale) => locale.languageCode == 'es';
+
+  @override
+  Future<AppLocalizations> load(Locale locale) =>
+      SynchronousFuture(_SpanishCodeLocalizations());
+
+  @override
+  bool shouldReload(covariant LocalizationsDelegate<AppLocalizations> old) =>
+      false;
 }
