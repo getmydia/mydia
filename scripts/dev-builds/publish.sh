@@ -98,8 +98,8 @@ SHA=$(shasum -a 256 "$SOURCE" | cut -d' ' -f1)
 rclone copyto "$SOURCE" "${REMOTE}/${OWN_FILE}"
 
 # Read, amend, write. The index is small and only the dev build publishers
-# write it (serialised by the mydia-dev-builds-index concurrency group in
-# player-ondemand.yml), so a read-modify-write is safe and avoids a bucket
+# write it (serialised by the mydia-dev-builds-index concurrency group on
+# the publish-dev-build jobs of player-android.yml and player-macos.yml), so a read-modify-write is safe and avoids a bucket
 # listing the scoped token may not allow.
 #
 # The exit code alone cannot say whether an index already exists. Against a

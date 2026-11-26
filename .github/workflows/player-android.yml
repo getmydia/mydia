@@ -137,26 +137,6 @@ jobs:
           path: ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
-      - name: Publish the dev build to R2
-        if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
-        env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          VERSION: ${{ inputs.version }}
-          VERSION_CODE: ${{ inputs.version_code }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq && sudo apt-get install -y -qq rclone jq
-          # Upload, index amend, prune and refusal rules all live in the
-          # shared script, which player-macos.yml calls too.
-          DEV_BUILD_PLATFORM=android \
-          DEV_BUILD_SOURCE="${PLAYER_PATH}/build/app/outputs/flutter-apk/app-release.apk" \
-          DEV_BUILD_FILE="android/mydia-player-android-${VERSION}.apk" \
-          DEV_BUILD_VERSION="$VERSION" \
-          DEV_BUILD_NUMBER="$VERSION_CODE" \
-            ./.ci-actions/scripts/dev-builds/publish.sh
-
       - name: Setup Ruby for Fastlane
         if: ${{ inputs.upload_to_play_store && !inputs.dry_run && env.PLAY_STORE_CREDENTIALS != '' }}
         env:
@@ -176,3 +156,60 @@ jobs:
           export GOOGLE_PLAY_JSON_KEY_PATH="$(pwd)/play-store-credentials.json"
           bundle exec fastlane ${{ inputs.play_store_track }}
           rm play-store-credentials.json
+
+  # The R2 dev index publish runs as its own job so that only the few seconds
+  # of index.json read-amend-write hold the shared lock, not the whole build.
+  # Holding it for the build serialised a master dispatch's Android and macOS
+  # builds one after the other. player-macos.yml has the twin of this job.
+  publish-dev-build:
+    name: Publish dev build
+    needs: build
+    # release.yml calls this workflow without publish_dev_build, so a tagged
+    # release never runs this job and never waits on the lock.
+    if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    # Serialises every write to the dev build index.json, across runs, refs
+    # and platforms: publish.sh does an unlocked read-amend-write, so two
+    # concurrent publishes could both read the same index and the later write
+    # would drop the earlier entry while its file stays in the bucket.
+    concurrency:
+      group: mydia-dev-builds-index
+      cancel-in-progress: false
+      # The default (single) cancels a pending job when another joins the
+      # group, so a second platform or dispatch would silently drop one.
+      queue: max
+    steps:
+      # scripts/dev-builds comes from this workflow's own commit, not from
+      # the build target: an older target predates the dev build publisher.
+      - name: Checkout CI scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-actions
+          sparse-checkout: scripts/dev-builds
+          persist-credentials: false
+
+      - name: "Download artifact: APK"
+        uses: actions/download-artifact@v8
+        with:
+          name: mydia-player-android-apk
+          path: apk
+
+      - name: Publish the dev build to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          VERSION: ${{ inputs.version }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone jq
+          # Upload, index amend, prune and refusal rules all live in the
+          # shared script, which player-macos.yml calls too.
+          DEV_BUILD_PLATFORM=android \
+          DEV_BUILD_SOURCE="apk/app-release.apk" \
+          DEV_BUILD_FILE="android/mydia-player-android-${VERSION}.apk" \
+          DEV_BUILD_VERSION="$VERSION" \
+          DEV_BUILD_NUMBER="$VERSION_CODE" \
+            ./.ci-actions/scripts/dev-builds/publish.sh
