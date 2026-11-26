@@ -4316,14 +4316,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
+  /// Counts [_navigateToSequence] calls; see the last-wins check there.
+  int _sequenceNavigationRequest = 0;
+
   /// Same shape as [_navigateToEpisode], for a neighbour of the sequence.
   Future<void> _navigateToSequence(SequenceNeighbour neighbour) async {
     // Captured before the await: a file switch during the save rebinds
     // [_session], and the neighbour belongs to the session it came from.
     final session = _session;
     final generation = _loadGeneration;
+    // Last request wins: two started close together (an end of scene and a
+    // tap, or a double tap) both pass the generation check, and the one whose
+    // save resolves last would otherwise decide the route.
+    final request = ++_sequenceNavigationRequest;
     await _saveProgress();
-    if (!mounted || generation != _loadGeneration) return;
+    if (!mounted ||
+        generation != _loadGeneration ||
+        request != _sequenceNavigationRequest) {
+      return;
+    }
     context.go(session.sequenceLocation(neighbour));
   }
 

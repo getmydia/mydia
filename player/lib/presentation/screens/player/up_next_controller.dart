@@ -84,9 +84,10 @@ class UpNextController {
   /// Whether [onPlaybackCompleted] already advanced out of this file.
   bool _completionHandled = false;
 
-  /// Whether a sequence navigation is under way. The screen saves progress
-  /// before it routes, and a scene ending meanwhile must not start a second
-  /// navigation that lands somewhere the viewer did not ask for.
+  /// Whether a sequence navigation has started for this file (see
+  /// [_goSequence]). The screen saves progress before it routes, and a scene
+  /// ending meanwhile must not start a second navigation that lands somewhere
+  /// the viewer did not ask for.
   bool get _navigatingSequence => _sequenceNavigation != null;
 
   /// The navigation in flight, as an identity token: one settling late after
@@ -461,16 +462,21 @@ class UpNextController {
     );
   }
 
-  /// Navigates to [neighbour], marking the navigation in flight until it
-  /// settles. A failure leaves this file, and its auto-advance, in place.
+  /// Navigates to [neighbour], blocking [onPlaybackCompleted] from then on.
+  ///
+  /// A navigation that routed stays marked until [reset]: the old player is
+  /// still up between the route change and the file switch, and its end must
+  /// not start a second navigation. Only a failure clears the mark, so a
+  /// later end of this file can still advance; the end that already passed
+  /// is not replayed.
   Future<void> _goSequence(SequenceNeighbour neighbour) async {
     final token = Object();
     _sequenceNavigation = token;
     try {
       await navigateSequence(neighbour);
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('[UpNext] Sequence navigation failed: $e');
-    } finally {
+      debugPrintStack(stackTrace: stack);
       if (identical(_sequenceNavigation, token)) _sequenceNavigation = null;
     }
   }

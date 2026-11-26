@@ -421,6 +421,50 @@ void main() {
       expect(h.sceneNavigations, [previous, next]);
     });
 
+    test('after a manual navigation succeeds, completion stays blocked '
+        'until the next file', () async {
+      final h = _Harness(episode: false);
+      h.controller.setSequence(
+        SequenceNeighbours(previous: previous, next: next),
+      );
+      h.controller.playPrevious();
+      await pumpEventQueue();
+      // Routed, but the old file is still up until the switch lands.
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous]);
+
+      h.controller.reset();
+      h.controller.onPlaybackCompleted();
+      expect(h.sceneNavigations, [previous, next]);
+    });
+
+    test(
+      'a navigation failing after a reset does not unblock a newer one',
+      () async {
+        final first = Completer<void>();
+        final second = Completer<void>();
+        final gates = [first, second];
+        var calls = 0;
+        final h = _Harness(
+          episode: false,
+          sceneNavigation: () => gates[calls++].future,
+        );
+        h.controller.setSequence(
+          SequenceNeighbours(previous: previous, next: next),
+        );
+        h.controller.playPrevious();
+        h.controller.reset();
+        h.controller.playPrevious();
+
+        first.completeError(StateError('stale route failed'));
+        await pumpEventQueue();
+        h.controller.onPlaybackCompleted();
+        expect(h.sceneNavigations, [previous, previous]);
+        second.complete();
+        await pumpEventQueue();
+      },
+    );
+
     test('without a next scene, completion does nothing', () {
       final h = _Harness(episode: false);
       h.controller.setSequence(SequenceNeighbours(previous: previous));
