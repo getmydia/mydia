@@ -229,11 +229,10 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      // The playing state: back pill, a title, and a cast pill.
+      // The playing state: back disc and a cast pill.
       final playing = await castRectFor(
         tester,
         chromeTopBar: ChromeTopBar(
-          title: 'Fictional Show S01E02',
           onBack: () {},
           castAction: const Icon(Icons.cast),
           onCastTap: () {},
@@ -242,7 +241,7 @@ void main() {
         paddingTop: kMacTitleBarOverlap,
       );
 
-      // `_withCastAffordance`'s exact shape: no back pill, no title, cast
+      // `_withCastAffordance`'s exact shape: no back disc, cast
       // only.
       final loadingOrError = await castRectFor(
         tester,
@@ -262,7 +261,6 @@ void main() {
       final playing = await castRectFor(
         tester,
         chromeTopBar: ChromeTopBar(
-          title: 'Fictional Show S01E02',
           onBack: () {},
           castAction: const Icon(Icons.cast),
           onCastTap: () {},

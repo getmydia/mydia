@@ -652,12 +652,16 @@ class PlayerTopBarSlot extends StatelessWidget {
       insets.isZero
       ? MediaQuery.paddingOf(context).top +
             (_compact(context) ? compactTopInset : edgeInset)
-      : (insets.height - GlassPill.defaultHeight) / 2;
+      : (insets.height - _barHeight(context)) / 2;
+
+  /// The height of the bar this slot places: the back disc's diameter.
+  static double _barHeight(BuildContext context) =>
+      ChromeTopBar.sideFor(compact: _compact(context));
 
   /// Distance from the top of the chrome to the top bar's bottom edge, as
-  /// this slot places a [GlassPill.defaultHeight]-tall bar.
+  /// this slot places it.
   static double bottomEdgeOf(BuildContext context) =>
-      _top(context, WindowChromeInsets.of(context)) + GlassPill.defaultHeight;
+      _top(context, WindowChromeInsets.of(context)) + _barHeight(context);
 
   @override
   Widget build(BuildContext context) {
@@ -683,7 +687,7 @@ class PlayerTopBarSlot extends StatelessWidget {
       );
     }
     // Windowed desktop: sit inside the reserved band, vertically centred on
-    // it (so a 36px `GlassPill` lands level with the traffic lights /
+    // it (so the back disc lands level with the traffic lights /
     // window buttons), clear of whichever corner the controls occupy.
     return PositionedDirectional(
       top: top,

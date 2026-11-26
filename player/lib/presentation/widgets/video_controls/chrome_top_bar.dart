@@ -35,8 +35,7 @@ class GlassPill extends StatelessWidget {
   final VoidCallback? onTap;
 
   /// Pill height. Defaults to [defaultHeight]; `UpNextPrompt` passes 44 at the
-  /// touch tier so its two hit targets clear the 44px floor. The top bar's
-  /// title pill takes the default.
+  /// touch tier so its two hit targets clear the 44px floor.
   final double height;
 
   const GlassPill({
@@ -46,8 +45,7 @@ class GlassPill extends StatelessWidget {
     this.height = defaultHeight,
   });
 
-  /// Default pill height, shared by the title pill and the top bar's actions
-  /// pill.
+  /// Default pill height, used by the skip and Up Next pills.
   static const double defaultHeight = 36.0;
 
   @override
@@ -93,18 +91,16 @@ class GlassPill extends StatelessWidget {
   }
 }
 
-/// The playback screen's top chrome: one pill holding the back chevron and
-/// the title, and one actions pill holding the scaling and cast controls.
+/// The playback screen's top chrome: a round back disc at the start and, at
+/// the end, a capsule holding the scaling and cast controls (and, on a touch
+/// phone, one holding the track buttons).
 ///
-/// No scrim sits behind it (`ChromeScrim` darkens only the bottom), so the
-/// title lives inside the pill: the OSD fill holds its contrast over a
-/// bright frame, and the rest of the picture stays clear.
+/// No scrim sits behind it (`ChromeScrim` darkens only the bottom), so every
+/// piece is its own OSD pill: the fill holds contrast over a bright frame and
+/// the rest of the picture stays clear. The title lives in the bottom bar's
+/// title block, not here.
 class ChromeTopBar extends StatelessWidget {
-  /// Media title. When null no title text renders and the actions pill
-  /// stays at the end of the row.
-  final String? title;
-
-  /// Back action. When null the back chevron is inert but still rendered.
+  /// Back action. When null the back disc is inert but still rendered.
   final VoidCallback? onBack;
 
   /// Whether the back chevron renders at all.
@@ -141,7 +137,6 @@ class ChromeTopBar extends StatelessWidget {
 
   const ChromeTopBar({
     super.key,
-    this.title,
     this.onBack,
     this.showBack = true,
     this.castAction,
@@ -153,6 +148,9 @@ class ChromeTopBar extends StatelessWidget {
   });
 
   static const Key backKey = Key('chrome-back');
+
+  /// Key of the title text. The top bar draws no title; `ChromeTitleBlock`
+  /// keys its title line with this.
   static const Key titleKey = Key('chrome-title');
   static const Key castKey = Key('chrome-cast');
   static const Key scalingKey = Key('chrome-scaling');
@@ -163,21 +161,14 @@ class ChromeTopBar extends StatelessWidget {
   /// The pill holding [trailing].
   static const Key trailingPillKey = Key('osd-top-trailing');
 
-  /// The pill holding the back chevron and the title.
-  static const Key titlePillKey = Key('osd-top-title');
+  /// The back disc's glass surface. [backKey] is the tap target around it.
+  static const Key backDiscKey = Key('osd-top-back');
 
-  /// Width of the back chevron's tap target inside the title pill.
-  static const double backWidth = 40.0;
+  /// The height of the capsules and the diameter of the back disc: 36 on the
+  /// touch phone, 40 elsewhere.
+  static double sideFor({required bool compact}) => compact ? 36.0 : 40.0;
 
-  /// Inset between the title text and the title pill's edge, and between the
-  /// text and the back target. The chevron's own target supplies most of the
-  /// space on its side, so that gap is narrower.
-  static const double titleInset = 14.0;
-
-  /// Gap between the back target and the title text.
-  static const double titleGap = 2.0;
-
-  /// Gap between the title pill and the other pills.
+  /// Gap between the pills.
   static const double gap = 12.0;
 
   /// [gap] when [compact].
@@ -185,10 +176,10 @@ class ChromeTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleText = title;
     final cast = castAction;
     final l10n = context.l10n;
-    const side = GlassPill.defaultHeight;
+    final side = sideFor(compact: compact);
+    final glyph = compact ? 19.0 : 20.0;
     final gap = compact ? compactGap : ChromeTopBar.gap;
     final trailing = this.trailing;
     final pills = <Widget>[
@@ -220,11 +211,11 @@ class ChromeTopBar extends StatelessWidget {
                       key: scalingKey,
                       icon: scalingIcon(scaling),
                       size: side,
-                      iconSize: 19,
+                      iconSize: glyph,
                       tooltip: scalingTooltip(l10n, scaling),
                       onTap: onScalingTap,
                     ),
-                  if (cast != null) _castButton(cast, side),
+                  if (cast != null) _castButton(cast, side, glyph),
                 ],
               ),
             ),
@@ -233,24 +224,21 @@ class ChromeTopBar extends StatelessWidget {
       ],
     ];
 
-    final titlePill = (showBack || titleText != null)
-        ? _titlePill(titleText, l10n.commonBack)
-        : null;
-
-    // The title pill takes its natural width up to whatever the other pills
-    // leave, ellipsizing past that. Below ~300 px, where the pills alone
-    // would not fit, they scale down rather than overflow, as the bottom
-    // bar's pill does, and the title pill keeps at least the back target.
+    // The capsules take whatever the back disc leaves. Below ~300 px, where
+    // they would not fit, they scale down rather than overflow, as the bottom
+    // bar's pill does.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final reserved = showBack ? backWidth : 0.0;
+        final reserved = showBack ? side : 0.0;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: titlePill ?? const SizedBox.shrink(),
+                child: showBack
+                    ? _backDisc(l10n.commonBack, side)
+                    : const SizedBox.shrink(),
               ),
             ),
             if (pills.isNotEmpty) ...[
@@ -272,55 +260,22 @@ class ChromeTopBar extends StatelessWidget {
     );
   }
 
-  /// The back chevron and the title in one OSD pill. Only the chevron's
-  /// target is the back button; the title is plain text.
-  Widget _titlePill(String? titleText, String backLabel) {
-    const side = GlassPill.defaultHeight;
-    return SizedBox(
-      height: side,
-      child: GlassSurface.osdPill(
-        key: titlePillKey,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showBack) _backButton(backLabel, side),
-            if (titleText != null)
-              Flexible(
-                child: Padding(
-                  padding: EdgeInsetsDirectional.only(
-                    start: showBack ? titleGap : titleInset,
-                    end: titleInset,
-                  ),
-                  child: Text(
-                    titleText,
-                    key: titleKey,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.start,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xD9FFFFFF), // white @ 0.85
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _backButton(String label, double side) {
+  /// The back chevron on a circular OSD pill. The whole disc is the tap
+  /// target.
+  Widget _backDisc(String label, double side) {
     Widget target = SizedBox(
       key: backKey,
-      width: backWidth,
+      width: side,
       height: side,
-      child: const Center(
-        child: Icon(
-          Icons.chevron_left_rounded,
-          size: 22,
-          color: Color(0xCCFFFFFF), // white @ 0.80
+      child: GlassSurface.osdPill(
+        key: backDiscKey,
+        borderRadius: BorderRadius.circular(side / 2),
+        child: const Center(
+          child: Icon(
+            Icons.chevron_left_rounded,
+            size: 22,
+            color: Color(0xCCFFFFFF), // white @ 0.80
+          ),
         ),
       ),
     );
@@ -351,14 +306,14 @@ class ChromeTopBar extends StatelessWidget {
 
   /// The cast affordance in a square tap target. The whole square is the tap
   /// target, not the glyph; with no [onCastTap] it stays inert.
-  Widget _castButton(Widget cast, double side) {
+  Widget _castButton(Widget cast, double side, double glyph) {
     final target = SizedBox(
       key: castKey,
       width: side,
       height: side,
       child: Center(
         child: IconTheme.merge(
-          data: const IconThemeData(size: 19, color: Color(0xEBFFFFFF)),
+          data: IconThemeData(size: glyph, color: const Color(0xEBFFFFFF)),
           child: cast,
         ),
       ),
