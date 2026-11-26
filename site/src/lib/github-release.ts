@@ -1,4 +1,5 @@
 import type { GitHubRelease } from './release-assets';
+import { FEED_URL, parseFeed, type ReleaseFeed } from './release-feed';
 
 const RELEASE_API = 'https://api.github.com/repos/getmydia/mydia/releases/latest';
 
@@ -25,7 +26,7 @@ export async function fetchLatestRelease(): Promise<GitHubRelease | null> {
   const cache = (caches as unknown as { default: Cache }).default;
 
   const cached = await cache.match(CACHE_KEY);
-  if (cached) return safeParse(await cached.text());
+  if (cached) return safeParse(await readBody(cached));
 
   let response: Response;
   try {
@@ -42,7 +43,7 @@ export async function fetchLatestRelease(): Promise<GitHubRelease | null> {
 
   if (!response.ok) return null;
 
-  const body = await response.text();
+  const body = await readBody(response);
   const release = safeParse(body);
   if (!release) return null;
 
@@ -66,5 +67,56 @@ function safeParse(body: string): GitHubRelease | null {
     return Array.isArray(parsed?.assets) ? (parsed as GitHubRelease) : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * updates.mydia.dev/releases.json, the feed behind the player's Release track
+ * setting. Cached for a minute only: dev builds land several times a day, and
+ * the feed itself is a static file on the same CDN.
+ *
+ * Returns null on every failure, like fetchLatestRelease.
+ */
+export async function fetchReleaseFeed(): Promise<ReleaseFeed | null> {
+  const cache = (caches as unknown as { default: Cache }).default;
+
+  const cached = await cache.match(FEED_URL);
+  if (cached) return parseFeed(await readBody(cached));
+
+  let response: Response;
+  try {
+    response = await fetch(FEED_URL, {
+      headers: { 'User-Agent': 'mydia.dev-download-resolver' },
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+
+  const body = await readBody(response);
+  const feed = parseFeed(body);
+  if (!feed) return null;
+
+  await cache.put(
+    FEED_URL,
+    new Response(body, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=60',
+      },
+    }),
+  );
+  return feed;
+}
+
+/**
+ * A body that cannot be read (a dropped connection, bad encoding) parses as
+ * nothing, so callers fall back instead of the route throwing.
+ */
+async function readBody(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return '';
   }
 }

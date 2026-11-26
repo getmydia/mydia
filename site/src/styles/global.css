@@ -96,3 +96,15 @@ body {
   background: radial-gradient(ellipse at center, color-mix(in oklab, var(--color-primary) 35%, transparent), transparent 70%);
   filter: blur(40px);
 }
+
+/* Release track switch on /download. Pure CSS so it works before (or
+   without) the page script: the checked radio decides which panels show. */
+.track-panel {
+  display: none;
+}
+
+#downloads:has(#track-stable:checked) .track-panel[data-track="stable"],
+#downloads:has(#track-beta:checked) .track-panel[data-track="beta"],
+#downloads:has(#track-dev:checked) .track-panel[data-track="dev"] {
+  display: flex;
+}
