@@ -38,8 +38,11 @@ sheets, dialogs and popovers, the primary Play button, the home hero's
 buttons and episode badge, the detail action row, the "Next Up" badge over
 artwork, and the capsule behind the selected season. Content stays solid:
 settings rows, inline buttons, switches, and anything repeated per
-item in a scrolling list. A slider's track stays solid, but the scrubber and
-the volume slider carry a clear glass knob on Liquid Glass (`GlassSlider`). Per-card overlays and metadata chips stay solid
+item in a scrolling list. A slider's track stays solid, but the cast mini
+controller's scrubber carries a clear glass knob on Liquid Glass
+(`GlassSlider`). The playback OSD's scrubber and volume slider keep Material's
+white thumb: a clear knob over a white active track refracts white into white,
+and at full volume it vanished. Per-card overlays and metadata chips stay solid
 because they repeat in scrolling lists and each glass surface costs two
 backdrop passes. The detail action row and the home hero sit in a
 `BackdropGroup`, but only the frosted fallback shares its blur there (see
@@ -155,7 +158,7 @@ live in `LiquidGeometry`.
 | `ToastPill` | min height 48, radius 24, one line centred | unchanged |
 | `BottomNav` | bar min 62, selection pill min 54 inset 4 | unchanged |
 | `GlassIconButton` | 44, clamped to the row height minus 2 x 4 inset when the parent is shorter | Material `IconButton`: 40 visual, 48 tap target |
-| `GlassSlider` | clear 37x24 knob (below); the volume slider is widened by the knob so its track stays 72 | plain Material slider |
+| `GlassSlider` | clear 37x24 knob (below); a slider using it is widened by the knob so its track keeps its length | plain Material slider |
 
 `FloatingRail` is unchanged. It carries labels, and the kit's vertical tab bar
 does not.

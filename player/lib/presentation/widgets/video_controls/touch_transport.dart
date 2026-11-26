@@ -73,10 +73,10 @@ class TouchTransport extends StatelessWidget {
   static const double compactGap = 20;
 
   /// Fill of the play disc (white-ish at 0.95).
-  static const Color playFill = Color(0xF2F0EFED);
+  static const Color playFill = ControlButton.filledFill;
 
   /// Glyph colour on the play disc.
-  static const Color playGlyph = Color(0xFF0B0B0C);
+  static const Color playGlyph = ControlButton.filledGlyph;
 
   static const double _playIconSize = 36;
 

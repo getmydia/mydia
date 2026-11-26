@@ -59,7 +59,7 @@ Widget _bar(double width) {
                 ),
               ),
             ),
-            ChromeScrim(topHeight: 0, bottomHeight: metrics.barHeight),
+            ChromeScrim(bottomHeight: metrics.barHeight),
             Positioned(
               left: 0,
               right: 0,
@@ -71,12 +71,13 @@ Widget _bar(double width) {
               // passes them, and the scrubber at `metrics.touchTargets`.
               child: ChromeBottomBar(
                 metrics: metrics,
-                timecodes: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('12:34', style: TextStyle(color: Colors.white)),
-                    Text('-31:26', style: TextStyle(color: Colors.white)),
-                  ],
+                elapsed: const Text(
+                  '12:34',
+                  style: TextStyle(color: Colors.white),
+                ),
+                remaining: const Text(
+                  '-31:26',
+                  style: TextStyle(color: Colors.white),
                 ),
                 transport: TransportSurface(
                   isPlaying: true,

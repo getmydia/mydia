@@ -1,7 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/layout/breakpoints.dart';
-import '../glass_surface.dart';
 
 /// Responsive sizing for the full-width playback bottom bar.
 ///
@@ -159,18 +158,23 @@ class ChromeMetrics {
 
 /// The full-width playback bottom bar.
 ///
-/// A timecode row, the scrubber, then a control row: volume on the left, the
-/// transport centred, the secondary cluster in a pill on the right. With
-/// [controlsFirst] the control row moves to the top. Slot-based so it can be
-/// tested without a media_kit `Player`.
+/// A timeline row (elapsed, the scrubber, remaining), then a control row:
+/// volume on the left, the transport centred, the secondary cluster on the
+/// right. With [controlsFirst] the control row moves to the top. Every group
+/// sits straight on `ChromeScrim`'s plateau, which is the OSD pill fill, so
+/// none carries a pill of its own. Slot-based so it can be tested without a
+/// media_kit `Player`.
 class ChromeBottomBar extends StatelessWidget {
-  /// Timecode row above the scrubber.
-  final Widget timecodes;
+  /// Elapsed timecode, left of the scrubber.
+  final Widget elapsed;
 
-  /// Scrubber row.
+  /// Remaining timecode, right of the scrubber.
+  final Widget remaining;
+
+  /// Scrubber, taking the width between the timecodes.
   final Widget scrubber;
 
-  /// Right group of the control row, wrapped in a pill by the bar.
+  /// Right group of the control row.
   final Widget secondary;
 
   /// Centre group of the control row.
@@ -197,7 +201,8 @@ class ChromeBottomBar extends StatelessWidget {
   const ChromeBottomBar({
     super.key,
     required this.metrics,
-    required this.timecodes,
+    required this.elapsed,
+    required this.remaining,
     required this.scrubber,
     required this.secondary,
     this.transport,
@@ -208,11 +213,8 @@ class ChromeBottomBar extends StatelessWidget {
   /// Vertical padding above the first row and below the last.
   static const double verticalPadding = 12;
 
-  /// Height of the timecode row. Remote timecodes (18 px) fit.
-  static const double timecodeHeight = 24;
-
-  /// Gap between the timecode row and the scrubber.
-  static const double timecodeGap = 4;
+  /// Gap between a timecode and the scrubber.
+  static const double timecodeGap = 12;
 
   /// Gap between the scrubber and the control row, whichever comes first.
   static const double rowGap = 8;
@@ -227,12 +229,6 @@ class ChromeBottomBar extends StatelessWidget {
   /// Scrubber row height with a fine pointer, matching `ProgressBarSurface`.
   static const double _scrubberFineHeight = 32;
 
-  /// Horizontal inset between the secondary cluster and its pill edge.
-  static const double _pillInset = 4;
-
-  /// Key on the pill wrapping [secondary].
-  static const Key secondaryPillKey = Key('osd-secondary-pill');
-
   /// The bar's rendered height: the sum of the layout constants above, or
   /// with [compactTouch] [CompactChromeBottomBar]'s single row.
   static double heightFor({
@@ -241,24 +237,24 @@ class ChromeBottomBar extends StatelessWidget {
   }) => compactTouch
       ? CompactChromeBottomBar.height
       : verticalPadding * 2 +
-            timecodeHeight +
-            timecodeGap +
             (touchTargets ? _scrubberTouchHeight : _scrubberFineHeight) +
             rowGap +
             controlRowHeight;
 
   @override
   Widget build(BuildContext context) {
-    final timeline = [
-      SizedBox(height: timecodeHeight, child: timecodes),
-      const SizedBox(height: timecodeGap),
-      SizedBox(
-        height: metrics.touchTargets
-            ? _scrubberTouchHeight
-            : _scrubberFineHeight,
-        child: scrubber,
+    final timeline = SizedBox(
+      height: metrics.touchTargets ? _scrubberTouchHeight : _scrubberFineHeight,
+      child: Row(
+        children: [
+          elapsed,
+          const SizedBox(width: timecodeGap),
+          Expanded(child: scrubber),
+          const SizedBox(width: timecodeGap),
+          remaining,
+        ],
       ),
-    ];
+    );
     final controlRow = SizedBox(
       height: controlRowHeight,
       child: Row(
@@ -274,20 +270,14 @@ class ChromeBottomBar extends StatelessWidget {
           Expanded(
             child: Align(
               alignment: Alignment.centerRight,
-              // scaleDown is a no-op wherever the pill fits its slot
+              // scaleDown is a no-op wherever the cluster fits its slot
               // and only shrinks it where it cannot (320 px with all
               // four buttons), so equal-flex centring is never traded
               // for an overflow.
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerRight,
-                child: GlassSurface.osdPill(
-                  key: secondaryPillKey,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: _pillInset),
-                    child: secondary,
-                  ),
-                ),
+                child: secondary,
               ),
             ),
           ),
@@ -302,8 +292,8 @@ class ChromeBottomBar extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: controlsFirst
-            ? [controlRow, const SizedBox(height: rowGap), ...timeline]
-            : [...timeline, const SizedBox(height: rowGap), controlRow],
+            ? [controlRow, const SizedBox(height: rowGap), timeline]
+            : [timeline, const SizedBox(height: rowGap), controlRow],
       ),
     );
   }

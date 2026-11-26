@@ -2,7 +2,6 @@ import 'package:material_ui/material_ui.dart';
 
 import 'dart:ui' show SemanticsAction;
 
-import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/player/video_scaling.dart';
@@ -160,7 +159,33 @@ void main() {
 
       final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
       final title = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-      expect(title.left - back.right, 12);
+      expect(title.left - back.right, ChromeTopBar.titleGap);
+    });
+
+    testWidgets('back and title share one pill', (tester) async {
+      await tester.pumpWidget(
+        _host(ChromeTopBar(onBack: () {}, title: 'Silo')),
+      );
+      for (final key in [ChromeTopBar.backKey, ChromeTopBar.titleKey]) {
+        expect(
+          find.descendant(
+            of: find.byKey(ChromeTopBar.titlePillKey),
+            matching: find.byKey(key),
+          ),
+          findsOneWidget,
+        );
+      }
+      final pill = tester.getRect(find.byKey(ChromeTopBar.titlePillKey));
+      expect(pill.height, GlassPill.defaultHeight);
+      // The pill hugs a short title rather than spanning the bar.
+      expect(
+        tester.getRect(find.byKey(ChromeTopBar.titleKey)).right,
+        closeTo(pill.right - ChromeTopBar.titleInset, 1.5),
+      );
+      expect(
+        pill.width,
+        lessThan(tester.getSize(find.byType(ChromeTopBar)).width / 2),
+      );
     });
 
     testWidgets('title starts at the left edge on TV', (tester) async {
@@ -172,8 +197,10 @@ void main() {
 
       expect(find.byKey(ChromeTopBar.backKey), findsNothing);
       final bar = tester.getRect(find.byType(ChromeTopBar));
+      final pill = tester.getRect(find.byKey(ChromeTopBar.titlePillKey));
       final title = tester.getRect(find.byKey(ChromeTopBar.titleKey));
-      expect(title.left, bar.left);
+      expect(pill.left, bar.left);
+      expect(title.left - pill.left, ChromeTopBar.titleInset);
     });
 
     testWidgets('cast and scaling share one pill', (tester) async {
@@ -233,17 +260,23 @@ void main() {
       );
     });
 
-    testWidgets('compact narrows the gaps', (tester) async {
-      Future<double> titleLeft({required bool compact}) async {
+    testWidgets('compact narrows the gaps between pills', (tester) async {
+      Future<double> pillGap({required bool compact}) async {
         await tester.pumpWidget(
-          _host(ChromeTopBar(title: 'Silo', onBack: () {}, compact: compact)),
+          _host(
+            ChromeTopBar(
+              onScalingTap: () {},
+              trailing: const SizedBox(width: 40, height: 32),
+              compact: compact,
+            ),
+          ),
         );
-        return tester.getRect(find.byKey(ChromeTopBar.titleKey)).left -
-            tester.getRect(find.byKey(ChromeTopBar.backKey)).right;
+        return tester.getRect(find.byKey(ChromeTopBar.actionsPillKey)).left -
+            tester.getRect(find.byKey(ChromeTopBar.trailingPillKey)).right;
       }
 
-      expect(await titleLeft(compact: false), ChromeTopBar.gap);
-      expect(await titleLeft(compact: true), ChromeTopBar.compactGap);
+      expect(await pillGap(compact: false), ChromeTopBar.gap);
+      expect(await pillGap(compact: true), ChromeTopBar.compactGap);
     });
 
     testWidgets('no overflow at 320 px with back, title, trailing and both '
@@ -367,21 +400,14 @@ void main() {
       // Back leads on the right in RTL, the actions pill on the left.
       expect(back.left, greaterThan(actions.right));
 
-      // Measure the glyphs, not the Expanded box that spans the whole gap.
-      final paragraph = tester.renderObject<RenderParagraph>(
-        find.byKey(ChromeTopBar.titleKey),
-      );
-      final box = paragraph.localToGlobal(Offset.zero) & paragraph.size;
-      final lineWidth = paragraph.getMaxIntrinsicWidth(double.infinity);
-      expect(lineWidth, lessThan(box.width / 2));
-      final glyphs = paragraph.getBoxesForSelection(
-        const TextSelection(baseOffset: 0, extentOffset: 'Ash Harbour'.length),
-      );
-      final glyphRight = glyphs
-          .map((b) => b.right)
-          .reduce((a, b) => a > b ? a : b);
-      // Start-aligned in RTL: the text hugs the right edge, next to Back.
-      expect(box.left + glyphRight, closeTo(box.right, 1.0));
+      // The title pill hugs the start edge (the right, in RTL), with the
+      // title on Back's inner side.
+      final bar = tester.getRect(find.byType(ChromeTopBar));
+      final pill = tester.getRect(find.byKey(ChromeTopBar.titlePillKey));
+      final title = tester.getRect(find.byKey(ChromeTopBar.titleKey));
+      expect(pill.right, closeTo(bar.right, 0.5));
+      expect(back.left - title.right, ChromeTopBar.titleGap);
+      expect(pill.width, lessThan(bar.width / 2));
     });
 
     testWidgets('long title ellipsizes at 320 px with cast and scaling', (
@@ -533,7 +559,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(ChromeTopBar.scalingKey),
-          matching: find.byIcon(Icons.crop_free_rounded),
+          matching: find.byIcon(Icons.crop_rounded),
         ),
         findsOneWidget,
       );

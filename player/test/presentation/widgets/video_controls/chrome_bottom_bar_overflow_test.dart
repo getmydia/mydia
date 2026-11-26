@@ -21,7 +21,9 @@ Widget _bar(double width, {bool quality = true, bool alwaysOnTop = false}) {
         alignment: Alignment.bottomCenter,
         child: ChromeBottomBar(
           metrics: metrics,
-          timecodes: const SizedBox(),
+          // Hour-long timecodes, the widest the scrubber row carries.
+          elapsed: const Text('1:23:45'),
+          remaining: const Text('-1:23:45'),
           transport: TransportSurface(
             isPlaying: true,
             onPreviousEpisode: () {},

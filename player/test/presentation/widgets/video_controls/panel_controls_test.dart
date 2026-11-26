@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/l10n/l10n.dart';
 import 'package:player/core/player/video_scaling.dart';
 import 'package:player/core/theme/app_theme.dart';
-import 'package:player/core/theme/liquid_glass/liquid_geometry.dart';
+import 'package:player/presentation/widgets/glass/glass_slider.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
@@ -36,34 +36,51 @@ void main() {
       );
     });
 
-    testWidgets(
-      'Liquid Glass widens the slider by the knob to keep the track',
-      (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
-            home: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: 600,
-                  child: VolumeSurface(
-                    volume: 60,
-                    onVolumeChanged: (_) {},
-                    onToggleMute: () {},
-                  ),
+    testWidgets('Liquid Glass keeps the plain slider and its visible thumb', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: AppTheme.build(Palettes.projectionBooth, liquid: true),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 600,
+                child: VolumeSurface(
+                  volume: 60,
+                  onVolumeChanged: (_) {},
+                  onToggleMute: () {},
                 ),
               ),
             ),
           ),
-        );
-        expect(
-          tester.getSize(find.byKey(VolumeSurface.sliderKey)).width,
-          VolumeSurface.sliderWidth + LiquidGeometry.sliderKnobWidth,
-        );
-      },
-    );
+        ),
+      );
+      expect(
+        tester.getSize(find.byKey(VolumeSurface.sliderKey)).width,
+        VolumeSurface.sliderWidth,
+      );
+      // The clear glass knob vanished over the white active track at full
+      // volume; the OSD draws Material's own white thumb instead.
+      expect(
+        find.descendant(
+          of: find.byKey(VolumeSurface.sliderKey),
+          matching: find.byType(GlassSlider),
+        ),
+        findsNothing,
+      );
+      final theme = SliderTheme.of(
+        tester.element(
+          find.descendant(
+            of: find.byKey(VolumeSurface.sliderKey),
+            matching: find.byType(Slider),
+          ),
+        ),
+      );
+      expect(theme.thumbShape, isA<RoundSliderThumbShape>());
+    });
 
     testWidgets('shows a muted glyph at zero volume', (tester) async {
       await tester.pumpWidget(

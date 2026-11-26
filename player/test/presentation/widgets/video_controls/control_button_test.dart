@@ -140,6 +140,85 @@ void main() {
       expect(_iconOf(tester).color?.a, closeTo(1.0, 0.001));
     });
 
+    group('filled', () {
+      Finder disc() => find.byWidgetPredicate(
+        (w) =>
+            w is DecoratedBox &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).shape == BoxShape.circle &&
+            (w.decoration as BoxDecoration).color != null &&
+            (w.decoration as BoxDecoration).color!.a > 0.5,
+      );
+
+      testWidgets('draws a dark glyph on a light disc inset from the edge', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _host(
+            ControlButton(
+              icon: Icons.play_arrow_rounded,
+              filled: true,
+              onTap: () {},
+            ),
+          ),
+        );
+
+        expect(_iconOf(tester).color, ControlButton.filledGlyph);
+        final color =
+            (tester.widget<DecoratedBox>(disc()).decoration as BoxDecoration)
+                .color;
+        expect(color, ControlButton.filledFill);
+        // The disc sits inside the button, leaving the edge to the ring.
+        final button = tester.getRect(find.byType(ControlButton));
+        final rect = tester.getRect(disc());
+        expect(rect.width, button.width - 2 * ControlButton.filledInset);
+        expect(rect.center, button.center);
+      });
+
+      testWidgets('the disc brightens to white on hover', (tester) async {
+        await tester.pumpWidget(
+          _host(
+            ControlButton(
+              icon: Icons.play_arrow_rounded,
+              filled: true,
+              onTap: () {},
+            ),
+          ),
+        );
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.addPointer(location: Offset.zero);
+        addTearDown(gesture.removePointer);
+        await tester.pump();
+        await gesture.moveTo(tester.getCenter(find.byType(ControlButton)));
+        await tester.pumpAndSettle();
+
+        final color =
+            (tester.widget<DecoratedBox>(disc()).decoration as BoxDecoration)
+                .color;
+        expect(color, Colors.white);
+      });
+
+      testWidgets('the focus ring stays on the button edge, outside the disc', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _host(
+            ControlButton(
+              icon: Icons.play_arrow_rounded,
+              filled: true,
+              onTap: () {},
+            ),
+          ),
+        );
+        expect(
+          tester.getSize(find.byKey(FocusHighlight.ringKey)).width,
+          tester.getSize(find.byType(ControlButton)).width,
+        );
+      });
+    });
+
     testWidgets(
       'stays at rest opacity on hover when it has no onTap (not interactive)',
       (tester) async {
