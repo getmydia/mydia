@@ -227,11 +227,10 @@ void main() {
 
     test('white labels clear 4.5:1 and icons 3:1 at every grey', () {
       for (final v in greys) {
-        final bg = _overGrey(
-          DepthTokens.osdTint,
-          DepthTokens.osdDryTintOpacity,
-          v,
-          0,
+        // Tint, then the catch light at its peak, then the glyph.
+        final bg = Color.alphaBlend(
+          Colors.white.withValues(alpha: DepthTokens.osdDryCatchLightAlpha),
+          _overGrey(DepthTokens.osdTint, DepthTokens.osdDryTintOpacity, v, 0),
         );
         expect(
           contrastRatio(Colors.white, bg),

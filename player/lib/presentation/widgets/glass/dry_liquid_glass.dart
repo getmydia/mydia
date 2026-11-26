@@ -86,6 +86,9 @@ class DryGlassPainter extends CustomPainter {
   /// Glow centre as a fraction of the surface.
   final Offset light;
 
+  /// Peak alpha of the catch light.
+  double get catchLightAlpha => DepthTokens.osdDryCatchLightAlpha;
+
   /// Fraction of the height each catch light fades over.
   @visibleForTesting
   static const double catchLightFraction = 0.3;
@@ -99,7 +102,7 @@ class DryGlassPainter extends CustomPainter {
 
     // Top and bottom catch light, fading over 30% of the height from each end.
     final catchLight = const Color(0xFFFFFFFF)
-        .withValues(alpha: profile.specular.clamp(0.0, 1.0));
+        .withValues(alpha: catchLightAlpha);
     final clear = catchLight.withValues(alpha: 0);
     canvas.drawRRect(
       rrect,

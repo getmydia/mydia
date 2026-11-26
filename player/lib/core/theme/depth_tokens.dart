@@ -179,9 +179,17 @@ abstract final class DepthTokens {
   /// no backdrop can be sampled). Fixed: there is no luma to adapt to, so it
   /// must hold over every grey the video can show. Smallest multiple of 0.05
   /// that keeps white labels at 4.5:1 over pure white: at 0.55 the fill
-  /// composites to ~#6A6967 (4.36:1), at 0.60 to ~#5B5A58 (5.2:1). Set by the
+  /// composites to ~#797878 (4.36:1), at 0.60 to ~#6D6C6B (5.2:1). Set by the
   /// "OSD dry" sweep in `liquid_glass_legibility_test.dart`, not by eye.
   static const double osdDryTintOpacity = 0.60;
+
+  /// Peak alpha of the white top and bottom catch light on dry glass, painted
+  /// under the content. Worst case is white video: the 0.60 tint gives
+  /// ~#6D6C6C, and the catch light lightens that at the glass ends. White
+  /// labels stay at 4.5:1 up to 0.06 (4.58:1; 0.07 gives 4.48:1), so this is
+  /// the largest multiple of 0.01 that passes. Set by the "OSD dry" sweep,
+  /// which composites tint, then catch light, then the glyph.
+  static const double osdDryCatchLightAlpha = 0.06;
 
   /// Backdrop blur sigma. Light on purpose: the fill does the legibility
   /// work, and the blur only turns the ~15% of video that shows through into

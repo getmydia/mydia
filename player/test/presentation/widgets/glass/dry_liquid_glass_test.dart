@@ -47,6 +47,13 @@ void main() {
     expect(_painter(tester).tint, const Color(0x99123456));
   });
 
+  testWidgets('the catch light peaks at the OSD token, not the profile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_glass()));
+    expect(_painter(tester).catchLightAlpha, DepthTokens.osdDryCatchLightAlpha);
+  });
+
   testWidgets('clips to the border radius', (tester) async {
     await tester.pumpWidget(_host(_glass()));
     final clip = tester.widget<ClipRRect>(
