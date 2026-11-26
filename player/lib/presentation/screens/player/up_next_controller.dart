@@ -81,6 +81,13 @@ class UpNextController {
   bool _showing = false;
   bool _cancelled = false;
 
+  /// Whether [onPlaybackCompleted] already advanced out of this file.
+  bool _completionHandled = false;
+
+  /// The scene's time left and its prompt window, from [trackScene].
+  Duration? _sceneRemaining;
+  Duration _sceneWindow = kUpNextCountdown;
+
   /// The resolved next episode, or null when nothing is on offer. Non-null
   /// implies playable: `UpNextTarget` cannot be built without a file id.
   UpNextTarget? _target;
@@ -150,6 +157,34 @@ class UpNextController {
     _nextSeasonResolved = false;
   }
 
+  /// Feeds a scene's playback position to the prompt, on every position tick
+  /// while a sequence is set. A scene never auto-advances on a timer: its
+  /// ring shows the scene's own time left, and [onPlaybackCompleted] is what
+  /// moves on.
+  void trackScene({required Duration position, required Duration duration}) {
+    if (duration <= Duration.zero) return;
+    _sceneWindow = sceneUpNextWindow(duration);
+    final remaining = duration - position;
+    _sceneRemaining = remaining;
+    if (_sequence != null) _countdown?.setRemaining(remaining);
+  }
+
+  /// The player reached the end of the file. For a scene of a sequence this
+  /// is the only automatic way to the next scene, so it can never leave
+  /// before the scene ends. A dismissed prompt blocks it; an episode is left
+  /// to its credits countdown.
+  void onPlaybackCompleted() {
+    if (_completionHandled) return;
+    final next = _sequence?.next;
+    if (next == null) return;
+    // mpv also reports the end of a stream that died mid-file. Only a known
+    // position near the end counts as the scene finishing.
+    final remaining = _sceneRemaining;
+    if (remaining != null && remaining > sceneEndTolerance) return;
+    _completionHandled = true;
+    playNext(fromAutoCountdown: true);
+  }
+
   /// Show the "Up Next" overlay if conditions are met. Called on position
   /// ticks once [shouldOfferUpNext] says the credits have started.
   void onPositionTick() {
@@ -160,7 +195,7 @@ class UpNextController {
     final sequence = _sequence;
     if (sequence != null) {
       final next = sequence.next;
-      if (next != null) _show(UpNextTarget.scene(next));
+      if (next != null) _show(UpNextTarget.scene(next), scene: true);
       return;
     }
 
@@ -247,11 +282,18 @@ class UpNextController {
     _show(target);
   }
 
-  void _show(UpNextTarget target) {
+  void _show(UpNextTarget target, {bool scene = false}) {
     _countdown?.dispose();
-    final countdown = UpNextCountdown(
-      onElapsed: bindUpNextCountdownElapsed(playNext),
-    );
+    final UpNextCountdown countdown;
+    if (scene) {
+      countdown = UpNextCountdown.tracking(total: _sceneWindow);
+      final remaining = _sceneRemaining;
+      if (remaining != null) countdown.setRemaining(remaining);
+    } else {
+      countdown = UpNextCountdown(
+        onElapsed: bindUpNextCountdownElapsed(playNext),
+      );
+    }
     _countdown = countdown;
 
     if (!mounted()) return;
@@ -292,6 +334,9 @@ class UpNextController {
     _target = null;
     _showing = false;
     _cancelled = false;
+    _completionHandled = false;
+    _sceneRemaining = null;
+    _sceneWindow = kUpNextCountdown;
   }
 
   /// Cancel the prompt and the countdown, for the rest of this file.
@@ -440,6 +485,11 @@ class UpNextController {
     _playingSub = null;
   }
 }
+
+/// How close to the end the last position must be for a completion to
+/// count as a scene finishing rather than its stream dying.
+@visibleForTesting
+const sceneEndTolerance = Duration(seconds: 3);
 
 /// The countdown's `onElapsed` callback, bound so a fire is always marked
 /// as automatic.

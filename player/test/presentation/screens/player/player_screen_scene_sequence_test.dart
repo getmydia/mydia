@@ -58,6 +58,16 @@ class _PlatformPlayer extends PlatformPlayer {
 
   @override
   Future<void> setSubtitleTrack(SubtitleTrack track) async {}
+
+  void seekTo(Duration position) {
+    state = state.copyWith(position: position);
+    positionController.add(position);
+  }
+
+  void complete() {
+    state = state.copyWith(completed: true, position: state.duration);
+    completedController.add(true);
+  }
 }
 
 SequenceNeighbour _scene(String id, int position) => SequenceNeighbour(
@@ -164,6 +174,32 @@ void main() {
     expect(find.byKey(TransportSurface.nextEpisodeKey), findsOneWidget);
 
     await tester.tap(find.byKey(TransportSurface.nextEpisodeKey));
+    await pumpUntil(
+      tester,
+      () => find.text('landed sc-2').evaluate().isNotEmpty,
+    );
+    expect(find.text('landed sc-2'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('a scene stays put through the Up Next window and advances '
+      'only when it ends', (tester) async {
+    final session = _SceneSession(SequenceNeighbours(next: _scene('sc-2', 2)));
+    final fake = await _pumpScene(tester, session);
+    await pumpUntil(
+      tester,
+      () => find.byKey(TransportSurface.nextEpisodeKey).evaluate().isNotEmpty,
+    );
+    await fake.play();
+
+    // 90s scene: a 10s window. Well past what the old 10s timer allowed.
+    fake.seekTo(const Duration(seconds: 85));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text('landed sc-2'), findsNothing);
+
+    fake.complete();
     await pumpUntil(
       tester,
       () => find.text('landed sc-2').evaluate().isNotEmpty,

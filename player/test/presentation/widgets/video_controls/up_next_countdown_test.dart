@@ -118,6 +118,41 @@ void main() {
     });
   });
 
+  group('tracking', () {
+    test('fraction follows setRemaining, clamped to the total', () {
+      final countdown = UpNextCountdown.tracking(
+        total: const Duration(seconds: 20),
+      );
+      expect(countdown.fraction, 1.0);
+      countdown.setRemaining(const Duration(seconds: 5));
+      expect(countdown.fraction, closeTo(0.25, 0.001));
+      expect(countdown.remaining, const Duration(seconds: 5));
+      countdown.setRemaining(const Duration(seconds: 90));
+      expect(countdown.fraction, 1.0);
+      countdown.setRemaining(const Duration(seconds: -3));
+      expect(countdown.fraction, 0.0);
+      countdown.dispose();
+    });
+
+    test('never runs a timer of its own', () {
+      fakeAsync((async) {
+        final countdown = UpNextCountdown.tracking(
+          total: const Duration(seconds: 10),
+        );
+        countdown.start();
+        advance(async, const Duration(seconds: 60));
+        expect(countdown.fraction, 1.0);
+
+        countdown.setRemaining(Duration.zero);
+        countdown.hold(UpNextHold.paused);
+        countdown.release(UpNextHold.paused);
+        advance(async, const Duration(seconds: 60));
+        expect(async.pendingTimers, isEmpty);
+        countdown.dispose();
+      });
+    });
+  });
+
   test('notifies listeners on each tick and on hold changes', () {
     fakeAsync((async) {
       var notifications = 0;
