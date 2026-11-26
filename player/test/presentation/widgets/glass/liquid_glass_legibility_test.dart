@@ -21,6 +21,7 @@ import 'package:player/core/theme/liquid_glass/liquid_glass_adaptive.dart';
 import 'package:player/core/theme/palette.dart';
 import 'package:player/core/theme/theme_preset.dart';
 
+import '../../../test_utils/mac_accents.dart' show macAccents;
 import '../../../test_utils/osd_contrast.dart'
     show compositeOver, osdIconOnlyColors, osdTextColors;
 
@@ -371,6 +372,61 @@ void main() {
         }
       });
     });
+  });
+
+  group('OSD dry, pressed', () {
+    // The press glow is white at its peak alpha over the tint and the catch
+    // light, so it lifts the fill the glyph sits on. Dry-specific token: the sampled
+    // shader keeps DepthTokens.liquidPressGlow.
+    final greys = [for (var i = 0; i <= 20; i++) i / 20];
+    test('pill: every OSD text colour clears 4.5:1', () {
+      // Icon-only colours (the error red) never sit on a pill: as in the
+      // unpressed sweep, they are rated on panels, which are not pressable.
+      for (final v in greys) {
+        final bg = Color.alphaBlend(
+          Colors.white.withValues(alpha: DepthTokens.osdDryPressGlow),
+          Color.alphaBlend(
+            Colors.white.withValues(alpha: DepthTokens.osdDryCatchLightAlpha),
+            _overGrey(DepthTokens.osdTint, DepthTokens.osdDryTintOpacity, v, 0),
+          ),
+        );
+        for (final c in _osdTextFor('pill')) {
+          expect(
+            contrastRatio(compositeOver(c, bg), bg),
+            greaterThanOrEqualTo(4.5),
+            reason: 'pressed pill grey $v, text $c',
+          );
+        }
+      }
+    });
+  });
+
+  group('OSD dry panel, macOS accents', () {
+    // The accent is lifted against the OSD fill, which is not the dry panel
+    // (tint plus catch light), so rate every system accent on the panel too.
+    for (final a in macAccents.entries) {
+      test('${a.key}: primary clears 4.5:1 on the dry panel', () {
+        final primary = ThemePreset.macos
+            .palette(systemAccent: a.value)
+            .primary;
+        for (final v in [for (var i = 0; i <= 20; i++) i / 20]) {
+          final bg = Color.alphaBlend(
+            Colors.white.withValues(alpha: DepthTokens.osdDryCatchLightAlpha),
+            _overGrey(
+              DepthTokens.osdTint,
+              DepthTokens.osdDryPanelTintOpacity,
+              v,
+              0,
+            ),
+          );
+          expect(
+            contrastRatio(primary, bg),
+            greaterThanOrEqualTo(4.5),
+            reason: '${a.key} at grey $v',
+          );
+        }
+      });
+    }
   });
 
   test('every adaptive max clears the legibility floor', () {

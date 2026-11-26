@@ -4,7 +4,7 @@
 
 **Goal:** Put the playback OSD on Liquid Glass on iOS and macOS: shader glass where the video is a Flutter texture, dry glass over the macOS HDR surface, today's OSD everywhere else.
 
-**Architecture:** An `OsdGlassMode` (`off` / `sampled` / `dry`) is resolved from the glass style, platform, Reduce Transparency, shader availability and whether the macOS surface holds the video. An app-level host carries it, like `GlassAccessibilityHost`, so OSD sheets and dialogs (separate routes) see it too. `GlassSurface.osd` / `.osdPill` branch on it; `ChromeScrim` drops its plateau in the glass modes.
+**Architecture:** An `OsdGlassMode` (`off` / `sampled` / `dry`) is resolved from the glass style, platform, Reduce Transparency, shader availability and whether the macOS surface holds the video. An app-level host carries it, like `GlassAccessibilityHost`, so OSD sheets and dialogs (separate routes) see it too. `GlassSurface.osd` / `.osdPill` branch on it; `ChromeScrim` drops its plateau in the glass modes (superseded by the spec's "Revision after #1525": the plateau stays).
 
 **Tech Stack:** Flutter (Impeller fragment shader `shaders/liquid_glass.frag`), Riverpod, `flutter test`.
 
@@ -67,7 +67,7 @@ One `testWidgets`: under `OsdGlassScope(surfaceOutput: true)` with a liquid `App
 
 - [ ] **Step 2: Run and confirm it fails**
 
-Run: `./dev flutter test --concurrency=1 player/test/presentation/widgets/glass/osd_glass_test.dart`
+Run: `./dev flutter test --concurrency=1 test/presentation/widgets/glass/osd_glass_test.dart`
 Expected: compile failure, because `osd_glass.dart` does not exist.
 
 - [ ] **Step 3: Implement `osd_glass.dart`**
@@ -198,13 +198,15 @@ Wrap the result in `_withShadow(..., shadows)`. Replace the doc comments on both
 
 - [ ] **Step 4: Run the new tests plus every existing OSD test and confirm they pass**
 
-Run: `./dev flutter test --concurrency=1 player/test/presentation/widgets/glass player/test/presentation/widgets/video_controls player/test/presentation/widgets/osd_sheet_test.dart player/test/presentation/widgets/osd_dialog_test.dart`
+Run: `./dev flutter test --concurrency=1 test/presentation/widgets/glass test/presentation/widgets/video_controls test/presentation/widgets/osd_sheet_test.dart test/presentation/widgets/osd_dialog_test.dart`
 
 - [ ] **Step 5: Glass-diff, then commit**
 
 The lab has no OSD scene yet, so expect 0 changed pixels. Commit `feat(player): put the OSD surfaces on Liquid Glass on iOS and macOS`.
 
 ### Task 5: Gradient-only scrim in the glass modes
+
+> **Superseded:** see the spec's "Revision after #1525". The scrim plateau stays in the glass modes; this task's gradient-only scrim was not kept.
 
 **Files:**
 - Modify: `player/lib/presentation/widgets/video_controls/chrome_scrim.dart`, `player/lib/core/theme/depth_tokens.dart`
@@ -234,6 +236,8 @@ Branch in `build`. Keep `_bands` for `off`.
 `depth_tokens.dart` is staged, so glass-diff is required. Commit `feat(player): let glass OSD pills see the video through the scrim`.
 
 ### Task 6: Glass play disc and clear scrubber knob
+
+> **Superseded in part:** see the spec's "Revision after #1525". The scrubber thumb stays white, not a clear knob; the glass play disc from this task stands.
 
 **Files:**
 - Modify: `player/lib/presentation/widgets/video_controls/touch_transport.dart` (play disc, lines ~75-90 and its build), `player/lib/presentation/widgets/video_controls/video_progress_bar.dart` (thumb at line ~246, `ProgressBarSurface.thumbKey`)

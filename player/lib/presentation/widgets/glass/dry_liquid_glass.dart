@@ -53,7 +53,7 @@ class DryLiquidGlass extends StatelessWidget {
           rimAlpha: increaseContrast
               ? DepthTokens.liquidHighContrastRimAlpha
               : profile.rimHairline,
-          glow: pressed ? DepthTokens.liquidPressGlow : 0.0,
+          glow: pressed ? DepthTokens.osdDryPressGlow : 0.0,
           light: pointer?.light ?? DepthTokens.liquidLightRest,
         ),
         child: child,

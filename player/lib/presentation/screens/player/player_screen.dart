@@ -386,25 +386,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// holds the video.
   void _setSurfaceBinding(MpvSurfaceBinding? binding) {
     _surfaceBinding = binding;
-    if (binding != null) {
-      _surfaceOutputOwner = this;
-    } else if (identical(_surfaceOutputOwner, this)) {
-      _surfaceOutputOwner = null;
-    }
-    _publishSurfaceOutput();
+    _publishSurfaceOutput(binding != null);
   }
 
-  /// The screen whose surface the OSD flag describes. A newer screen can
-  /// publish before an older one finishes disposing, so a screen only
-  /// retracts what it owns.
-  static _PlayerScreenState? _surfaceOutputOwner;
-
   /// Deferred: this runs from `didUpdateWidget` and `dispose`, which Riverpod
-  /// refuses provider writes from (`player/docs/riverpod.md`). The value is
-  /// read when the microtask runs, so a later change always wins.
-  void _publishSurfaceOutput() {
+  /// refuses provider writes from (`player/docs/riverpod.md`). The notifier
+  /// tracks owners by token, so a screen only ever retracts its own claim
+  /// whatever order the microtasks of overlapping screens land in.
+  void _publishSurfaceOutput(bool owns) {
     final surfaceOutput = _surfaceOutput;
-    Future.microtask(() => surfaceOutput.set(_surfaceOutputOwner != null));
+    Future.microtask(
+      () => owns ? surfaceOutput.claim(this) : surfaceOutput.release(this),
+    );
   }
 
   /// This screen's place in [PlayerExitGuard]: quitting the app disposes the
@@ -5809,10 +5802,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _videoController = null;
     final surfaceBinding = _surfaceBinding;
     _surfaceBinding = null;
-    if (identical(_surfaceOutputOwner, this)) {
-      _surfaceOutputOwner = null;
-      _publishSurfaceOutput();
-    }
+    _publishSurfaceOutput(false);
     // Before `dispose()`, or the hls.js media_kit leaks restarts playback on
     // the detached element, and again once it completes, because an `open()`
     // queued on media_kit's lock can attach a new hls.js after the first

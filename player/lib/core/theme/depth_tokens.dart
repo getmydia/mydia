@@ -203,6 +203,14 @@ abstract final class DepthTokens {
   /// catch light, then the glyph.
   static const double osdDryCatchLightAlpha = 0.06;
 
+  /// Peak alpha of the press glow on dry glass. The shared
+  /// [liquidPressGlow] lifts a pressed pill's fill enough to drop 80% white
+  /// text under 4.5:1; dry glass has a fixed tint under the glyph, so it
+  /// gets its own, the largest 0.01 step that holds: 0.03 passes the pressed
+  /// sweep in `liquid_glass_legibility_test`, 0.04 leaves the 0.80 white at
+  /// 4.43:1 over white video.
+  static const double osdDryPressGlow = 0.03;
+
   /// Opacity of `GlassSlider`'s white knob where there is no shader to
   /// refract with (dry glass, a missing shader program, Reduce Transparency).
   /// The playback OSD's scrubber and volume slider keep Material's thumb.

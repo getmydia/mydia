@@ -99,7 +99,7 @@ void main() {
       ),
     );
     final p = _painter(tester);
-    expect(p.glow, DepthTokens.liquidPressGlow);
+    expect(p.glow, DepthTokens.osdDryPressGlow);
     expect(p.light, const Offset(0.3, 0.6));
   });
 

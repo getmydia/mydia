@@ -109,18 +109,52 @@ void main() {
     });
   });
 
-  test('VideoSurfaceOutputNotifier.set after disposal does not throw', () {
+  test('VideoSurfaceOutputNotifier claim after disposal does not throw', () {
     final container = ProviderContainer();
     final notifier = container.read(videoSurfaceOutputProvider.notifier);
     container.dispose();
-    expect(() => notifier.set(true), returnsNormally);
+    expect(() => notifier.claim(Object()), returnsNormally);
+    expect(() => notifier.release(Object()), returnsNormally);
   });
 
-  test('videoSurfaceOutputProvider starts false and follows set', () {
+  test('videoSurfaceOutputProvider starts false and follows a claim', () {
     final container = ProviderContainer();
     addTearDown(container.dispose);
+    final owner = Object();
     expect(container.read(videoSurfaceOutputProvider), isFalse);
-    container.read(videoSurfaceOutputProvider.notifier).set(true);
+    container.read(videoSurfaceOutputProvider.notifier).claim(owner);
+    expect(container.read(videoSurfaceOutputProvider), isTrue);
+    container.read(videoSurfaceOutputProvider.notifier).release(owner);
+    expect(container.read(videoSurfaceOutputProvider), isFalse);
+  });
+
+  test('overlapping owners keep the flag until the last one releases', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(videoSurfaceOutputProvider.notifier);
+    final a = Object();
+    final b = Object();
+    notifier.claim(a);
+    notifier.claim(b);
+    notifier.release(a);
+    expect(container.read(videoSurfaceOutputProvider), isTrue);
+    notifier.release(b);
+    expect(container.read(videoSurfaceOutputProvider), isFalse);
+  });
+
+  test('an outgoing owner installing late then disposing keeps the incoming '
+      "owner's claim", () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(videoSurfaceOutputProvider.notifier);
+    final incoming = Object();
+    final outgoing = Object();
+    notifier.claim(incoming);
+    notifier.claim(outgoing);
+    notifier.release(outgoing);
+    expect(container.read(videoSurfaceOutputProvider), isTrue);
+    // A repeated release of an already-retracted claim changes nothing.
+    notifier.release(outgoing);
     expect(container.read(videoSurfaceOutputProvider), isTrue);
   });
 }

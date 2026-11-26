@@ -49,13 +49,28 @@ final videoSurfaceOutputProvider =
     );
 
 class VideoSurfaceOutputNotifier extends Notifier<bool> {
+  /// Screens whose native surface currently holds the video. Tracked here, not
+  /// per screen, so an outgoing screen that installs or disposes late can only
+  /// retract its own claim and never the incoming screen's.
+  final Set<Object> _owners = {};
+
   @override
   bool build() => false;
 
-  void set(bool active) {
+  void claim(Object owner) {
+    _owners.add(owner);
+    _publish();
+  }
+
+  void release(Object owner) {
+    _owners.remove(owner);
+    _publish();
+  }
+
+  void _publish() {
     // The player's dispose microtask can land after the container is gone.
     if (!ref.mounted) return;
-    state = active;
+    state = _owners.isNotEmpty;
   }
 }
 
