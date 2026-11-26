@@ -11,6 +11,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'scripts/appcast/**'
+      - 'scripts/dev-builds/**'
       - '.github/workflows/ci-appcast.yml'
   workflow_dispatch:
 
@@ -46,6 +47,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: scripts/appcast/package-lock.json
+
+      # The dev build index publisher feeds this generator, so its contract
+      # test runs here, against an rclone local-filesystem bucket.
+      - name: Test the dev build index publisher
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq rclone jq
+          ../dev-builds/publish-test.sh
 
       - name: Install dependencies
         run: npm ci
