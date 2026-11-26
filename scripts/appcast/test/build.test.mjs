@@ -1,6 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildItems, assertFeedInvariants, toRfc822, MAX_ITEMS } from '../lib/build.mjs'
+import {
+  buildItems,
+  buildDevItems,
+  mergeFeedItems,
+  assertFeedInvariants,
+  toRfc822,
+  MAX_ITEMS,
+  DEV_CHANNEL,
+} from '../lib/build.mjs'
 
 function perReleaseAppcast(version, short) {
   return `<?xml version="1.0" encoding="utf-8"?>
@@ -64,7 +72,7 @@ test('a stable-only repo produces items with no channel', async () => {
 
   assert.equal(items.length, 1)
   assert.equal(items[0].channel, null)
-  assert.equal(items[0].prerelease, false)
+  assert.equal(items[0].kind, 'stable')
   assert.equal(items[0].title, 'Version 1.4.9')
   assert.equal(items[0].enclosure.signature, 'SIG10100')
 })
@@ -173,13 +181,13 @@ test('assertFeedInvariants rejects an empty feed', () => {
   assert.throws(() => assertFeedInvariants([]), /empty appcast/)
 })
 
-test('assertFeedInvariants rejects a prerelease item missing the beta channel', async () => {
+test('assertFeedInvariants rejects a beta item missing the beta channel', async () => {
   const { items } = await build([
     release({ tag: 'v1.5.0-beta.2', short: '1.5.0-beta.2', versionCode: '10123', prerelease: true }),
   ])
   items[0].channel = null
 
-  assert.throws(() => assertFeedInvariants(items), /prerelease.*beta/)
+  assert.throws(() => assertFeedInvariants(items), /beta item must carry the beta channel/)
 })
 
 test('assertFeedInvariants rejects a stable item that acquired a channel', async () => {
@@ -206,4 +214,137 @@ test('assertFeedInvariants rejects two items sharing the same sparkle:version', 
   const duplicate = { ...items[0] }
 
   assert.throws(() => assertFeedInvariants([...items, duplicate]), /duplicate/)
+})
+
+function devBuild(overrides = {}) {
+  return {
+    platform: 'macos',
+    version: '1.2.3-dev.4',
+    build: 102300004,
+    file: 'macos/mydia-player-macos-v1.2.3-dev.4.dmg',
+    size: 5,
+    sha256: 'x',
+    published_at: '2026-11-26T10:00:00Z',
+    ed_signature: 'SIG',
+    length: 5,
+    minimum_system_version: '13.0',
+    ...overrides,
+  }
+}
+
+test('buildDevItems maps a macos entry to a dev channel item', () => {
+  const { items, warnings } = buildDevItems([devBuild()])
+
+  assert.deepEqual(warnings, [])
+  assert.equal(items.length, 1)
+  const [item] = items
+  assert.equal(DEV_CHANNEL, 'dev')
+  assert.equal(item.title, 'Dev build 1.2.3-dev.4')
+  assert.equal(item.version, '102300004')
+  assert.equal(item.shortVersionString, '1.2.3-dev.4')
+  assert.equal(item.channel, 'dev')
+  assert.equal(item.kind, 'dev')
+  assert.equal(item.minimumSystemVersion, '13.0')
+  assert.equal(item.pubDate, 'Thu, 26 Nov 2026 10:00:00 +0000')
+  assert.deepEqual(item.enclosure, {
+    url: 'https://dl.mydia.dev/macos/mydia-player-macos-v1.2.3-dev.4.dmg',
+    signature: 'SIG',
+    length: 5,
+  })
+  assert.match(item.descriptionHtml, /https:\/\/github\.com\/getmydia\/mydia\/commits\/master/)
+})
+
+test('buildDevItems ignores android entries without a warning', () => {
+  const { items, warnings } = buildDevItems([devBuild({ platform: 'android', file: 'android/x.apk' })])
+
+  assert.equal(items.length, 0)
+  assert.deepEqual(warnings, [])
+})
+
+for (const [name, overrides] of [
+  ['an unsigned entry', { ed_signature: undefined }],
+  ['an empty signature', { ed_signature: '' }],
+  ['a string length', { length: '5' }],
+  ['a missing length', { length: undefined }],
+  ['a malformed published_at', { published_at: 'not-a-date' }],
+  ['a negative length', { length: -1 }],
+  ['an unsafe length', { length: Number.MAX_SAFE_INTEGER + 1 }],
+  ['a fractional build', { build: 1.5 }],
+  ['a negative build', { build: -1 }],
+  ['an unsafe build', { build: Number.MAX_SAFE_INTEGER + 1 }],
+]) {
+  test(`buildDevItems drops ${name} with a warning naming the file`, () => {
+    const { items, warnings } = buildDevItems([devBuild(overrides)])
+
+    assert.equal(items.length, 0)
+    assert.equal(warnings.length, 1)
+    assert.match(warnings[0], /macos\/mydia-player-macos-v1\.2\.3-dev\.4\.dmg/)
+  })
+}
+
+test('buildDevItems omits a missing minimum system version', () => {
+  const { items } = buildDevItems([devBuild({ minimum_system_version: undefined })])
+
+  assert.equal(items[0].minimumSystemVersion, null)
+})
+
+test('mergeFeedItems drops a dev item whose build number a release already holds', async () => {
+  const { items: releaseItems } = await build([
+    release({ tag: 'v1.2.3', short: '1.2.3', versionCode: '102300004' }),
+  ])
+  const { items: devItems } = buildDevItems([devBuild()])
+
+  const { items, warnings } = mergeFeedItems(releaseItems, devItems)
+
+  assert.deepEqual(items.map((i) => i.kind), ['stable'])
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /102300004/)
+  assert.doesNotThrow(() => assertFeedInvariants(items))
+})
+
+test('mergeFeedItems sorts newest first across kinds', async () => {
+  const { items: releaseItems } = await build([
+    release({ tag: 'v1.2.3', short: '1.2.3', versionCode: '102390000' }),
+    release({ tag: 'v1.3.0-beta.1', short: '1.3.0-beta.1', versionCode: '103031000', prerelease: true }),
+  ])
+  const { items: devItems } = buildDevItems([
+    devBuild({ version: '1.3.0-dev.2', build: 103000002, file: 'macos/b.dmg' }),
+    devBuild({ version: '1.2.3-dev.4', build: 102300004, file: 'macos/a.dmg' }),
+  ])
+
+  const { items } = mergeFeedItems(releaseItems, devItems)
+
+  assert.deepEqual(items.map((i) => i.kind), ['beta', 'dev', 'stable', 'dev'])
+  assert.doesNotThrow(() => assertFeedInvariants(items))
+})
+
+test('assertFeedInvariants rejects a dev item without the dev channel', () => {
+  const { items } = buildDevItems([devBuild()])
+  items[0].channel = null
+
+  assert.throws(() => assertFeedInvariants(items), /dev item must carry the dev channel/)
+})
+
+test('assertFeedInvariants rejects an item of unknown kind', async () => {
+  const { items } = await build([release({ tag: 'v1.4.9', short: '1.4.9', versionCode: '10100' })])
+  items[0].kind = 'nightly'
+
+  assert.throws(() => assertFeedInvariants(items), /unknown kind/)
+})
+
+test('buildDevItems keeps the newest of two entries sharing a build number', () => {
+  // build-number.sh lowercases the prerelease and makes its dot optional, so
+  // 1.2.3-rc13 and 1.2.3-rc.13 are different index rows with one build
+  // number. Both reaching the feed would fail assertFeedInvariants and stop
+  // every feed deploy until five newer builds pruned them.
+  const { items, warnings } = buildDevItems([
+    devBuild({ version: '1.2.3-rc13', file: 'macos/old.dmg', published_at: '2026-11-25T10:00:00Z' }),
+    devBuild({ version: '1.2.3-rc.13', file: 'macos/new.dmg', published_at: '2026-11-26T10:00:00Z' }),
+  ])
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].enclosure.url, 'https://dl.mydia.dev/macos/new.dmg')
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /macos\/old\.dmg/)
+  assert.doesNotThrow(() => assertFeedInvariants(items))
 })

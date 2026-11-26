@@ -79,6 +79,7 @@ jobs:
             echo
             echo "Items: $(grep -c '<item>' dist/appcast.xml)"
             echo "Beta items: $(grep -c '<sparkle:channel>beta</sparkle:channel>' dist/appcast.xml || true)"
+            echo "Dev items: $(grep -c '<sparkle:channel>dev</sparkle:channel>' dist/appcast.xml || true)"
             echo "Platform/track entries in releases.json: $(jq '[.platforms[] | keys[]] | length' dist/releases.json)"
           } >> "$GITHUB_STEP_SUMMARY"
 

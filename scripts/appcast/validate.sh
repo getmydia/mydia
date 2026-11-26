@@ -52,4 +52,16 @@ if [ "$stable_count" -lt 1 ]; then
   exit 1
 fi
 
-echo "merged appcast validated: $item_count item(s), $stable_count stable"
+# A file served from the dev build bucket must only reach clients on the dev
+# track. Without the channel element Sparkle offers the item to everyone, so a
+# stable install would be handed a dev build. Checked here independently of
+# assertFeedInvariants, for the reason given at the top of this file.
+dev_url="starts-with(@url,'https://dl.mydia.dev/')"
+dev_count=$(count_xpath "count(/rss/channel/item[enclosure[$dev_url]])")
+unchanneled_dev=$(count_xpath "count(/rss/channel/item[enclosure[$dev_url] and not(*[local-name()='channel' and normalize-space(text())='dev'])])")
+if [ "$unchanneled_dev" -ne 0 ]; then
+  echo "::error::$unchanneled_dev item(s) served from dl.mydia.dev lack the dev channel; stable clients would be offered a dev build"
+  exit 1
+fi
+
+echo "merged appcast validated: $item_count item(s), $stable_count stable, $dev_count dev"

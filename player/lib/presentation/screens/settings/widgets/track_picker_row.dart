@@ -10,7 +10,7 @@ import '../../../../l10n/l10n.dart';
 /// Lets the viewer choose which release cadence this installation follows.
 ///
 /// One tappable option per track in [availableTracks], so a platform that has
-/// never published a track (macOS has no dev builds) simply never offers it
+/// never published a track simply never offers it
 /// rather than offering a choice that resolves to nothing.
 ///
 /// Selecting a lower track never downgrades anything: the installed build

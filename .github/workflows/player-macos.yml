@@ -20,6 +20,11 @@ on:
         type: boolean
         required: false
         default: false
+      publish_dev_build:
+        description: Sign the DMG for Sparkle and publish it to the dev build index (dl.mydia.dev)
+        type: boolean
+        required: false
+        default: false
       dry_run:
         description: Build without publishing or final notarization submission
         type: boolean
@@ -39,6 +44,12 @@ on:
       APPLE_TEAM_ID:
         required: false
       SPARKLE_EDDSA_KEY:
+        required: false
+      R2_ACCOUNT_ID:
+        required: false
+      R2_ACCESS_KEY_ID:
+        required: false
+      R2_SECRET_ACCESS_KEY:
         required: false
 
 permissions:
@@ -67,7 +78,11 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .ci-actions
-          sparse-checkout: .github/actions
+          # scripts/dev-builds comes from here too, not from the build
+          # target: an older target predates the dev build publisher.
+          sparse-checkout: |
+            .github/actions
+            scripts/dev-builds
           persist-credentials: false
 
       - name: Flutter prep
@@ -163,7 +178,7 @@ jobs:
           rm -rf dmg_contents
 
       - name: Download Sparkle tools
-        if: ${{ inputs.generate_appcast }}
+        if: ${{ inputs.generate_appcast || (inputs.publish_dev_build && !inputs.dry_run) }}
         run: |
           curl -sSL https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz -o sparkle.tar.xz
           echo "5cddb7695674ef7704268f38eccaee80e3accbf19e61c1689efff5b6116d85be  sparkle.tar.xz" | shasum -a 256 -c -
@@ -281,6 +296,57 @@ jobs:
           name: mydia-player-macos-appcast
           path: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release/appcast.xml
           retention-days: 30
+
+      # A dev build reaches Macs on the Dev track through the dev channel of
+      # the Sparkle feed (scripts/appcast), which reads the entry written
+      # here. Only notarized and stapled builds get here: both steps above
+      # skip on dry_run, and so does this one. It is the last step that can
+      # fail, so a published build always means a successful job, which is
+      # what player-ondemand.yml's appcast job waits for.
+      - name: Publish the dev build to R2
+        if: ${{ inputs.publish_dev_build && !inputs.dry_run }}
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          VERSION: ${{ inputs.version }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        working-directory: ${{ env.PLAYER_PATH }}/build/macos/Build/Products/Release
+        run: |
+          set -euo pipefail
+          if [ -z "${SPARKLE_EDDSA_KEY}" ]; then
+            echo "::error::SPARKLE_EDDSA_KEY is missing, so the dev build cannot be signed for Sparkle and would be rejected by every client."
+            exit 1
+          fi
+          command -v rclone > /dev/null || brew install rclone
+          command -v jq > /dev/null || brew install jq
+
+          # Same invocation and format check as "Generate appcast" above.
+          SIGNATURE=$(echo "$SPARKLE_EDDSA_KEY" | "$GITHUB_WORKSPACE/sparkle-tools/bin/sign_update" "Mydia Player.dmg" --ed-key-file -)
+          if ! printf '%s' "$SIGNATURE" | grep -Eq '^sparkle:edSignature="[^"]+" length="[0-9]+"$'; then
+            echo "::error::Unexpected sign_update output, refusing to publish: $SIGNATURE"
+            exit 1
+          fi
+          ED_SIG=$(printf '%s' "$SIGNATURE" | sed -E 's/^sparkle:edSignature="([^"]+)".*$/\1/')
+          LENGTH=$(printf '%s' "$SIGNATURE" | sed -E 's/^.* length="([0-9]+)"$/\1/')
+          # The digest in the object key keeps a re-dispatch of the same
+          # version from overwriting bytes that a signed feed entry still
+          # describes; publish.sh removes the superseded object afterwards.
+          DIGEST=$(shasum -a 256 "Mydia Player.dmg" | cut -c1-12)
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "Mydia Player.app/Contents/Info.plist")
+
+          # Its own assignment so a jq failure stops the step under set -e.
+          EXTRA=$(jq -nc --arg s "$ED_SIG" --argjson l "$LENGTH" --arg m "$MIN_OS" \
+            '{ed_signature: $s, length: $l, minimum_system_version: $m}')
+
+          DEV_BUILD_EXTRA="$EXTRA" \
+          DEV_BUILD_PLATFORM=macos \
+          DEV_BUILD_SOURCE="Mydia Player.dmg" \
+          DEV_BUILD_FILE="macos/mydia-player-macos-v${VERSION}-${DIGEST}.dmg" \
+          DEV_BUILD_VERSION="$VERSION" \
+          DEV_BUILD_NUMBER="$VERSION_CODE" \
+            "$GITHUB_WORKSPACE/.ci-actions/scripts/dev-builds/publish.sh"
 
       - name: Cleanup keychain
         if: always()
