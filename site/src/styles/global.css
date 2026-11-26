@@ -103,8 +103,8 @@ body {
   display: none;
 }
 
-#downloads:has(#track-stable:checked) .track-panel[data-track="stable"],
-#downloads:has(#track-beta:checked) .track-panel[data-track="beta"],
-#downloads:has(#track-dev:checked) .track-panel[data-track="dev"] {
+#downloads:has(#track-stable:checked) .track-panel[data-track~="stable"],
+#downloads:has(#track-beta:checked) .track-panel[data-track~="beta"],
+#downloads:has(#track-dev:checked) .track-panel[data-track~="dev"] {
   display: flex;
 }
