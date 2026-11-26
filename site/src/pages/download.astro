@@ -1,5 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
+import { PLATFORM_ICONS } from '../data/platform-icons';
+import type { Track } from '../lib/release-feed';
 
 interface Option {
   label: string;
@@ -7,121 +9,236 @@ interface Option {
   primary?: boolean;
 }
 
+/** What a card shows on one release track. */
+interface Channel {
+  options?: Option[];
+  commands?: string;
+  note: string;
+  docs?: { label: string; href: string };
+  /** releases.json key whose version, size and date fill this panel. */
+  feed?: string;
+}
+
 interface Platform {
-  id: string;
+  id: keyof typeof PLATFORM_ICONS;
   name: string;
   tagline: string;
-  icon: string;
-  options: Option[];
-  note: string;
-  commands?: string;
-  docs?: { label: string; href: string };
+  /** Slug /api/player-release reports a stable file size under. */
   sizeFor?: string;
+  channels: Partial<Record<Track, Channel>>;
+  /** Shown on a track the platform has no build for. */
+  unavailable?: Partial<Record<Track, string>>;
 }
+
+const docsBase = 'https://docs.mydia.dev/latest/using/how-to';
+const linuxDocs = `${docsBase}/install-player-linux/`;
+const trackSetting = (track: string) =>
+  `To keep receiving ${track} builds after installing, open Settings › Manage › Release track and choose ${track[0].toUpperCase()}${track.slice(1)}.`;
+const devWarning =
+  'Dev builds come straight from development. They are untested and can break without notice.';
 
 const platforms: Platform[] = [
   {
     id: 'android',
     name: 'Android',
     tagline: 'Phones, tablets and Android TV',
-    icon: 'M17.523 2.27a.75.75 0 00-1.046.206l-1.238 1.855A7.47 7.47 0 0012 3.5a7.47 7.47 0 00-3.239.831L7.523 2.476a.75.75 0 10-1.252.828l1.14 1.71A7.5 7.5 0 004.5 11h15a7.5 7.5 0 00-2.91-5.986l1.14-1.71a.75.75 0 00-.207-1.034zM10 8.5a1 1 0 11-2 0 1 1 0 012 0zm6 0a1 1 0 11-2 0 1 1 0 012 0zM4.5 12v6.5A2.5 2.5 0 007 21h1v2.25a1.25 1.25 0 102.5 0V21h3v2.25a1.25 1.25 0 102.5 0V21h1a2.5 2.5 0 002.5-2.5V12h-15zM2.25 12a1.25 1.25 0 00-1.25 1.25v5a1.25 1.25 0 102.5 0v-5A1.25 1.25 0 002.25 12zm19.5 0a1.25 1.25 0 00-1.25 1.25v5a1.25 1.25 0 102.5 0v-5A1.25 1.25 0 0021.75 12z',
-    options: [{ label: 'Download APK', href: '/download/android', primary: true }],
-    note: 'Android prompts you to allow installs from unknown sources the first time you open the APK. Later updates can be installed from inside the app.',
     sizeFor: 'android',
+    channels: {
+      stable: {
+        options: [{ label: 'Download APK', href: '/download/android', primary: true }],
+        note: 'Android prompts you to allow installs from unknown sources the first time you open the APK. Later updates can be installed from inside the app.',
+      },
+      beta: {
+        options: [{ label: 'Download beta APK', href: '/download/android?track=beta', primary: true }],
+        note: `Installs over the stable app and keeps your data. ${trackSetting('beta')}`,
+        feed: 'android:beta',
+      },
+      dev: {
+        options: [{ label: 'Download dev APK', href: '/download/android?track=dev', primary: true }],
+        note: `${devWarning} ${trackSetting('dev')}`,
+        feed: 'android:dev',
+      },
+    },
   },
   {
     id: 'ios',
     name: 'iOS',
     tagline: 'iPhone and iPad',
-    icon: 'M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z',
-    options: [{ label: 'Install via TestFlight', href: '/download/ios', primary: true }],
-    note: 'Requires the TestFlight app from the App Store. Updates are delivered through TestFlight.',
+    channels: {
+      stable: {
+        options: [{ label: 'Install via TestFlight', href: '/download/ios', primary: true }],
+        note: 'Requires the TestFlight app from the App Store. Updates are delivered through TestFlight.',
+      },
+      beta: {
+        options: [{ label: 'Join the TestFlight beta', href: '/download/ios?track=beta', primary: true }],
+        note: 'Betas and release candidates have their own TestFlight group. Joining it keeps you in the stable group too; leave either one from inside the TestFlight app.',
+      },
+    },
+    unavailable: {
+      dev: 'There are no dev builds for iOS. Switch to Beta to join the pre-release TestFlight group.',
+    },
   },
   {
     id: 'macos',
     name: 'macOS',
     tagline: 'Signed and notarized',
-    icon: 'M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z',
-    options: [{ label: 'Download .dmg', href: '/download/macos', primary: true }],
-    note: 'Notarized by Apple, with built-in automatic updates.',
     sizeFor: 'macos',
+    channels: {
+      stable: {
+        options: [{ label: 'Download .dmg', href: '/download/macos', primary: true }],
+        note: 'Notarized by Apple, with built-in automatic updates.',
+      },
+      beta: {
+        options: [{ label: 'Download beta .dmg', href: '/download/macos?track=beta', primary: true }],
+        note: `Replaces the stable app and keeps your data. ${trackSetting('beta')}`,
+        feed: 'macos:beta',
+      },
+      dev: {
+        options: [{ label: 'Download dev .dmg', href: '/download/macos?track=dev', primary: true }],
+        note: `${devWarning} ${trackSetting('dev')}`,
+        feed: 'macos:dev',
+      },
+    },
   },
   {
     id: 'windows',
     name: 'Windows',
     tagline: 'x64 installer',
-    icon: 'M3 5.548l7.06-0.966v6.817H3V5.548zm0 12.905l7.06 0.966v-6.819H3v5.853zm7.862 1.075L21 21V12.601H10.862v6.927zM10.862 4.472v6.929H21V3L10.862 4.472z',
-    options: [{ label: 'Download installer', href: '/download/windows', primary: true }],
-    commands: 'irm https://mydia.dev/install.ps1 | iex',
-    note: 'Run the PowerShell command to install without a SmartScreen warning. Because the installer is not code-signed, downloading it in a browser triggers a SmartScreen prompt on first launch (click More info, then Run anyway). Installs per-user without administrator rights.',
     sizeFor: 'windows',
+    channels: {
+      stable: {
+        options: [{ label: 'Download installer', href: '/download/windows', primary: true }],
+        commands: 'irm https://mydia.dev/install.ps1 | iex',
+        note: 'Run the PowerShell command to install without a SmartScreen warning. Because the installer is not code-signed, downloading it in a browser triggers a SmartScreen prompt on first launch (click More info, then Run anyway). Installs per-user without administrator rights.',
+      },
+      beta: {
+        options: [{ label: 'Download beta installer', href: '/download/windows?track=beta', primary: true }],
+        note: `The installer is not code-signed, so SmartScreen asks on first launch (click More info, then Run anyway). ${trackSetting('beta')}`,
+        feed: 'windows:beta',
+      },
+    },
+    unavailable: {
+      dev: 'There are no dev builds for Windows yet. Switch to Beta for the newest tested pre-release.',
+    },
   },
   {
     id: 'linux',
     name: 'Linux',
     tagline: 'Flatpak recommended',
-    icon: 'M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.396 1.884 1.564.34.134.684.134 1.025-.015s.59-.467.838-.954c.364-.736.263-1.665.122-2.397-.201-1.069-.36-2.135.193-2.962.521-.731.897-1.395.897-2.131 0-.903-.312-1.869-.78-2.733a12.54 12.54 0 00-.559-.868l-.003-.005c-.86-1.252-1.91-2.502-2.424-3.537-.464-.872-.693-1.875-.693-2.933 0-.528.052-.748.116-1.073.063-.307.142-.676.142-1.398 0-1.347-.29-2.282-1.067-3.056C14.204.298 13.276 0 12.504 0z',
-    options: [
-      { label: 'Get the Flatpak repo', href: '/download/flatpak', primary: true },
-      { label: 'Download .tar.gz', href: '/download/linux' },
-    ],
-    commands: `flatpak remote-add --if-not-exists --from mydia https://flatpak.mydia.dev/mydia.flatpakrepo
-flatpak install mydia dev.mydia.player`,
-    note: 'The Flatpak includes all required libraries. The x64 tarball requires libmpv, libsecret and GTK 3 on the host system.',
-    docs: {
-      label: 'Tarball instructions',
-      href: 'https://docs.mydia.dev/latest/using/how-to/install-player-linux/',
-    },
     sizeFor: 'linux',
+    channels: {
+      stable: {
+        options: [
+          { label: 'Get the Flatpak repo', href: '/download/flatpak', primary: true },
+          { label: 'Download .tar.gz', href: '/download/linux' },
+        ],
+        commands: `flatpak remote-add --if-not-exists --from mydia https://flatpak.mydia.dev/mydia.flatpakrepo
+flatpak install mydia dev.mydia.player`,
+        note: 'The Flatpak includes all required libraries. The x64 tarball requires libmpv, libsecret and GTK 3 on the host system.',
+        docs: { label: 'Tarball instructions', href: linuxDocs },
+      },
+      beta: {
+        options: [
+          { label: 'Get the beta Flatpak repo', href: '/download/flatpak?track=beta', primary: true },
+          { label: 'Download beta .tar.gz', href: '/download/linux?track=beta' },
+        ],
+        commands: `flatpak remote-add --if-not-exists --from mydia-beta https://flatpak.mydia.dev/mydia-beta.flatpakrepo
+flatpak install mydia-beta dev.mydia.player//beta`,
+        note: 'The beta Flatpak lives on its own remote and branch. If stable is installed, remove it afterwards with flatpak uninstall dev.mydia.player//stable.',
+        docs: { label: 'Switching branches', href: `${linuxDocs}#beta` },
+        feed: 'linux:beta',
+      },
+      dev: {
+        options: [{ label: 'Get the dev Flatpak repo', href: '/download/flatpak?track=dev', primary: true }],
+        commands: `flatpak remote-add --if-not-exists --from mydia-dev https://flatpak.mydia.dev/mydia-dev.flatpakrepo
+flatpak install mydia-dev dev.mydia.player//dev`,
+        note: `${devWarning} Dev is Flatpak only. If stable is installed, remove it afterwards with flatpak uninstall dev.mydia.player//stable.`,
+        docs: { label: 'Switching branches', href: `${linuxDocs}#dev` },
+      },
+    },
   },
   {
     id: 'web',
     name: 'Web',
     tagline: 'Included with Mydia Server',
-    icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9',
-    options: [],
-    note: 'Mydia Server hosts the web build of Mydia Player at /player. Open that URL in a browser and sign in with your server account.',
-    docs: {
-      label: 'How-to guides',
-      href: 'https://docs.mydia.dev/latest/using/how-to/',
+    channels: {
+      stable: {
+        note: 'Mydia Server hosts the web build of Mydia Player at /player. Open that URL in a browser and sign in with your server account.',
+        docs: { label: 'How-to guides', href: `${docsBase}/` },
+      },
+      beta: {
+        commands: 'image: ghcr.io/getmydia/mydia:beta',
+        note: 'The web player is whatever version your server runs. Run the server’s :beta image (:beta-pg for PostgreSQL) to get the beta player.',
+        docs: { label: 'Testing pre-release builds', href: `${docsBase}/update-mydia/#testing-pre-release-builds` },
+      },
+      dev: {
+        commands: 'image: ghcr.io/getmydia/mydia:master',
+        note: 'The :master image (:master-pg for PostgreSQL) rebuilds on every merge and carries the newest web player. It is amd64 only and not meant for production.',
+        docs: { label: 'Testing pre-release builds', href: `${docsBase}/update-mydia/#testing-pre-release-builds` },
+      },
     },
   },
+];
+
+const tracks: { id: Track; label: string; blurb: string }[] = [
+  { id: 'stable', label: 'Stable', blurb: 'Tested releases. The right choice for most people.' },
+  { id: 'beta', label: 'Beta', blurb: 'Release candidates, a few weeks ahead of stable. Expect the occasional rough edge.' },
+  { id: 'dev', label: 'Dev', blurb: 'Built from the main branch for trying fixes before release. Untested.' },
 ];
 
 // Every card links to its own section of the beta builds docs page. The
 // section ids there are pinned to the card ids above, so a new card gets a
 // working link for free.
-const betaDocs = 'https://docs.mydia.dev/latest/using/how-to/beta-builds/';
+const betaDocs = `${docsBase}/beta-builds/`;
 ---
 
 <Base
   title="Download Mydia Player"
-  description="Download Mydia Player for Android, iOS, macOS, Windows and Linux."
+  description="Download Mydia Player for Android, iOS, macOS, Windows and Linux, including beta and dev builds."
 >
-  <section class="py-16 px-4">
+  <section id="downloads" class="py-12 sm:py-16 px-4">
     <div class="max-w-5xl mx-auto">
-      <div class="text-center mb-12">
+      <div class="text-center mb-10 sm:mb-12">
         <span class="badge badge-primary badge-outline mb-4">Mydia Player</span>
         <h1 class="text-3xl sm:text-5xl font-bold mb-4">Download Mydia Player</h1>
         <p class="text-base-content/60 max-w-xl mx-auto mb-8">
           Play from Plex, Jellyfin and Mydia Server on Android, iOS, macOS, Windows, Linux and the web.
         </p>
 
-        <a id="primary-download" href="#platforms" class="btn btn-primary btn-lg gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+        <div class="join mb-3" role="radiogroup" aria-label="Release track">
+          {tracks.map(track => (
+            <input
+              id={`track-${track.id}`}
+              class="join-item btn btn-sm sm:btn-md px-5"
+              type="radio"
+              name="track"
+              value={track.id}
+              aria-label={track.label}
+              checked={track.id === 'stable'}
+            />
+          ))}
+        </div>
+        {tracks.map(track => (
+          <p data-track={track.id} class="track-panel justify-center text-sm text-base-content/50 mb-6 max-w-md mx-auto">
+            {track.blurb}
+          </p>
+        ))}
+
+        <a id="primary-download" href="#platforms" class="btn btn-primary btn-lg gap-2 max-w-full">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
             <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
           </svg>
-          <span data-primary-label>Download Mydia Player</span>
+          <span data-primary-label class="truncate">Download Mydia Player</span>
         </a>
 
         <p id="release-line" class="text-sm text-base-content/50 mt-4 hidden"></p>
       </div>
 
-      <div id="platforms" class="grid md:grid-cols-2 gap-5 scroll-mt-20">
+      <div id="platforms" class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 scroll-mt-20">
         {platforms.map(platform => (
-          <div id={platform.id} class="card bg-base-200/60 border border-base-300 scroll-mt-20">
-            <div class="card-body gap-4">
+          <div id={platform.id} class="card min-w-0 bg-base-200/60 border border-base-300 scroll-mt-20">
+            <div class="card-body gap-4 p-5 sm:p-8">
               <div class="flex items-start gap-3">
                 <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <svg
@@ -132,56 +249,66 @@ const betaDocs = 'https://docs.mydia.dev/latest/using/how-to/beta-builds/';
                     stroke={platform.id === 'web' ? 'currentColor' : 'none'}
                     stroke-width={platform.id === 'web' ? '2' : '0'}
                   >
-                    <path stroke-linecap="round" stroke-linejoin="round" d={platform.icon} />
+                    <path stroke-linecap="round" stroke-linejoin="round" d={PLATFORM_ICONS[platform.id]} />
                   </svg>
                 </div>
-                <div>
+                <div class="min-w-0">
                   <h2 class="card-title text-lg">{platform.name}</h2>
-                  <p class="text-sm text-base-content/50">
-                    {platform.tagline}
-                    {platform.sizeFor && (
-                      <span data-size={platform.sizeFor} class="hidden"></span>
-                    )}
-                  </p>
+                  <p class="text-sm text-base-content/50">{platform.tagline}</p>
                 </div>
               </div>
 
-              {platform.options.length > 0 && (
-                <div class="flex flex-wrap gap-2">
-                  {platform.options.map(option => (
-                    <a
-                      href={option.href}
-                      class:list={['btn', 'btn-sm', option.primary ? 'btn-primary' : 'btn-outline']}
-                    >
-                      {option.label}
-                    </a>
-                  ))}
-                </div>
-              )}
+              {tracks.map(({ id: track }) => {
+                const channel = platform.channels[track];
+                if (!channel) {
+                  return (
+                    <div data-track={track} class="track-panel flex-col items-start gap-4">
+                      <p class="text-sm text-base-content/50 leading-relaxed rounded-lg border border-dashed border-base-300 px-4 py-3">
+                        {platform.unavailable?.[track]}
+                      </p>
+                    </div>
+                  );
+                }
+                return (
+                  <div data-track={track} class="track-panel flex-col gap-4 flex-1">
+                    {channel.feed && (
+                      <p data-feed={channel.feed} class="text-xs text-base-content/50 hidden"></p>
+                    )}
+                    {track === 'stable' && platform.sizeFor && (
+                      <p data-size={platform.sizeFor} class="text-xs text-base-content/50 hidden"></p>
+                    )}
+                    {channel.options && (
+                      <div class="flex flex-wrap gap-2">
+                        {channel.options.map(option => (
+                          <a
+                            href={option.href}
+                            class:list={['btn', 'btn-sm', 'max-w-full', option.primary ? 'btn-primary' : 'btn-outline']}
+                          >
+                            {option.label}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {channel.commands && (
+                      <pre class="px-3 py-2 rounded bg-base-300/60 text-base-content/80 text-xs overflow-x-auto"><code>{channel.commands}</code></pre>
+                    )}
+                    <p class="text-sm text-base-content/50 leading-relaxed">{channel.note}</p>
+                    {channel.docs && (
+                      <a href={channel.docs.href} class="link link-hover text-primary text-sm w-fit">
+                        {channel.docs.label}
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
 
-              {platform.commands && (
-                <pre
-                  class="px-3 py-2 rounded bg-base-300/60 text-base-content/80 text-xs overflow-x-auto"
-                ><code>{platform.commands}</code></pre>
-              )}
-
-              <p class="text-sm text-base-content/50 leading-relaxed">{platform.note}</p>
-
-              <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                {platform.docs && (
-                  <>
-                    <a href={platform.docs.href} class="link link-hover text-primary">
-                      {platform.docs.label}
-                    </a>
-                    <span class="text-base-content/30" aria-hidden="true">·</span>
-                  </>
-                )}
+              <div class="mt-auto pt-1 text-sm">
                 <a
                   href={`${betaDocs}#${platform.id}`}
                   class="link link-hover text-base-content/50"
                   data-beta-link={platform.id}
                 >
-                  Beta builds
+                  About pre-release builds for {platform.name}
                 </a>
               </div>
             </div>
@@ -189,10 +316,23 @@ const betaDocs = 'https://docs.mydia.dev/latest/using/how-to/beta-builds/';
         ))}
       </div>
 
-      <p class="text-center text-sm text-base-content/40 mt-10">
+      <p data-track="stable" class="track-panel flex-wrap justify-center gap-x-1 text-center text-sm text-base-content/40 mt-10">
         Download links point to the latest stable release.
         <a href="https://github.com/getmydia/mydia/releases" class="link link-hover text-primary">
           Browse all releases
+        </a>
+      </p>
+      <p data-track="beta" class="track-panel flex-wrap justify-center gap-x-1 text-center text-sm text-base-content/40 mt-10">
+        Found a problem in a beta?
+        <a href="https://github.com/getmydia/mydia/issues" class="link link-hover text-primary">
+          Open an issue
+        </a>
+        and include the version shown in Settings.
+      </p>
+      <p data-track="dev" class="track-panel flex-wrap justify-center gap-x-1 text-center text-sm text-base-content/40 mt-10">
+        Dev builds are not covered by release notes.
+        <a href="https://github.com/getmydia/mydia/commits/master" class="link link-hover text-primary">
+          Read the commit log
         </a>
       </p>
     </div>
@@ -200,19 +340,39 @@ const betaDocs = 'https://docs.mydia.dev/latest/using/how-to/beta-builds/';
 </Base>
 
 <script>
+  type Track = 'stable' | 'beta' | 'dev';
+
   interface Target {
     href: string;
     label: string;
   }
 
-  // Linux points at its card rather than the tarball: the recommended path is
-  // Flatpak, and that needs two commands rather than a file.
-  const TARGETS: Record<string, Target> = {
-    android: { href: '/download/android', label: 'Download for Android' },
-    ios: { href: '/download/ios', label: 'Install via TestFlight' },
-    macos: { href: '/download/macos', label: 'Download for macOS' },
-    windows: { href: '/download/windows', label: 'Download for Windows' },
-    linux: { href: '#linux', label: 'Get it for Linux' },
+  // Linux points at its card rather than a file: the recommended path is
+  // Flatpak, and that needs two commands rather than a download.
+  const TARGETS: Record<string, Partial<Record<Track, Target>>> = {
+    android: {
+      stable: { href: '/download/android', label: 'Download for Android' },
+      beta: { href: '/download/android?track=beta', label: 'Download the Android beta' },
+      dev: { href: '/download/android?track=dev', label: 'Download the Android dev build' },
+    },
+    ios: {
+      stable: { href: '/download/ios', label: 'Install via TestFlight' },
+      beta: { href: '/download/ios?track=beta', label: 'Join the TestFlight beta' },
+    },
+    macos: {
+      stable: { href: '/download/macos', label: 'Download for macOS' },
+      beta: { href: '/download/macos?track=beta', label: 'Download the macOS beta' },
+      dev: { href: '/download/macos?track=dev', label: 'Download the macOS dev build' },
+    },
+    windows: {
+      stable: { href: '/download/windows', label: 'Download for Windows' },
+      beta: { href: '/download/windows?track=beta', label: 'Download the Windows beta' },
+    },
+    linux: {
+      stable: { href: '#linux', label: 'Get it for Linux' },
+      beta: { href: '#linux', label: 'Get the Linux beta' },
+      dev: { href: '#linux', label: 'Get the Linux dev build' },
+    },
   };
 
   function detect(): string | null {
@@ -236,15 +396,52 @@ const betaDocs = 'https://docs.mydia.dev/latest/using/how-to/beta-builds/';
 
   const detected = detect();
   const button = document.getElementById('primary-download');
-  if (detected && button instanceof HTMLAnchorElement) {
-    const target = TARGETS[detected];
-    button.href = target.href;
-    const label = button.querySelector('[data-primary-label]');
-    if (label) label.textContent = target.label;
+  const buttonLabel = button?.querySelector('[data-primary-label]');
+
+  function updatePrimary(track: Track) {
+    if (!(button instanceof HTMLAnchorElement) || !buttonLabel) return;
+    const target = detected ? TARGETS[detected]?.[track] : undefined;
+    if (target) {
+      button.href = target.href;
+      buttonLabel.textContent = target.label;
+    } else {
+      // No build of this track for the visitor's platform (or no platform):
+      // send them to the cards, which say what exists.
+      button.href = detected ? `#${detected}` : '#platforms';
+      buttonLabel.textContent = track === 'stable' ? 'Download Mydia Player' : 'See all platforms';
+    }
   }
+
+  // The track switch works without this script (CSS :has); the script only
+  // keeps the URL, the main button and a ?track= link in step with it.
+  const radios = document.querySelectorAll<HTMLInputElement>('input[name="track"]');
+  function selectedTrack(): Track {
+    for (const radio of radios) if (radio.checked) return radio.value as Track;
+    return 'stable';
+  }
+
+  const requested = new URLSearchParams(location.search).get('track');
+  for (const radio of radios) {
+    if (radio.value === requested) radio.checked = true;
+    radio.addEventListener('change', () => {
+      const track = selectedTrack();
+      updatePrimary(track);
+      const url = new URL(location.href);
+      if (track === 'stable') url.searchParams.delete('track');
+      else url.searchParams.set('track', track);
+      history.replaceState(null, '', url);
+    });
+  }
+  updatePrimary(selectedTrack());
 
   function megabytes(bytes: number): string {
     return `${Math.round(bytes / 1_000_000)} MB`;
+  }
+
+  function day(iso?: string): string | null {
+    return iso
+      ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      : null;
   }
 
   interface Summary {
@@ -255,43 +452,77 @@ const betaDocs = 'https://docs.mydia.dev/latest/using/how-to/beta-builds/';
     assets?: Record<string, { size: number }>;
   }
 
-  // Progressive enhancement only. If this fails the page is already complete:
-  // the version line stays hidden and every button still works.
-  try {
+  interface FeedEntry {
+    version: string;
+    build: number;
+    size?: number;
+    published_at?: string;
+  }
+
+  type Feed = { platforms?: Record<string, Partial<Record<Track, FeedEntry>>> };
+
+  // Progressive enhancement only. If either request fails the page is already
+  // complete: the version lines stay hidden and every button still works.
+  async function showStableRelease() {
     const summary: Summary = await (await fetch('/api/player-release')).json();
-    if (summary.ok && summary.version) {
-      const line = document.getElementById('release-line');
-      if (line) {
-        const when = summary.publishedAt
-          ? new Date(summary.publishedAt).toLocaleDateString(undefined, {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })
-          : null;
-        line.textContent = when
-          ? `Latest release v${summary.version}, published ${when}. `
-          : `Latest release v${summary.version}. `;
+    if (!summary.ok || !summary.version) return;
 
-        if (summary.releaseUrl) {
-          const link = document.createElement('a');
-          link.href = summary.releaseUrl;
-          link.className = 'link link-hover text-primary';
-          link.textContent = 'Release notes';
-          line.appendChild(link);
-        }
-        line.classList.remove('hidden');
+    const line = document.getElementById('release-line');
+    if (line) {
+      const when = day(summary.publishedAt);
+      line.textContent = when
+        ? `Latest stable release v${summary.version}, published ${when}. `
+        : `Latest stable release v${summary.version}. `;
+      if (summary.releaseUrl) {
+        const link = document.createElement('a');
+        link.href = summary.releaseUrl;
+        link.className = 'link link-hover text-primary';
+        link.textContent = 'Release notes';
+        line.appendChild(link);
       }
+      line.classList.remove('hidden');
+    }
 
-      for (const [slug, asset] of Object.entries(summary.assets ?? {})) {
-        const el = document.querySelector(`[data-size="${slug}"]`);
-        if (el) {
-          el.textContent = ` · ${megabytes(asset.size)}`;
-          el.classList.remove('hidden');
-        }
+    for (const [slug, asset] of Object.entries(summary.assets ?? {})) {
+      const el = document.querySelector(`[data-size="${slug}"]`);
+      if (el) {
+        el.textContent = `v${summary.version} · ${megabytes(asset.size)}`;
+        el.classList.remove('hidden');
       }
     }
-  } catch {
-    // Leave the page exactly as rendered.
   }
+
+  // Mirrors resolveTrackBuild in src/lib/release-feed.ts, which decides where
+  // the ?track= buttons actually redirect.
+  const ORDER: Track[] = ['stable', 'beta', 'dev'];
+
+  async function showPreReleases() {
+    const feed: Feed = await (await fetch('https://updates.mydia.dev/releases.json')).json();
+
+    for (const el of document.querySelectorAll<HTMLElement>('[data-feed]')) {
+      const [platform, track] = (el.dataset.feed ?? '').split(':') as [string, Track];
+      const tracks = feed.platforms?.[platform];
+      if (!tracks) continue;
+
+      let best: { track: Track; entry: FeedEntry } | null = null;
+      for (const candidate of ORDER.slice(0, ORDER.indexOf(track) + 1)) {
+        const entry = tracks[candidate];
+        if (entry && (!best || entry.build > best.entry.build)) best = { track: candidate, entry };
+      }
+      if (!best) continue;
+
+      const { entry } = best;
+      const parts = [`v${entry.version}`];
+      if (entry.size) parts.push(megabytes(entry.size));
+      const when = day(entry.published_at);
+      if (when) parts.push(when);
+      el.textContent =
+        best.track === track
+          ? parts.join(' · ')
+          : `No ${track} build newer than ${best.track} right now, so this gets ${parts.join(' · ')}`;
+      el.classList.remove('hidden');
+    }
+  }
+
+  await Promise.allSettled([showStableRelease(), showPreReleases()]);
 </script>

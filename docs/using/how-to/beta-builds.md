@@ -8,6 +8,10 @@ arrive a few weeks ahead of the stable release and get less testing, so expect
 the occasional rough edge. Every install starts on stable, and joining a beta
 is a choice you make on each device.
 
+To install a beta or dev build directly, open the
+[download page](https://mydia.dev/download?track=beta) and pick **Beta** or
+**Dev** above the platform list.
+
 If something breaks, [open an issue](https://github.com/getmydia/mydia/issues)
 and include the version shown in Settings. A beta player can be newer than
 your Mydia server. When it needs a newer server than the one you run, the app
