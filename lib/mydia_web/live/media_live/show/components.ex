@@ -334,6 +334,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :season_order_suggestion, :any, default: nil
   attr :season_order_options, :any, default: nil
   attr :can_update_media, :boolean, required: true
+  attr :can_delete_media, :boolean, default: false
 
   def episodes_section(assigns) do
     ~H"""
@@ -424,6 +425,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               media_file_subtitle_tracks={@media_file_subtitle_tracks}
               segment_statuses={@segment_statuses}
               segment_detection_available={@segment_detection_available}
+              can_delete_media={@can_delete_media}
             />
           <% end %>
         </div>

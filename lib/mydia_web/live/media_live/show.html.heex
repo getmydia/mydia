@@ -383,6 +383,7 @@
             season_order_suggestion={@season_order_suggestion}
             season_order_options={@season_order_options}
             can_update_media={@can_update_media}
+            can_delete_media={@can_delete_media}
           />
           <%!-- Media Files Section --%>
           <Components.media_files_section
@@ -473,6 +474,9 @@
       file_to_delete={@file_to_delete}
       file_delete_mode={@file_delete_mode}
     />
+  <% end %>
+  <%= if @show_season_delete_confirm && @season_delete do %>
+    <Modals.season_delete_confirm_modal season_delete={@season_delete} />
   <% end %>
   <%= if @show_file_details_modal && @file_details do %>
     <Modals.file_details_modal

@@ -28,6 +28,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
   attr :fetching_season_subtitles, :any, default: nil
+  attr :can_delete_media, :boolean, default: false
   attr :auto_searching_episode, :any, default: nil
   attr :player_enabled, :boolean, required: true
   attr :current_user_id, :string, default: nil
@@ -47,6 +48,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         auto_searching_season={@auto_searching_season}
         rescanning_season={@rescanning_season}
         fetching_season_subtitles={@fetching_season_subtitles}
+        can_delete_media={@can_delete_media}
       />
 
       <%= if @expanded? do %>
@@ -512,6 +514,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
   attr :fetching_season_subtitles, :any, default: nil
+  attr :can_delete_media, :boolean, default: false
 
   def season_header(assigns) do
     downloading =
@@ -558,6 +561,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
       |> assign(:downloading_count, length(downloading))
       |> assign(:season_state, season_state)
       |> assign(:season_size, season_size)
+      |> assign(:has_files?, Enum.any?(assigns.episodes, &(&1.media_files != [])))
       |> assign(:chip, chip)
 
     ~H"""
@@ -690,6 +694,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           <% else %>
             <.icon name="hero-language" class="w-4 h-4" />
           <% end %>
+        </button>
+
+        <button
+          :if={@can_delete_media and @has_files?}
+          type="button"
+          id={"season-#{@season_number}-delete-files"}
+          phx-click="show_season_delete_confirm"
+          phx-value-season-number={@season_number}
+          aria-label={gettext("Delete season files")}
+          title={gettext("Delete season files")}
+          class="join-item btn btn-sm btn-square btn-ghost text-error"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" />
         </button>
       </div>
     </div>

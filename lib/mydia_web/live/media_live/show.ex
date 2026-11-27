@@ -97,6 +97,8 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_file_delete_confirm, false)
      |> assign(:file_to_delete, nil)
      |> assign(:file_delete_mode, :trash)
+     |> assign(:show_season_delete_confirm, false)
+     |> assign(:season_delete, nil)
      |> assign(:show_file_details_modal, false)
      |> assign(:file_details, nil)
      |> assign(:file_origin, nil)
@@ -209,6 +211,10 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(
        :can_update_media,
        Mydia.Accounts.Authorization.can_update_media?(socket.assigns.current_user)
+     )
+     |> assign(
+       :can_delete_media,
+       Mydia.Accounts.Authorization.can_delete_media?(socket.assigns.current_user)
      )
      |> SearchEvents.assign_manual_search_defaults()
      # Category modal state
@@ -363,6 +369,18 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("hide_file_delete_confirm", params, socket),
     do: FileEvents.hide_file_delete_confirm(params, socket)
+
+  def handle_event("show_season_delete_confirm", params, socket),
+    do: FileEvents.show_season_delete_confirm(params, socket)
+
+  def handle_event("hide_season_delete_confirm", params, socket),
+    do: FileEvents.hide_season_delete_confirm(params, socket)
+
+  def handle_event("change_season_delete", params, socket),
+    do: FileEvents.change_season_delete(params, socket)
+
+  def handle_event("delete_season_files", params, socket),
+    do: FileEvents.delete_season_files(params, socket)
 
   def handle_event("toggle_file_delete_mode", params, socket),
     do: FileEvents.toggle_file_delete_mode(params, socket)
