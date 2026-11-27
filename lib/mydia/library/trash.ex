@@ -147,10 +147,39 @@ defmodule Mydia.Library.Trash do
              bytes: non_neg_integer()
            }}
   def trash_episode_files(episode_ids, opts \\ []) do
+    episode_ids |> live_episode_files() |> trash_files(opts)
+  end
+
+  @doc """
+  Trashes exactly the listed media files that are still live (not trashed),
+  and keeps going when one fails. Ids that no longer exist or are already
+  trashed are ignored; nothing else on the same episodes is touched.
+
+  Same result shape as `trash_episode_files/2`.
+  """
+  @spec trash_media_files([binary()], keyword()) ::
+          {:ok,
+           %{
+             trashed: [MediaFile.t()],
+             failed: [{MediaFile.t(), term()}],
+             bytes: non_neg_integer()
+           }}
+  def trash_media_files(file_ids, opts \\ [])
+  def trash_media_files([], _opts), do: trash_files([], [])
+
+  def trash_media_files(file_ids, opts) do
+    Repo.all(
+      from(f in MediaFile,
+        where: f.id in ^file_ids and is_nil(f.trashed_at),
+        order_by: [asc: f.inserted_at, asc: f.id]
+      )
+    )
+    |> trash_files(opts)
+  end
+
+  defp trash_files(files, opts) do
     {trashed, failed} =
-      episode_ids
-      |> live_episode_files()
-      |> Enum.reduce({[], []}, fn file, {ok, bad} ->
+      Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
         case trash_media_file(file, opts) do
           {:ok, trashed} -> {[trashed | ok], bad}
           {:error, reason} -> {ok, [{file, reason} | bad]}

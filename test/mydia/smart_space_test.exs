@@ -173,6 +173,63 @@ defmodule Mydia.SmartSpaceTest do
     end
 
     @tag :tmp_dir
+    test "disabled with stale selected users is not an error", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      watched_season(c, 1, 1)
+
+      assert {:ok, %{cleanups: 0}} =
+               SmartSpace.run(
+                 config: cfg(%{enabled: false, watched_by: "selected", selected_users: ["ghost"]})
+               )
+
+      assert Repo.all(from e in Event, where: like(e.type, "smart_space.%")) == []
+    end
+
+    @tag :tmp_dir
+    test "trashes only the approved files, not extras or late imports", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      ep = episode(c, 1, 1)
+      version = file(c, ep, "s1e1.mkv")
+      watch(c, ep, days_ago(30))
+
+      {:ok, extra} =
+        Library.create_scanned_media_file(%{
+          relative_path: "s1e1-sample.mkv",
+          library_path_id: c.lp.id,
+          episode_id: ep.id,
+          size: 3,
+          extra_kind: "sample"
+        })
+
+      inputs = Mydia.SmartSpace.Loader.load(config: cfg())
+
+      assert [%{file_ids: [id]}] =
+               Mydia.SmartSpace.Evaluator.eligible(inputs, DateTime.utc_now(), Date.utc_today())
+
+      assert id == version.id
+
+      assert {:ok, %{files: 1}} = SmartSpace.run(config: cfg())
+      assert Repo.get!(MediaFile, version.id).trashed_at
+      assert is_nil(Repo.get!(MediaFile, extra.id).trashed_at)
+    end
+
+    @tag :tmp_dir
+    test "a file imported after load survives", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      ep = episode(c, 1, 1)
+      approved = file(c, ep, "s1e1.mkv")
+      watch(c, ep, days_ago(30))
+      late = file(c, ep, "s1e1-late.mkv", "zz")
+
+      # Stand in for an import landing between load and trash.
+      assert {:ok, %{trashed: [t]}} =
+               Library.trash_media_files([approved.id], reason: :smart_space)
+
+      assert t.id == approved.id
+      assert is_nil(Repo.get!(MediaFile, late.id).trashed_at)
+    end
+
+    @tag :tmp_dir
     test "misconfigured selected users trash nothing and warn", %{tmp_dir: tmp} do
       c = ctx(tmp)
       [{_, f}] = watched_season(c, 1, 1)

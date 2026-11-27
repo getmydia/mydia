@@ -119,6 +119,28 @@ defmodule Mydia.Library.TrashEpisodeFilesTest do
     end
   end
 
+  describe "trash_media_files/2" do
+    @tag :tmp_dir
+    test "trashes exactly the listed live files and reports failures", %{tmp_dir: tmp} do
+      ctx = setup_show(tmp)
+      e1 = episode(ctx, 1, 1)
+      f1 = add_file(ctx, e1, "a.mkv", "aaaa")
+      f2 = add_file(ctx, e1, "b.mkv", "bb")
+      other = add_file(ctx, e1, "c.mkv", "c")
+      {:ok, _} = Library.trash_media_file(f2, reason: :manual)
+
+      assert {:ok, %{trashed: [t], failed: [], bytes: 4}} =
+               Library.trash_media_files([f1.id, f2.id, Ecto.UUID.generate()],
+                 reason: :smart_space
+               )
+
+      assert t.id == f1.id
+      assert Repo.get!(MediaFile, f2.id).trashed_reason == :manual
+      assert is_nil(Repo.get!(MediaFile, other.id).trashed_at)
+      assert {:ok, %{trashed: [], failed: [], bytes: 0}} = Library.trash_media_files([])
+    end
+  end
+
   describe "delete_episode_files/2" do
     @tag :tmp_dir
     test "delete_files: true removes rows and bytes", %{tmp_dir: tmp} do

@@ -64,22 +64,19 @@ defmodule Mydia.SmartSpace do
     inputs = opts |> Keyword.take([:config]) |> Loader.load()
 
     cond do
+      inputs.shows == [] ->
+        {:ok, empty_summary()}
+
       inputs.selected_user_ids == :misconfigured ->
         record(%{type: "smart_space.misconfigured", severity: :warning, metadata: %{}})
         {:error, :misconfigured}
 
-      inputs.shows == [] ->
-        {:ok, empty_summary()}
-
       true ->
-        {chosen, capped?} = inputs |> evaluate(now) |> apply_cap(cap)
+        {chosen, skipped} = inputs |> evaluate(now) |> apply_cap(cap)
+        capped? = skipped != []
+        log_capped(skipped, cap)
         summary = Enum.reduce(chosen, %{empty_summary() | capped?: capped?}, &apply_cleanup/2)
-
-        record(%{
-          type: "smart_space.run",
-          metadata: Map.new(Map.delete(summary, :capped?)) |> Map.put(:capped, capped?)
-        })
-
+        record(%{type: "smart_space.run", metadata: summary})
         {:ok, summary}
     end
   end
@@ -100,35 +97,34 @@ defmodule Mydia.SmartSpace do
 
   # Cleanups arrive sorted by eligible_at. One that does not fit in what is
   # left of the cap is skipped, never split; later, smaller ones may still fit.
+  # Returns {chosen, skipped}.
   defp apply_cap(cleanups, cap) do
-    {chosen, _total, capped?} =
-      Enum.reduce(cleanups, {[], 0, false}, fn cleanup, {acc, total, capped?} ->
+    {chosen, _total, skipped} =
+      Enum.reduce(cleanups, {[], 0, []}, fn cleanup, {acc, total, skipped} ->
         count = length(cleanup.file_ids)
 
-        cond do
-          total + count <= cap ->
-            {[cleanup | acc], total + count, capped?}
-
-          true ->
-            if count > cap do
-              Logger.warning("Smart Space skipped a cleanup larger than the cap",
-                media_item_id: cleanup.media_item_id,
-                season_number: cleanup.season_number,
-                files: count,
-                cap: cap
-              )
-            end
-
-            {acc, total, true}
-        end
+        if total + count <= cap,
+          do: {[cleanup | acc], total + count, skipped},
+          else: {acc, total, [cleanup | skipped]}
       end)
 
-    {Enum.reverse(chosen), capped?}
+    {Enum.reverse(chosen), Enum.reverse(skipped)}
+  end
+
+  defp log_capped([], _cap), do: :ok
+
+  defp log_capped(skipped, cap) do
+    Logger.warning("Smart Space hit its per-run cap; the rest waits for the next run",
+      cap: cap,
+      skipped_cleanups: length(skipped),
+      skipped_files: skipped |> Enum.map(&length(&1.file_ids)) |> Enum.sum(),
+      oversized: Enum.count(skipped, &(length(&1.file_ids) > cap))
+    )
   end
 
   defp apply_cleanup(%Cleanup{} = cleanup, summary) do
     {:ok, %{trashed: trashed, failed: failed, bytes: bytes}} =
-      Library.trash_episode_files(cleanup.episode_ids, reason: :smart_space)
+      Library.trash_media_files(cleanup.file_ids, reason: :smart_space)
 
     failed_episode_ids = MapSet.new(failed, fn {file, _reason} -> file.episode_id end)
     done_ids = Enum.reject(cleanup.episode_ids, &MapSet.member?(failed_episode_ids, &1))

@@ -46,6 +46,7 @@ defmodule Mydia.Library do
 
   defdelegate delete_media_file(media_file, opts \\ []), to: Mydia.Library.Trash
   defdelegate trash_media_file(media_file, opts \\ []), to: Mydia.Library.Trash
+  defdelegate trash_media_files(file_ids, opts \\ []), to: Mydia.Library.Trash
   defdelegate trash_episode_files(episode_ids, opts \\ []), to: Mydia.Library.Trash
   defdelegate delete_episode_files(episode_ids, opts \\ []), to: Mydia.Library.Trash
   defdelegate restore_media_file(media_file), to: Mydia.Library.Trash
