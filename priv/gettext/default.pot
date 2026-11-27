@@ -1241,7 +1241,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/library_config_components.ex:122
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:259
 #: lib/mydia_web/live/admin_settings_live/proxy_components.ex:154
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:143
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:147
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:166
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:349
 #: lib/mydia_web/live/discover_live/regional_components.ex:222
@@ -22958,27 +22958,27 @@ msgctxt "trash reason"
 msgid "Smart Space"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:156
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:160
 #, elixir-autogen, elixir-format
 msgid "Any one person"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:38
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:41
 #, elixir-autogen, elixir-format
 msgid "Clean up watched TV"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:155
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:159
 #, elixir-autogen, elixir-format
 msgid "Everyone who started the show"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:71
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:75
 #, elixir-autogen, elixir-format
 msgid "Grace period (days)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:84
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:88
 #, elixir-autogen, elixir-format
 msgid "How long a finished season or episode stays put after it was last watched, so a rewatch can still happen."
 msgstr ""
@@ -22993,14 +22993,14 @@ msgstr ""
 msgid "Pick at least one person, or choose a different rule."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:113
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:122
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:157
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:117
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:126
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:161
 #, elixir-autogen, elixir-format
 msgid "Selected people"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:153
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:157
 #, elixir-autogen, elixir-format
 msgid "Single episodes"
 msgstr ""
@@ -23017,22 +23017,22 @@ msgstr ""
 msgid "Unknown user: %{names}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:116
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:120
 #, elixir-autogen, elixir-format
 msgid "Used when the rule above is Selected people."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:55
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:59
 #, elixir-autogen, elixir-format
 msgid "What to clean up"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:92
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:96
 #, elixir-autogen, elixir-format
 msgid "Who has to have watched it"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:152
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:156
 #, elixir-autogen, elixir-format
 msgid "Whole seasons"
 msgstr ""
