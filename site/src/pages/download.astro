@@ -36,8 +36,6 @@ const docsBase = 'https://docs.mydia.dev/latest/using/how-to';
 const linuxDocs = `${docsBase}/install-player-linux/`;
 const trackSetting = (track: string) =>
   `To keep receiving ${track} builds after installing, open Settings › Manage › Release track and choose ${track[0].toUpperCase()}${track.slice(1)}.`;
-const devWarning =
-  'Dev builds come straight from development. They are untested and can break without notice.';
 
 const platforms: Platform[] = [
   {
@@ -52,12 +50,12 @@ const platforms: Platform[] = [
       },
       beta: {
         options: [{ label: 'Download beta APK', href: '/download/android?track=beta', primary: true }],
-        note: `Installs over the stable app and keeps your data. ${trackSetting('beta')}`,
+        note: trackSetting('beta'),
         feed: 'android:beta',
       },
       dev: {
         options: [{ label: 'Download dev APK', href: '/download/android?track=dev', primary: true }],
-        note: `${devWarning} ${trackSetting('dev')}`,
+        note: trackSetting('dev'),
         feed: 'android:dev',
       },
     },
@@ -73,11 +71,11 @@ const platforms: Platform[] = [
       },
       beta: {
         options: [{ label: 'Join the TestFlight beta', href: '/download/ios?track=beta', primary: true }],
-        note: 'Betas and release candidates have their own TestFlight group. Joining it keeps you in the stable group too; leave either one from inside the TestFlight app.',
+        note: 'Pre-release builds use a separate TestFlight group. Joining it keeps you in the stable one; leave either from inside the TestFlight app.',
       },
     },
     unavailable: {
-      dev: 'There are no dev builds for iOS. Switch to Beta to join the pre-release TestFlight group.',
+      dev: 'There are no dev builds for iOS.',
     },
   },
   {
@@ -92,12 +90,12 @@ const platforms: Platform[] = [
       },
       beta: {
         options: [{ label: 'Download beta .dmg', href: '/download/macos?track=beta', primary: true }],
-        note: `Replaces the stable app and keeps your data. ${trackSetting('beta')}`,
+        note: trackSetting('beta'),
         feed: 'macos:beta',
       },
       dev: {
         options: [{ label: 'Download dev .dmg', href: '/download/macos?track=dev', primary: true }],
-        note: `${devWarning} ${trackSetting('dev')}`,
+        note: trackSetting('dev'),
         feed: 'macos:dev',
       },
     },
@@ -120,7 +118,7 @@ const platforms: Platform[] = [
       },
     },
     unavailable: {
-      dev: 'There are no dev builds for Windows yet. Switch to Beta for the newest tested pre-release.',
+      dev: 'There are no dev builds for Windows.',
     },
   },
   {
@@ -155,7 +153,7 @@ flatpak install mydia-beta dev.mydia.player//beta`,
         options: [{ label: 'Get the dev Flatpak repo', href: '/download/flatpak?track=dev', primary: true }],
         commands: `flatpak remote-add --if-not-exists --from mydia-dev https://flatpak.mydia.dev/mydia-dev.flatpakrepo
 flatpak install mydia-dev dev.mydia.player//dev`,
-        note: `${devWarning} Dev is Flatpak only. If stable is installed, remove it afterwards with flatpak uninstall dev.mydia.player//stable.`,
+        note: `There is no dev tarball. If stable is installed, remove it afterwards with flatpak uninstall dev.mydia.player//stable.`,
         docs: { label: 'Switching branches', href: `${linuxDocs}#dev` },
       },
     },
@@ -176,17 +174,17 @@ flatpak install mydia-dev dev.mydia.player//dev`,
       },
       dev: {
         commands: 'image: ghcr.io/getmydia/mydia:master',
-        note: 'The :master image (:master-pg for PostgreSQL) rebuilds on every merge and carries the newest web player. It is amd64 only and not meant for production.',
+        note: 'The :master image (:master-pg for PostgreSQL) rebuilds on every merge to the main branch. It is amd64 only.',
         docs: { label: 'Testing pre-release builds', href: `${docsBase}/update-mydia/#testing-pre-release-builds` },
       },
     },
   },
 ];
 
-const tracks: { id: Track; label: string; blurb: string }[] = [
-  { id: 'stable', label: 'Stable', blurb: 'Tested releases. The right choice for most people.' },
-  { id: 'beta', label: 'Beta', blurb: 'Release candidates, a few weeks ahead of stable. Expect the occasional rough edge.' },
-  { id: 'dev', label: 'Dev', blurb: 'Built from the main branch for trying fixes before release. Untested.' },
+const tracks: { id: Track; label: string }[] = [
+  { id: 'stable', label: 'Stable' },
+  { id: 'beta', label: 'Beta' },
+  { id: 'dev', label: 'Dev' },
 ];
 
 // Every card links to its own section of the beta builds docs page. The
@@ -197,7 +195,7 @@ const betaDocs = `${docsBase}/beta-builds/`;
 
 <Base
   title="Download Mydia Player"
-  description="Download Mydia Player for Android, iOS, macOS, Windows and Linux, including beta and dev builds."
+  description="Download Mydia Player for Android, iOS, macOS, Windows and Linux."
 >
   <section id="downloads" class="py-12 sm:py-16 px-4">
     <div class="max-w-5xl mx-auto">
@@ -208,25 +206,6 @@ const betaDocs = `${docsBase}/beta-builds/`;
           Play from Plex, Jellyfin and Mydia Server on Android, iOS, macOS, Windows, Linux and the web.
         </p>
 
-        <div class="join mb-3" role="radiogroup" aria-label="Release track">
-          {tracks.map(track => (
-            <input
-              id={`track-${track.id}`}
-              class="join-item btn btn-sm sm:btn-md px-5"
-              type="radio"
-              name="track"
-              value={track.id}
-              aria-label={track.label}
-              checked={track.id === 'stable'}
-            />
-          ))}
-        </div>
-        {tracks.map(track => (
-          <p data-track={track.id} class="track-panel justify-center text-sm text-base-content/50 mb-6 max-w-md mx-auto">
-            {track.blurb}
-          </p>
-        ))}
-
         <a id="primary-download" href="#platforms" class="btn btn-primary btn-lg gap-2 max-w-full">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
@@ -236,6 +215,22 @@ const betaDocs = `${docsBase}/beta-builds/`;
         </a>
 
         <p id="release-line" class="text-sm text-base-content/50 mt-4 hidden"></p>
+      </div>
+
+      <div class="flex justify-end mb-3">
+        <div class="join" role="radiogroup" aria-label="Release track">
+          {tracks.map(track => (
+            <input
+              id={`track-${track.id}`}
+              class="join-item btn btn-xs btn-ghost font-normal text-base-content/50 checked:bg-base-300 checked:border-base-300 checked:text-base-content"
+              type="radio"
+              name="track"
+              value={track.id}
+              aria-label={track.label}
+              checked={track.id === 'stable'}
+            />
+          ))}
+        </div>
       </div>
 
       <div id="platforms" class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 scroll-mt-20">
@@ -325,17 +320,9 @@ const betaDocs = `${docsBase}/beta-builds/`;
           Browse all releases
         </a>
       </p>
-      <p data-track="beta" class="track-panel flex-wrap justify-center gap-x-1 text-center text-sm text-base-content/40 mt-10">
-        Found a problem in a beta?
-        <a href="https://github.com/getmydia/mydia/issues" class="link link-hover text-primary">
-          Open an issue
-        </a>
-        and include the version shown in Settings.
-      </p>
-      <p data-track="dev" class="track-panel flex-wrap justify-center gap-x-1 text-center text-sm text-base-content/40 mt-10">
-        Dev builds are not covered by release notes.
-        <a href="https://github.com/getmydia/mydia/commits/master" class="link link-hover text-primary">
-          Read the commit log
+      <p class="track-panel flex-wrap justify-center text-center text-sm mt-10" data-track="beta dev">
+        <a href="https://github.com/getmydia/mydia/releases" class="link link-hover text-primary">
+          Browse all releases
         </a>
       </p>
     </div>
