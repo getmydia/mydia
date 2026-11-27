@@ -141,20 +141,28 @@ defmodule Mydia.Library.Trash do
   `:covers_other_episodes`.
 
   `opts[:reason]` is passed to `trash_media_file/2`. Returns the trashed rows,
-  the `{file, reason}` pairs that failed, and the summed `size` of the trashed
-  files. Episode rows are never touched.
+  the `{file, reason}` pairs that failed, the summed `size` of the trashed
+  files, and `covered` (see `episode_files_for_removal/1`), read before any
+  row changed. Episode rows are never touched.
   """
   @spec trash_episode_files([binary()], keyword()) ::
           {:ok,
            %{
              trashed: [MediaFile.t()],
              failed: [{MediaFile.t(), term()}],
-             bytes: non_neg_integer()
+             bytes: non_neg_integer(),
+             covered: %{binary() => [binary()]}
            }}
   def trash_episode_files(episode_ids, opts \\ []) do
-    %{removable: files, blocked: blocked} = episode_files_for_removal(episode_ids)
+    %{removable: files, blocked: blocked, covered: covered} =
+      episode_files_for_removal(episode_ids)
+
     {:ok, result} = trash_files(files, opts)
-    {:ok, %{result | failed: result.failed ++ blocked_failures(blocked)}}
+
+    {:ok,
+     result
+     |> Map.put(:failed, result.failed ++ blocked_failures(blocked))
+     |> Map.put(:covered, covered)}
   end
 
   @doc """
@@ -162,16 +170,19 @@ defmodule Mydia.Library.Trash do
   `media_files.episode_id` or a `media_file_episodes` link. `removable` holds
   the files that cover only episodes in the set; `blocked` holds multi-episode
   files that also cover an episode outside it, which removing the set must not
-  take.
+  take. `covered` maps every listed file's id to the episodes it covers
+  (`episode_id` plus links). Read it before removing anything: deleting a row
+  cascades its links away.
 
   This is the selection `trash_episode_files/2` and `delete_episode_files/2`
   act on, so a confirmation dialog can count exactly what will go.
   """
   @spec episode_files_for_removal([binary()]) :: %{
           removable: [MediaFile.t()],
-          blocked: [MediaFile.t()]
+          blocked: [MediaFile.t()],
+          covered: %{binary() => [binary()]}
         }
-  def episode_files_for_removal([]), do: %{removable: [], blocked: []}
+  def episode_files_for_removal([]), do: %{removable: [], blocked: [], covered: %{}}
 
   def episode_files_for_removal(episode_ids) do
     linked =
@@ -198,38 +209,21 @@ defmodule Mydia.Library.Trash do
 
     wanted = MapSet.new(episode_ids)
 
-    {removable, blocked} =
-      Enum.split_with(files, fn file ->
-        [file.episode_id | Map.get(links, file.id, [])]
-        |> Enum.reject(&is_nil/1)
-        |> Enum.all?(&MapSet.member?(wanted, &1))
+    covered =
+      Map.new(files, fn file ->
+        {file.id,
+         [file.episode_id | Map.get(links, file.id, [])] |> Enum.reject(&is_nil/1) |> Enum.uniq()}
       end)
 
-    %{removable: removable, blocked: blocked}
+    {removable, blocked} =
+      Enum.split_with(files, fn file ->
+        Enum.all?(covered[file.id], &MapSet.member?(wanted, &1))
+      end)
+
+    %{removable: removable, blocked: blocked, covered: covered}
   end
 
   defp blocked_failures(blocked), do: Enum.map(blocked, &{&1, :covers_other_episodes})
-
-  @doc """
-  Every episode the given files cover: each file's `episode_id` plus its
-  `media_file_episodes` links. A file whose row is already gone still counts
-  its `episode_id`.
-  """
-  @spec covered_episode_ids([MediaFile.t()]) :: MapSet.t(binary())
-  def covered_episode_ids([]), do: MapSet.new()
-
-  def covered_episode_ids(files) do
-    file_ids = Enum.map(files, & &1.id)
-
-    linked =
-      Repo.all(
-        from(l in MediaFileEpisode, where: l.media_file_id in ^file_ids, select: l.episode_id)
-      )
-
-    (Enum.map(files, & &1.episode_id) ++ linked)
-    |> Enum.reject(&is_nil/1)
-    |> MapSet.new()
-  end
 
   @doc """
   Trashes exactly the listed media files that are still live (not trashed),
@@ -278,18 +272,23 @@ defmodule Mydia.Library.Trash do
   that also covers another episode under `failed` with `:covers_other_episodes`.
 
   With `delete_files: true` the bytes go too; a `{:ok, file, :file_delete_failed}`
-  result (row gone, bytes left behind) is reported under `failed`.
+  result (row gone, bytes left behind) is reported under `failed`. Such a row's
+  `media_file_episodes` links cascade away with it, so `covered` is read
+  before any delete.
   """
   @spec delete_episode_files([binary()], keyword()) ::
           {:ok,
            %{
              deleted: [MediaFile.t()],
              failed: [{MediaFile.t(), term()}],
-             bytes: non_neg_integer()
+             bytes: non_neg_integer(),
+             covered: %{binary() => [binary()]}
            }}
   def delete_episode_files(episode_ids, opts \\ []) do
     delete_files = Keyword.get(opts, :delete_files, false)
-    %{removable: files, blocked: blocked} = episode_files_for_removal(episode_ids)
+
+    %{removable: files, blocked: blocked, covered: covered} =
+      episode_files_for_removal(episode_ids)
 
     {deleted, failed} =
       Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
@@ -304,7 +303,8 @@ defmodule Mydia.Library.Trash do
      %{
        deleted: Enum.reverse(deleted),
        failed: Enum.reverse(failed) ++ blocked_failures(blocked),
-       bytes: sum_bytes(deleted)
+       bytes: sum_bytes(deleted),
+       covered: covered
      }}
   end
 

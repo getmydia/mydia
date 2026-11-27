@@ -99,12 +99,12 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
       media_item_id = socket.assigns.media_item.id
       socket = socket |> assign(:show_season_delete_confirm, false) |> assign(:season_delete, nil)
 
-      {count, failed} = run_season_delete(state)
+      {count, failed, covered} = run_season_delete(state)
 
       # The user asked for the season to stop being monitored. Honour it for
       # every episode except those a file still holds: one that failed, or
       # one skipped because it also covers another season.
-      if state.unmonitor, do: unmonitor_released(state.episode_ids, failed)
+      if state.unmonitor, do: unmonitor_released(state.episode_ids, failed, covered)
 
       media_item = Loaders.load_media_item(socket.assigns.current_scope, media_item_id)
       # The hero links the next episode's file; recompute it as mount does.
@@ -139,8 +139,14 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
 
   defp delete_files(_params, socket), do: {:noreply, socket}
 
-  defp unmonitor_released(episode_ids, failed) do
-    held = failed |> Enum.map(&elem(&1, 0)) |> Library.covered_episode_ids()
+  # `covered` was read before any row was removed: a row deleted while its
+  # bytes stayed has already lost its media_file_episodes links.
+  defp unmonitor_released(episode_ids, failed, covered) do
+    held =
+      for {file, _reason} <- failed,
+          id <- Map.get(covered, file.id, [file.episode_id]),
+          into: MapSet.new(),
+          do: id
 
     episode_ids
     |> Enum.reject(&MapSet.member?(held, &1))
@@ -148,20 +154,20 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
     |> Monitoring.set_episodes_monitored(false)
   end
 
-  # Returns {removed_count, failed}. A `:file_delete_failed` entry is a row
-  # that is already gone from the DB, so it counts as failed, not removed.
+  # Returns {removed_count, failed, covered}. A `:file_delete_failed` entry is
+  # a row that is already gone from the DB, so it counts as failed, not removed.
   defp run_season_delete(%{mode: :trash} = state) do
-    {:ok, %{trashed: ok, failed: failed}} =
+    {:ok, %{trashed: ok, failed: failed, covered: covered}} =
       Library.trash_episode_files(state.episode_ids, reason: :manual)
 
-    {length(ok), failed}
+    {length(ok), failed, covered}
   end
 
   defp run_season_delete(%{mode: mode} = state) do
-    {:ok, %{deleted: ok, failed: failed}} =
+    {:ok, %{deleted: ok, failed: failed, covered: covered}} =
       Library.delete_episode_files(state.episode_ids, delete_files: mode == :permanent)
 
-    {length(ok), failed}
+    {length(ok), failed, covered}
   end
 
   defp season_delete_success_message(:trash, n),

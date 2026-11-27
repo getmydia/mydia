@@ -201,6 +201,25 @@ defmodule Mydia.Library.TrashEpisodeFilesTest do
 
   describe "delete_episode_files/2" do
     @tag :tmp_dir
+    test "reports what a failed file covered, read before its links cascaded away",
+         %{tmp_dir: tmp} do
+      ctx = setup_show(tmp)
+      e9 = episode(ctx, 1, 9)
+      e10 = episode(ctx, 1, 10)
+      f = add_file(ctx, e9, "locked/s1e09e10.mkv", "aaaa")
+      link(f, e10)
+      File.chmod!(Path.join(ctx.root, "locked"), 0o500)
+      on_exit(fn -> File.chmod(Path.join(ctx.root, "locked"), 0o700) end)
+
+      assert {:ok, %{deleted: [], failed: [{failed, :file_delete_failed}], covered: covered}} =
+               Library.delete_episode_files([e9.id, e10.id], delete_files: true)
+
+      assert failed.id == f.id
+      assert Enum.sort(covered[f.id]) == Enum.sort([e9.id, e10.id])
+      assert Repo.all(from l in MediaFileEpisode, where: l.media_file_id == ^f.id) == []
+    end
+
+    @tag :tmp_dir
     test "deletes a linked file once and leaves one reaching outside", %{tmp_dir: tmp} do
       ctx = setup_show(tmp)
       e9 = episode(ctx, 1, 9)

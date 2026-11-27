@@ -30,7 +30,7 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
     s2 = for n <- 1..2, do: episode_with_file(show, library_path, root, 2, n)
     empty = episode_fixture(%{media_item_id: show.id, season_number: 3, episode_number: 1})
 
-    %{show: show, s1: s1, s2: s2, empty: empty, root: root}
+    %{show: show, s1: s1, s2: s2, empty: empty, root: root, library_path: library_path}
   end
 
   defp episode_with_file(show, library_path, root, season, number) do
@@ -255,6 +255,44 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
       assert monitored?(e3)
       assert monitored?(s2e1)
       assert is_nil(Repo.reload!(f3).trashed_at)
+    end
+
+    test "permanent delete whose disk delete fails keeps every covered episode monitored", %{
+      conn: conn,
+      show: show,
+      s1: [{e1, _}, {e2, _}, {e3, _}],
+      root: root,
+      library_path: library_path
+    } do
+      locked = Path.join(root, "locked")
+      File.mkdir_p!(locked)
+      File.write!(Path.join(locked, "s1e1e2.mkv"), "video")
+
+      {:ok, f} =
+        Library.create_scanned_media_file(%{
+          relative_path: "locked/s1e1e2.mkv",
+          library_path_id: library_path.id,
+          episode_id: e1.id,
+          size: 5
+        })
+
+      Repo.insert!(%MediaFileEpisode{media_file_id: f.id, episode_id: e2.id})
+      File.chmod!(locked, 0o500)
+      on_exit(fn -> File.chmod(locked, 0o700) end)
+
+      {conn, _user} = register_and_log_in_user(conn)
+      view = open_dialog(conn, show)
+
+      view
+      |> form("#season-delete-form", %{"file_delete_mode" => "permanent", "unmonitor" => "true"})
+      |> render_change()
+
+      view |> element("#season-delete-confirm") |> render_click()
+
+      assert File.exists?(Path.join(locked, "s1e1e2.mkv"))
+      assert monitored?(e1)
+      assert monitored?(e2)
+      refute monitored?(e3)
     end
 
     test "unchecking unmonitor keeps the season monitored", %{conn: conn, show: show, s1: s1} do
