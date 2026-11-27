@@ -34,7 +34,9 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceComponents do
           </div>
 
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="font-medium">{gettext("Clean up watched TV")}</span>
+            <label for="smart-space-enabled" class="font-medium cursor-pointer">
+              {gettext("Clean up watched TV")}
+            </label>
             <.config_source_badge source={@enabled.source} />
             <input type="hidden" name="enabled" value="false" disabled={@enabled.source == :env} />
             <input

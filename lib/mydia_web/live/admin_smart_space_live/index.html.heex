@@ -21,6 +21,7 @@
       <.link
         id="smart-space-tab-upcoming"
         role="tab"
+        aria-selected={to_string(@tab == :upcoming)}
         patch={~p"/admin/smart-space"}
         class={["tab", @tab == :upcoming && "tab-active"]}
       >
@@ -30,6 +31,7 @@
       <.link
         id="smart-space-tab-kept"
         role="tab"
+        aria-selected={to_string(@tab == :kept)}
         patch={~p"/admin/smart-space?tab=kept"}
         class={["tab", @tab == :kept && "tab-active"]}
       >

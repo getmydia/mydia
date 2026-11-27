@@ -85,6 +85,23 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettingsTest do
     assert Settings.get_config_setting_by_key("smart_space.selected_users") == nil
   end
 
+  test "a name with a comma or surrounding space cannot be saved", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+    for name <- ["ana,bo", " ana", "ana "] do
+      submit(view, %{"watched_by" => "selected", "selected_users" => [name]})
+
+      assert view |> element("#smart-space-error") |> render() =~ "comma"
+      assert Settings.get_config_setting_by_key("smart_space.selected_users") == nil
+    end
+  end
+
+  test "the enabled toggle has an accessible name", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/admin/settings")
+
+    assert has_element?(view, "label[for='smart-space-enabled']", "Clean up watched TV")
+  end
+
   test "a negative grace period is rejected", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/settings")
 

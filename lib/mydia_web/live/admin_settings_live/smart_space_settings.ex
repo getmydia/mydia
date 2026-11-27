@@ -175,15 +175,31 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettings do
   defp invalid(key),
     do: gettext("Invalid value for %{key}", key: key)
 
+  # Selected users are stored comma-joined (`encode/1`), so a name holding a
+  # comma or surrounding whitespace would come back as a different name.
   defp validate_users(desired, known) do
-    unknown = Enum.reject(Map.get(desired, "smart_space.selected_users", []), &(&1 in known))
+    users = Map.get(desired, "smart_space.selected_users", [])
+    unknown = Enum.reject(users, &(&1 in known))
+    unstorable = Enum.reject(users, &storable_username?/1)
 
-    if unknown == [] do
-      :ok
-    else
-      {:error, :validation, gettext("Unknown user: %{names}", names: Enum.join(unknown, ", "))}
+    cond do
+      unstorable != [] ->
+        {:error, :validation,
+         gettext(
+           "These names cannot be saved, because they contain a comma or start or end with a space: %{names}",
+           names: Enum.map_join(unstorable, ", ", &inspect/1)
+         )}
+
+      unknown != [] ->
+        {:error, :validation, gettext("Unknown user: %{names}", names: Enum.join(unknown, ", "))}
+
+      true ->
+        :ok
     end
   end
+
+  defp storable_username?(name),
+    do: not String.contains?(name, ",") and String.trim(name) == name
 
   defp same?(current, value) when is_list(current) and is_list(value),
     do: Enum.sort(current) == Enum.sort(value)

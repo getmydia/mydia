@@ -111,8 +111,13 @@ defmodule MydiaWeb.AdminSmartSpaceLiveTest do
     refute render(view) =~ "in 3 days"
     assert [%{season_number: 1}] = Rules.list_keeps()
 
+    assert has_element?(view, "#smart-space-tab-upcoming[aria-selected='true']")
+    assert has_element?(view, "#smart-space-tab-kept[aria-selected='false']")
+
     view |> element("#smart-space-tab-kept") |> render_click()
     assert_patch(view, ~p"/admin/smart-space?tab=kept")
+    assert has_element?(view, "#smart-space-tab-kept[aria-selected='true']")
+    assert has_element?(view, "#smart-space-tab-upcoming[aria-selected='false']")
     assert has_element?(view, "#smart-space-keeps", "Harrowgate Nights")
 
     [keep] = Rules.list_keeps()
