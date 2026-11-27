@@ -127,6 +127,22 @@ defmodule Mydia.SmartSpace.RulesTest do
       assert {:error, cs} = insert.()
       assert %{media_item_id: _} = errors_on(cs)
     end
+
+    test "an insert that loses the race returns the winner's keep" do
+      s = show()
+      insert = fn -> Repo.insert(Keep.changeset(%Keep{media_item_id: s.id, season_number: 2})) end
+      assert {:ok, winner} = insert.()
+      assert {:error, cs} = insert.()
+
+      assert {:ok, %Keep{id: id}} = Rules.recover_lost_race({:season, s.id, 2}, cs)
+      assert id == winner.id
+    end
+
+    test "a non-conflict error is returned as is" do
+      s = show()
+      cs = Keep.changeset(%Keep{}) |> Map.put(:action, :insert)
+      assert {:error, ^cs} = Rules.recover_lost_race({:show, s.id}, cs)
+    end
   end
 
   test "deleting the media item cascades overrides and keeps" do

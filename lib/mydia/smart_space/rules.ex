@@ -92,9 +92,29 @@ defmodule Mydia.SmartSpace.Rules do
   defp target_belongs?(_target), do: false
 
   defp do_keep(target, user) do
-    Repo.transaction(fn ->
-      find_keep(target) || insert_keep(target, user)
-    end)
+    case Repo.transaction(fn -> find_keep(target) || insert_keep(target, user) end) do
+      {:error, %Ecto.Changeset{} = changeset} -> recover_lost_race(target, changeset)
+      result -> result
+    end
+  end
+
+  @doc false
+  # A concurrent keep on the same target can win the unique index between the
+  # lookup and the insert. That is the idempotent case, so return its row.
+  # Runs after the transaction: on PostgreSQL the failed insert aborts it.
+  @spec recover_lost_race(target, Ecto.Changeset.t()) ::
+          {:ok, Keep.t()} | {:error, Ecto.Changeset.t()}
+  def recover_lost_race(target, changeset) do
+    with true <- unique_violation?(changeset),
+         %Keep{} = keep <- find_keep(target) do
+      {:ok, keep}
+    else
+      _ -> {:error, changeset}
+    end
+  end
+
+  defp unique_violation?(changeset) do
+    Enum.any?(changeset.errors, fn {_field, {_msg, opts}} -> opts[:constraint] == :unique end)
   end
 
   defp insert_keep(target, user) do
@@ -104,6 +124,44 @@ defmodule Mydia.SmartSpace.Rules do
       {:ok, keep} -> keep
       {:error, changeset} -> Repo.rollback(changeset)
     end
+  end
+
+  @doc """
+  Turns each episode keep of a show into a season keep for that episode's
+  season, unless the season is already kept. Returns the number of season keeps
+  added.
+
+  For a provider switch, which deletes and recreates every episode row: an
+  episode keep would cascade away with its row. A season keep protects at least
+  as much, so call this inside the switch's transaction before the episodes go.
+  """
+  @spec carry_episode_keeps_to_seasons(binary()) :: non_neg_integer()
+  def carry_episode_keeps_to_seasons(media_item_id) do
+    kept_seasons =
+      from(k in Keep,
+        where: k.media_item_id == ^media_item_id and not is_nil(k.season_number),
+        select: k.season_number
+      )
+
+    seasons =
+      from(k in Keep,
+        join: e in Episode,
+        on: e.id == k.episode_id,
+        where: k.media_item_id == ^media_item_id and not is_nil(e.season_number),
+        where: e.season_number not in subquery(kept_seasons),
+        order_by: [asc: k.inserted_at, asc: k.id],
+        select: {e.season_number, k.created_by_id}
+      )
+      |> Repo.all()
+      |> Enum.uniq_by(&elem(&1, 0))
+
+    for {season, created_by_id} <- seasons do
+      %Keep{media_item_id: media_item_id, season_number: season, created_by_id: created_by_id}
+      |> Keep.changeset()
+      |> Repo.insert!()
+    end
+
+    length(seasons)
   end
 
   @doc "Removes the keep at a level. Missing keeps are fine."

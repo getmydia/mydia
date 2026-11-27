@@ -323,6 +323,9 @@ defmodule Mydia.Media.ProviderSwitch do
             end
           end)
 
+          # Episode keeps cascade away with their rows; keep the seasons instead.
+          Mydia.SmartSpace.Rules.carry_episode_keeps_to_seasons(item.id)
+
           Repo.delete_all(from(e in Episode, where: e.media_item_id == ^item.id))
 
           # Roll back (preserving the just-deleted episodes) instead of raising a
