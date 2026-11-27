@@ -115,6 +115,7 @@ defmodule Mydia.SmartSpace.LoaderTest do
       position_seconds: 0,
       duration_seconds: 100,
       completion_percentage: 0.0,
+      last_watched_at: DateTime.utc_now() |> DateTime.truncate(:second),
       media_item_id: media_item_fixture(%{type: "movie"}).id
     })
 
