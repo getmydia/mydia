@@ -6,7 +6,7 @@ defmodule Mydia.SmartSpace.Inputs.Show do
   `in_flight_show?` holds the whole show back.
   """
 
-  alias Mydia.SmartSpace.Inputs.{Episode, KeepRef, Watch}
+  alias Mydia.SmartSpace.Inputs.{Episode, KeepRef, OverrideRule, Watch}
 
   @enforce_keys [:media_item_id]
   defstruct media_item_id: nil,
@@ -17,16 +17,10 @@ defmodule Mydia.SmartSpace.Inputs.Show do
             watches: [],
             in_flight_show?: false
 
-  @type override :: %{
-          mode: String.t(),
-          unit: String.t() | nil,
-          grace_days: non_neg_integer() | nil
-        }
-
   @type t :: %__MODULE__{
           media_item_id: binary(),
           title: String.t() | nil,
-          override: override() | nil,
+          override: OverrideRule.t() | nil,
           episodes: [Episode.t()],
           keeps: [KeepRef.t()],
           watches: [Watch.t()],

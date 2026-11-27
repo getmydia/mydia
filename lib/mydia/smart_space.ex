@@ -9,8 +9,13 @@ defmodule Mydia.SmartSpace do
   files all moved, and records events. It never deletes anything.
 
   A season that was due is listed with every episode, including episodes
-  without files, so unmonitoring covers the whole season. An episode that owns
-  a file that failed to trash stays monitored, and the next run retries it.
+  without files, so unmonitoring covers the whole season.
+
+  Per cleanup the order is: unmonitor its episodes, trash its files, then
+  monitor again every episode a failed file covers (only those this run
+  unmonitored), so the next run retries them. A crash between the steps
+  leaves files live on unmonitored episodes; eligibility does not look at
+  `monitored` for an episode with files, so the next run finishes the job.
   """
 
   import Ecto.Query
@@ -78,7 +83,11 @@ defmodule Mydia.SmartSpace do
         {chosen, skipped} = inputs |> evaluate(now) |> apply_cap(cap)
         capped? = skipped != []
         log_capped(skipped, cap)
-        summary = Enum.reduce(chosen, %{empty_summary() | capped?: capped?}, &apply_cleanup/2)
+        run = %{unmonitored: MapSet.new(), held: MapSet.new()}
+
+        {summary, _run} =
+          Enum.reduce(chosen, {%{empty_summary() | capped?: capped?}, run}, &apply_cleanup/2)
+
         record(%{type: "smart_space.run", metadata: summary})
         {:ok, summary}
     end
@@ -125,18 +134,55 @@ defmodule Mydia.SmartSpace do
     )
   end
 
-  defp apply_cleanup(%Cleanup{} = cleanup, summary) do
+  # `run` tracks, across the whole run, the episodes this run unmonitored and
+  # those a failed file holds. A held episode is never unmonitored by a later
+  # cleanup that shares it.
+  defp apply_cleanup(%Cleanup{} = cleanup, {summary, run}) do
+    unmonitored =
+      cleanup.episode_ids
+      |> Enum.reject(&MapSet.member?(run.held, &1))
+      |> unmonitor()
+      |> MapSet.union(run.unmonitored)
+
     {:ok, %{trashed: trashed, failed: failed, bytes: bytes}} =
       Library.trash_media_files(cleanup.file_ids, reason: :smart_space)
 
-    failed_episode_ids = MapSet.new(failed, fn {file, _reason} -> file.episode_id end)
-    done_ids = Enum.reject(cleanup.episode_ids, &MapSet.member?(failed_episode_ids, &1))
+    held = failed_coverage(cleanup, failed)
+    set_monitored(MapSet.intersection(held, unmonitored), true)
 
-    Monitoring.set_episodes_monitored(
-      Repo.all(from e in Episode, where: e.id in ^done_ids),
-      false
-    )
+    run = %{
+      unmonitored: MapSet.difference(unmonitored, held),
+      held: MapSet.union(run.held, held)
+    }
 
+    {record_cleanup(cleanup, summary, trashed, failed, bytes), run}
+  end
+
+  # Unmonitors the episodes and returns the ids that were monitored before.
+  defp unmonitor([]), do: MapSet.new()
+
+  defp unmonitor(ids) do
+    rows = Repo.all(from e in Episode, where: e.id in ^ids, select: {e.id, e.monitored})
+    set_monitored(Enum.map(rows, &elem(&1, 0)), false)
+    for {id, monitored} <- rows, monitored != false, into: MapSet.new(), do: id
+  end
+
+  defp set_monitored(ids, monitored) do
+    ids |> Enum.map(&%Episode{id: &1}) |> Monitoring.set_episodes_monitored(monitored)
+  end
+
+  # Every episode covered by a file that failed to move.
+  defp failed_coverage(%Cleanup{files: files}, failed) do
+    by_id = Map.new(files, &{&1.id, &1.episode_ids})
+
+    for {file, _reason} <- failed,
+        id <- Map.get(by_id, file.id, [file.episode_id]),
+        not is_nil(id),
+        into: MapSet.new(),
+        do: id
+  end
+
+  defp record_cleanup(cleanup, summary, trashed, failed, bytes) do
     if trashed != [] do
       record(%{
         type: "smart_space.cleanup",

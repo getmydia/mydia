@@ -8,7 +8,7 @@ defmodule Mydia.SmartSpaceTest do
   alias Mydia.Config.Schema.SmartSpace, as: Config
   alias Mydia.Events.Event
   alias Mydia.Library
-  alias Mydia.Library.MediaFile
+  alias Mydia.Library.{MediaFile, MediaFileEpisode}
   alias Mydia.Media.Episode
   alias Mydia.Playback.Progress
   alias Mydia.Repo
@@ -77,6 +77,12 @@ defmodule Mydia.SmartSpaceTest do
     })
   end
 
+  defp lock(c) do
+    dir = Path.join(c.root, "locked")
+    File.chmod!(dir, 0o500)
+    on_exit(fn -> File.chmod(dir, 0o700) end)
+  end
+
   defp days_ago(n), do: DateTime.utc_now() |> DateTime.add(-n, :day) |> DateTime.truncate(:second)
 
   defp watched_season(c, season, files) do
@@ -140,6 +146,52 @@ defmodule Mydia.SmartSpaceTest do
       assert Repo.get!(MediaFile, good.id).trashed_at
       assert is_nil(Repo.get!(MediaFile, bad.id).trashed_at)
       assert Repo.get!(Episode, e1.id).monitored
+    end
+
+    @tag :tmp_dir
+    test "a failing multi-episode file keeps every episode it covers monitored", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      e1 = episode(c, 1, 1)
+      e2 = episode(c, 1, 2)
+      bad = file(c, e1, "locked/s1e1e2.mkv")
+      Repo.insert!(%MediaFileEpisode{media_file_id: bad.id, episode_id: e2.id})
+      e3 = episode(c, 1, 3)
+      good = file(c, e3, "s1e3.mkv")
+      for e <- [e1, e2, e3], do: watch(c, e, days_ago(30))
+      lock(c)
+
+      assert {:ok, %{files: 1, failed: 1}} = SmartSpace.run(config: cfg())
+
+      assert Repo.get!(MediaFile, good.id).trashed_at
+      assert is_nil(Repo.get!(MediaFile, bad.id).trashed_at)
+      assert Repo.get!(Episode, e1.id).monitored
+      assert Repo.get!(Episode, e2.id).monitored
+      refute Repo.get!(Episode, e3.id).monitored
+    end
+
+    @tag :tmp_dir
+    test "a failed file does not monitor an episode the user had unmonitored", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      e1 = episode(c, 1, 1, %{monitored: false})
+      bad = file(c, e1, "locked/s1e1.mkv")
+      watch(c, e1, days_ago(30))
+      lock(c)
+
+      assert {:ok, %{failed: 1}} = SmartSpace.run(config: cfg())
+      assert is_nil(Repo.get!(MediaFile, bad.id).trashed_at)
+      refute Repo.get!(Episode, e1.id).monitored
+    end
+
+    @tag :tmp_dir
+    test "episodes already unmonitored with live files are finished next run", %{tmp_dir: tmp} do
+      # The state a crash between unmonitor and trash leaves behind.
+      c = ctx(tmp)
+      [{e1, f1}] = watched_season(c, 1, 1)
+      e1 |> Ecto.Changeset.change(monitored: false) |> Repo.update!()
+
+      assert {:ok, %{files: 1}} = SmartSpace.run(config: cfg())
+      assert Repo.get!(MediaFile, f1.id).trashed_at
+      refute Repo.get!(Episode, e1.id).monitored
     end
 
     @tag :tmp_dir

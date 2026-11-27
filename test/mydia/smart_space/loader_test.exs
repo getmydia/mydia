@@ -9,7 +9,8 @@ defmodule Mydia.SmartSpace.LoaderTest do
   alias Mydia.Library.MediaFile
   alias Mydia.Playback.Progress
   alias Mydia.Repo
-  alias Mydia.SmartSpace.Inputs.KeepRef
+  alias Mydia.Library.MediaFileEpisode
+  alias Mydia.SmartSpace.Inputs.{FileRef, KeepRef}
   alias Mydia.SmartSpace.{Loader, Rules}
 
   defp cfg(attrs \\ %{}), do: struct(%Config{enabled: true}, attrs)
@@ -53,7 +54,7 @@ defmodule Mydia.SmartSpace.LoaderTest do
 
     inputs = Loader.load(config: cfg())
 
-    assert inputs.global == %{
+    assert inputs.global == %Mydia.SmartSpace.Inputs.Global{
              enabled: true,
              unit: "season",
              grace_days: 7,
@@ -68,7 +69,8 @@ defmodule Mydia.SmartSpace.LoaderTest do
     assert sa.override == nil
     assert Enum.sort(Enum.map(sa.episodes, & &1.id)) == Enum.sort([a1.id, a2.id])
     e1 = Enum.find(sa.episodes, &(&1.id == a1.id))
-    assert e1.files == [{f.id, 42}]
+    assert [%FileRef{id: fid, size: 42}] = e1.files
+    assert fid == f.id
     assert e1.air_date == ~D[2020-01-01]
     assert e1.monitored
     refute Enum.find(sa.episodes, &(&1.id == a2.id)).monitored
@@ -95,7 +97,26 @@ defmodule Mydia.SmartSpace.LoaderTest do
 
     [show] = Loader.load(config: cfg()).shows
     [ep] = show.episodes
-    assert Enum.sort(ep.files) == Enum.sort([{f1.id, 10}, {f2.id, 20}])
+
+    assert ep.files |> Enum.map(&{&1.id, &1.size}) |> Enum.sort() ==
+             Enum.sort([{f1.id, 10}, {f2.id, 20}])
+  end
+
+  test "a multi-episode file is on every episode it covers, with all of them listed" do
+    s = show("Harbor Lights")
+    e9 = ep(s, 1, 9)
+    e10 = ep(s, 1, 10)
+    f = media_file_fixture(%{episode_id: e9.id, size: 50})
+    Repo.insert!(%MediaFileEpisode{media_file_id: f.id, episode_id: e10.id})
+
+    [show] = Loader.load(config: cfg()).shows
+    by_id = Map.new(show.episodes, &{&1.id, &1.files})
+
+    for id <- [e9.id, e10.id] do
+      assert [%FileRef{id: fid, size: 50, episode_ids: covered}] = by_id[id]
+      assert fid == f.id
+      assert Enum.sort(covered) == Enum.sort([e9.id, e10.id])
+    end
   end
 
   test "watches on episodes with trashed files are kept; nil episode ignored" do
@@ -194,7 +215,12 @@ defmodule Mydia.SmartSpace.LoaderTest do
     assert ids.(Loader.load(config: cfg(%{enabled: false}))) == [c.id]
 
     sc = find(Loader.load(config: cfg()), c)
-    assert sc.override == %{mode: "custom", unit: "episode", grace_days: 2}
+
+    assert sc.override == %Mydia.SmartSpace.Inputs.OverrideRule{
+             mode: "custom",
+             unit: "episode",
+             grace_days: 2
+           }
 
     narrowed = Loader.load(config: cfg(%{enabled: false}), media_item_id: b.id)
     assert ids.(narrowed) == [b.id]

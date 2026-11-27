@@ -26,6 +26,14 @@ defmodule Mydia.SmartSpace.Evaluator do
       skipped.
     * Episode unit: an aired, done episode with files.
     * `eligible_at = done_at + grace_days`, returned when `eligible_at <= now`.
+    * An episode's files include a multi-episode file linked to it through
+      `media_file_episodes`, so the second episode of an `S01E09E10` file is
+      not file-less. Such a file is trashed only when every episode it covers
+      is in some cleanup of the same evaluation; otherwise it is held back and
+      the episodes it covers leave their cleanups (they stay monitored). Each
+      file lands in exactly one cleanup, the earliest eligible, which also
+      lists every episode the file covers; each episode is listed once, and a
+      cleanup left without files is dropped.
     * Never: season 0, anything under a keep at its level or above (an
       episode keep holds its whole season under the season unit), a unit
       without live files, a unit containing an in-flight episode, or any unit
@@ -33,7 +41,7 @@ defmodule Mydia.SmartSpace.Evaluator do
   """
 
   alias Mydia.SmartSpace.{Cleanup, Inputs}
-  alias Mydia.SmartSpace.Inputs.{Episode, Show}
+  alias Mydia.SmartSpace.Inputs.{Episode, FileRef, Global, OverrideRule, Show}
 
   @units ~w(season episode)
   @policies ~w(all_started any selected)
@@ -48,12 +56,13 @@ defmodule Mydia.SmartSpace.Evaluator do
   @spec eligible(Inputs.t(), DateTime.t(), Date.t()) :: [Cleanup.t()]
   def eligible(%Inputs{selected_user_ids: :misconfigured}, _now, _today), do: []
 
-  def eligible(%Inputs{global: %{watched_by: policy}} = inputs, now, today)
+  def eligible(%Inputs{global: %Global{watched_by: policy}} = inputs, now, today)
       when policy in @policies do
     inputs.shows
     |> Enum.flat_map(&show_cleanups(inputs, &1, now, today))
     |> Enum.sort_by(&{&1.media_item_id, &1.season_number, &1.episode_ids})
     |> Enum.sort_by(& &1.eligible_at, DateTime)
+    |> settle_files()
   end
 
   def eligible(%Inputs{}, _now, _today), do: []
@@ -66,15 +75,15 @@ defmodule Mydia.SmartSpace.Evaluator do
   @spec effective_rule(Inputs.t(), Show.t()) :: rule() | nil
   def effective_rule(%Inputs{global: global}, %Show{override: override}) do
     case override do
-      %{mode: "custom"} -> valid_rule(override)
-      %{mode: "off"} -> nil
-      %{mode: "inherit"} -> global_rule(global)
+      %OverrideRule{mode: "custom"} -> valid_rule(override)
+      %OverrideRule{mode: "off"} -> nil
+      %OverrideRule{mode: "inherit"} -> global_rule(global)
       nil -> global_rule(global)
       _unknown -> nil
     end
   end
 
-  defp global_rule(%{enabled: true} = global), do: valid_rule(global)
+  defp global_rule(%Global{enabled: true} = global), do: valid_rule(global)
   defp global_rule(_global), do: nil
 
   defp valid_rule(%{unit: unit, grace_days: grace})
@@ -117,13 +126,16 @@ defmodule Mydia.SmartSpace.Evaluator do
 
   # `{:ok, users}` with a non-empty list of required user ids, `{:ok, :any}`,
   # or `:none` when nobody can satisfy the policy.
-  defp required_users(%Inputs{global: %{watched_by: "any"}}, _show), do: {:ok, :any}
+  defp required_users(%Inputs{global: %Global{watched_by: "any"}}, _show), do: {:ok, :any}
 
-  defp required_users(%Inputs{global: %{watched_by: "all_started"}}, show) do
+  defp required_users(%Inputs{global: %Global{watched_by: "all_started"}}, show) do
     show.watches |> Enum.map(& &1.user_id) |> Enum.uniq() |> non_empty()
   end
 
-  defp required_users(%Inputs{global: %{watched_by: "selected"}, selected_user_ids: ids}, _show)
+  defp required_users(
+         %Inputs{global: %Global{watched_by: "selected"}, selected_user_ids: ids},
+         _show
+       )
        when is_list(ids),
        do: ids |> Enum.uniq() |> non_empty()
 
@@ -276,21 +288,95 @@ defmodule Mydia.SmartSpace.Evaluator do
     eligible_at = DateTime.add(done_at, ctx.rule.grace_days * @seconds_per_day, :second)
 
     if DateTime.compare(eligible_at, ctx.now) != :gt do
-      files = Enum.flat_map(file_episodes, & &1.files)
+      cleanup = %Cleanup{
+        media_item_id: ctx.show.media_item_id,
+        title: ctx.show.title,
+        unit: unit,
+        season_number: season,
+        episode_ids: episodes |> Enum.sort_by(& &1.episode_number) |> Enum.map(& &1.id),
+        eligible_at: eligible_at
+      }
 
       {:ok,
-       %Cleanup{
-         media_item_id: ctx.show.media_item_id,
-         title: ctx.show.title,
-         unit: unit,
-         season_number: season,
-         episode_ids: episodes |> Enum.sort_by(& &1.episode_number) |> Enum.map(& &1.id),
-         file_ids: Enum.map(files, &elem(&1, 0)),
-         bytes: files |> Enum.map(&(elem(&1, 1) || 0)) |> Enum.sum(),
-         eligible_at: eligible_at
-       }}
+       put_files(cleanup, file_episodes |> Enum.flat_map(& &1.files) |> Enum.uniq_by(& &1.id))}
     else
       :error
+    end
+  end
+
+  defp put_files(%Cleanup{} = cleanup, files) do
+    %{
+      cleanup
+      | files: files,
+        file_ids: Enum.map(files, & &1.id),
+        bytes: files |> Enum.map(&(&1.size || 0)) |> Enum.sum()
+    }
+  end
+
+  # -- files shared between episodes -------------------------------------------
+
+  # A file is trashed only when every episode it covers is in some cleanup of
+  # this evaluation. One that is not is held back, and the episodes it covers
+  # leave their cleanups. That can strand another file on one of those
+  # episodes, so repeat until nothing more is held. Each loop removes at least
+  # one file, so it terminates.
+  defp settle_files(cleanups) do
+    covered = cleanups |> Enum.flat_map(& &1.episode_ids) |> MapSet.new()
+
+    held =
+      for %Cleanup{files: files} <- cleanups,
+          %FileRef{} = file <- files,
+          not Enum.all?(file.episode_ids, &MapSet.member?(covered, &1)),
+          uniq: true,
+          do: file
+
+    if held == [] do
+      assign_files_once(cleanups)
+    else
+      held_ids = MapSet.new(held, & &1.id)
+      held_episodes = held |> Enum.flat_map(& &1.episode_ids) |> MapSet.new()
+
+      cleanups
+      |> Enum.map(&release(&1, held_ids, held_episodes))
+      |> settle_files()
+    end
+  end
+
+  defp release(%Cleanup{} = cleanup, held_ids, held_episodes) do
+    %{
+      cleanup
+      | episode_ids: Enum.reject(cleanup.episode_ids, &MapSet.member?(held_episodes, &1))
+    }
+    |> put_files(Enum.reject(cleanup.files, &MapSet.member?(held_ids, &1.id)))
+  end
+
+  # Cleanups arrive in eligibility order. A file listed by several goes to the
+  # first, so its bytes count once, and that cleanup also takes every episode
+  # the file covers: otherwise an episode whose own cleanup ends up without
+  # files would lose its file yet stay monitored. Each episode is listed once.
+  # A cleanup left without files is dropped; any episode only it listed is
+  # file-less and already unmonitored.
+  defp assign_files_once(cleanups) do
+    {kept, _seen} = Enum.reduce(cleanups, {[], {MapSet.new(), MapSet.new()}}, &claim/2)
+    Enum.reverse(kept)
+  end
+
+  defp claim(cleanup, {acc, {seen_files, seen_episodes} = seen}) do
+    case Enum.reject(cleanup.files, &MapSet.member?(seen_files, &1.id)) do
+      [] ->
+        {acc, seen}
+
+      files ->
+        episode_ids =
+          (cleanup.episode_ids ++ Enum.flat_map(files, & &1.episode_ids))
+          |> Enum.uniq()
+          |> Enum.reject(&MapSet.member?(seen_episodes, &1))
+
+        seen =
+          {Enum.reduce(files, seen_files, &MapSet.put(&2, &1.id)),
+           Enum.reduce(episode_ids, seen_episodes, &MapSet.put(&2, &1))}
+
+        {[put_files(%{cleanup | episode_ids: episode_ids}, files) | acc], seen}
     end
   end
 end

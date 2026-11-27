@@ -2,7 +2,7 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
   use ExUnit.Case, async: true
 
   alias Mydia.SmartSpace.{Cleanup, Evaluator, Inputs}
-  alias Mydia.SmartSpace.Inputs.{Episode, KeepRef, Show, Watch}
+  alias Mydia.SmartSpace.Inputs.{Episode, FileRef, Global, KeepRef, OverrideRule, Show, Watch}
 
   @now ~U[2026-11-20 12:00:00Z]
   @today ~D[2026-11-20]
@@ -12,9 +12,12 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
   # -- helpers ---------------------------------------------------------------
 
   defp global(attrs) do
-    Map.merge(
-      %{enabled: true, unit: "season", grace_days: 7, watched_by: "all_started"},
-      Map.new(attrs)
+    struct!(
+      Global,
+      Keyword.merge(
+        [enabled: true, unit: "season", grace_days: 7, watched_by: "all_started"],
+        attrs
+      )
     )
   end
 
@@ -41,21 +44,24 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
     )
   end
 
+  # `files` may be given as `{id, size}` pairs (a file covering only this
+  # episode) or as `FileRef` structs (a multi-episode file).
   defp ep(id, season, number, attrs \\ []) do
+    attrs = Keyword.merge([files: [{"file-" <> id, 100}]], attrs)
+
     struct!(
       Episode,
       Keyword.merge(
-        [
-          id: id,
-          season_number: season,
-          episode_number: number,
-          air_date: ~D[2026-01-01],
-          files: [{"file-" <> id, 100}]
-        ],
-        attrs
+        [id: id, season_number: season, episode_number: number, air_date: ~D[2026-01-01]],
+        Keyword.update!(attrs, :files, &Enum.map(&1, fn f -> file_ref(f, id) end))
       )
     )
   end
+
+  defp file_ref(%FileRef{} = ref, _episode_id), do: ref
+
+  defp file_ref({fid, size}, episode_id),
+    do: %FileRef{id: fid, size: size, episode_ids: [episode_id]}
 
   defp watch(user, episode_id, at \\ @long_ago, watched \\ true) do
     %Watch{user_id: user, episode_id: episode_id, watched: watched, last_watched_at: at}
@@ -519,7 +525,7 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
   describe "rules" do
     test "override custom with global disabled applies" do
       eps = season_one()
-      override = %{mode: "custom", unit: "episode", grace_days: 0}
+      override = %OverrideRule{mode: "custom", unit: "episode", grace_days: 0}
 
       result =
         run(inputs(show(eps, watched_by("a", eps), override: override), global: [enabled: false]))
@@ -531,18 +537,19 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
     test "override custom grace replaces the global grace" do
       eps = [ep("e1", 1, 1)]
       at = DateTime.add(@now, -days(3), :second)
-      override = %{mode: "custom", unit: "season", grace_days: 30}
+      override = %OverrideRule{mode: "custom", unit: "season", grace_days: 30}
 
       assert run(inputs(show(eps, [watch("a", "e1", at)], override: override))) == []
 
-      override = %{mode: "custom", unit: "season", grace_days: 2}
+      override = %OverrideRule{mode: "custom", unit: "season", grace_days: 2}
       assert [_] = run(inputs(show(eps, [watch("a", "e1", at)], override: override)))
     end
 
     test "override off with global enabled skips" do
       eps = season_one()
 
-      assert run(inputs(show(eps, watched_by("a", eps), override: %{mode: "off"}))) == []
+      assert run(inputs(show(eps, watched_by("a", eps), override: %OverrideRule{mode: "off"}))) ==
+               []
     end
 
     test "no override with global disabled skips" do
@@ -555,10 +562,10 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
       eps = season_one()
 
       for override <- [
-            %{mode: "custom", unit: nil, grace_days: 7},
-            %{mode: "custom", unit: "season", grace_days: nil},
-            %{mode: "custom", unit: "decade", grace_days: 7},
-            %{mode: "custom", unit: "season", grace_days: -1}
+            %OverrideRule{mode: "custom", unit: nil, grace_days: 7},
+            %OverrideRule{mode: "custom", unit: "season", grace_days: nil},
+            %OverrideRule{mode: "custom", unit: "decade", grace_days: 7},
+            %OverrideRule{mode: "custom", unit: "season", grace_days: -1}
           ] do
         assert run(inputs(show(eps, watched_by("a", eps), override: override))) == []
       end
@@ -574,14 +581,14 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
 
   describe "effective_rule/2" do
     test "custom returns its unit and grace" do
-      s = show([], [], override: %{mode: "custom", unit: "episode", grace_days: 3})
+      s = show([], [], override: %OverrideRule{mode: "custom", unit: "episode", grace_days: 3})
 
       assert Evaluator.effective_rule(inputs(s, global: [enabled: false]), s) ==
                %{unit: "episode", grace_days: 3}
     end
 
     test "off returns nil" do
-      s = show([], [], override: %{mode: "off", unit: nil, grace_days: nil})
+      s = show([], [], override: %OverrideRule{mode: "off", unit: nil, grace_days: nil})
       assert Evaluator.effective_rule(inputs(s), s) == nil
     end
 
@@ -590,6 +597,69 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
 
       assert Evaluator.effective_rule(inputs(s), s) == %{unit: "season", grace_days: 7}
       assert Evaluator.effective_rule(inputs(s, global: [enabled: false]), s) == nil
+    end
+  end
+
+  # -- multi-episode files -----------------------------------------------------
+
+  describe "a file covering several episodes" do
+    defp double(id, episode_ids, size \\ 300),
+      do: %FileRef{id: id, size: size, episode_ids: episode_ids}
+
+    test "episode unit: an unwatched partner episode holds the file and the episode" do
+      f = double("f910", ["e9", "e10"])
+      eps = [ep("e9", 1, 9, files: [f]), ep("e10", 1, 10, files: [f])]
+      watches = [watch("a", "e9"), watch("a", "e10", @long_ago, false)]
+
+      assert run(inputs(show(eps, watches), global: [unit: "episode"])) == []
+    end
+
+    test "episode unit: both watched trashes the file once" do
+      f = double("f910", ["e9", "e10"])
+      eps = [ep("e9", 1, 9, files: [f]), ep("e10", 1, 10, files: [f])]
+
+      result = run(inputs(show(eps, watched_by("a", eps)), global: [unit: "episode"]))
+
+      # One cleanup takes the file and both episodes, so neither episode is
+      # left monitored without its file.
+      assert [%Cleanup{file_ids: ["f910"], bytes: 300} = cleanup] = result
+      assert Enum.sort(cleanup.episode_ids) == ["e10", "e9"]
+    end
+
+    test "episode unit: a held file also holds another version on the same episode" do
+      f = double("f910", ["e9", "e10"])
+      eps = [ep("e9", 1, 9, files: [f, {"f9", 50}]), ep("e10", 1, 10, files: [f])]
+      watches = [watch("a", "e9"), watch("a", "e10", @long_ago, false)]
+
+      assert run(inputs(show(eps, watches), global: [unit: "episode"])) == []
+    end
+
+    test "season unit: a file spanning two seasons is held when only one is due" do
+      f = double("f-span", ["s1e2", "s2e1"])
+
+      eps = [
+        ep("s1e1", 1, 1),
+        ep("s1e2", 1, 2, files: [f]),
+        ep("s2e1", 2, 1, files: [f]),
+        ep("s2e2", 2, 2)
+      ]
+
+      watches = [watch("a", "s1e1"), watch("a", "s1e2"), watch("a", "s2e1")]
+
+      assert [%Cleanup{season_number: 1} = cleanup] = run(inputs(show(eps, watches)))
+      assert cleanup.file_ids == ["file-s1e1"]
+      assert cleanup.episode_ids == ["s1e1"]
+      assert cleanup.bytes == 100
+    end
+
+    test "season unit: an episode covered only through a link is not file-less" do
+      f = double("f910", ["e9", "e10"])
+      # e10 is monitored and its only file is the e9 release: it does not hold
+      # the season as a wanted, file-less episode.
+      eps = [ep("e9", 1, 9, files: [f]), ep("e10", 1, 10, files: [f], monitored: true)]
+
+      assert [%Cleanup{file_ids: ["f910"], episode_ids: ["e9", "e10"], bytes: 300}] =
+               run(inputs(show(eps, watched_by("a", eps))))
     end
   end
 end

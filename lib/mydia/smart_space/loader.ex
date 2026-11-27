@@ -12,6 +12,11 @@ defmodule Mydia.SmartSpace.Loader do
     * Files are `MediaFile.versions/0` (untrashed, `extra_kind` nil). Extras
       (samples, trailers) are not episode content, so the automation neither
       counts nor trashes them.
+    * An episode's files are every such file whose `episode_id` is the episode
+      or that `media_file_episodes` links to it, and each file lists every
+      episode it covers. A multi-episode release is therefore on all of its
+      episodes, and the evaluator can tell when trashing it would take an
+      episode that is not due.
     * `watches` holds only the show's own playback rows, including episodes
       whose files are trashed. Rows without an episode are ignored.
   """
@@ -20,12 +25,12 @@ defmodule Mydia.SmartSpace.Loader do
 
   alias Mydia.Accounts.User
   alias Mydia.Downloads.Download
-  alias Mydia.Library.MediaFile
+  alias Mydia.Library.{MediaFile, MediaFileEpisode}
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Playback.Progress
   alias Mydia.Repo
   alias Mydia.SmartSpace.Inputs
-  alias Mydia.SmartSpace.Inputs.{KeepRef, Show, Watch}
+  alias Mydia.SmartSpace.Inputs.{FileRef, Global, KeepRef, OverrideRule, Show, Watch}
   alias Mydia.SmartSpace.{Keep, Override}
 
   @doc """
@@ -73,7 +78,7 @@ defmodule Mydia.SmartSpace.Loader do
       end)
 
     %Inputs{
-      global: %{
+      global: %Global{
         enabled: config.enabled,
         unit: config.unit,
         grace_days: config.grace_days,
@@ -95,7 +100,8 @@ defmodule Mydia.SmartSpace.Loader do
 
   defp override_map(nil), do: nil
 
-  defp override_map(%Override{} = o), do: %{mode: o.mode, unit: o.unit, grace_days: o.grace_days}
+  defp override_map(%Override{} = o),
+    do: %OverrideRule{mode: o.mode, unit: o.unit, grace_days: o.grace_days}
 
   defp select_items(config, overrides, media_item_id) do
     base = from(m in MediaItem, where: m.type == "tv_show", order_by: [asc: m.title, asc: m.id])
@@ -140,16 +146,47 @@ defmodule Mydia.SmartSpace.Loader do
 
   defp load_files([]), do: %{}
 
+  # %{episode_id => [FileRef]}, each file on every episode it covers.
   defp load_files(ids) do
-    from(mf in MediaFile.versions(),
-      join: e in Episode,
-      on: e.id == mf.episode_id,
-      where: e.media_item_id in ^ids,
-      order_by: [asc: mf.inserted_at, asc: mf.id],
-      select: {mf.episode_id, mf.id, mf.size}
-    )
-    |> Repo.all()
-    |> Enum.group_by(&elem(&1, 0), fn {_e, id, size} -> {id, size} end)
+    show_episodes = from(e in Episode, where: e.media_item_id in ^ids, select: e.id)
+
+    linked =
+      from(l in MediaFileEpisode,
+        where: l.episode_id in subquery(show_episodes),
+        select: l.media_file_id
+      )
+
+    files_query =
+      from(mf in MediaFile.versions(),
+        where: mf.episode_id in subquery(show_episodes) or mf.id in subquery(linked)
+      )
+
+    files =
+      from(mf in files_query,
+        order_by: [asc: mf.inserted_at, asc: mf.id],
+        select: {mf.id, mf.size, mf.episode_id}
+      )
+      |> Repo.all()
+
+    links =
+      from(l in MediaFileEpisode,
+        where: l.media_file_id in subquery(select(files_query, [mf], mf.id)),
+        select: {l.media_file_id, l.episode_id}
+      )
+      |> Repo.all()
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    for {id, size, primary} <- files,
+        ref = file_ref(id, size, primary, Map.get(links, id, [])),
+        episode_id <- ref.episode_ids,
+        reduce: %{} do
+      acc -> Map.update(acc, episode_id, [ref], &(&1 ++ [ref]))
+    end
+  end
+
+  defp file_ref(id, size, primary, linked) do
+    covered = [primary | linked] |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.sort()
+    %FileRef{id: id, size: size, episode_ids: covered}
   end
 
   defp load_in_flight([]), do: {MapSet.new(), MapSet.new()}
