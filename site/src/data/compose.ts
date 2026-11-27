@@ -37,11 +37,23 @@ export function composeWithSecrets(secrets: ComposeSecrets): string {
     .replace(PLACEHOLDERS.guardianSecretKey, `GUARDIAN_SECRET_KEY=${secrets.guardianSecretKey}`);
 }
 
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+// The largest multiple of 62 a byte can hold. Bytes at or above it are
+// dropped, so every character is equally likely (no modulo bias).
+const UNBIASED_LIMIT = 256 - (256 % ALPHABET.length);
+
 /**
- * The browser equivalent of `openssl rand -base64 48`: 48 random bytes from
- * the platform CSPRNG, base64 encoded to 64 characters with no padding.
+ * 64 letters and digits from the platform CSPRNG, about 381 bits. Letters and
+ * digits only, so a double-click selects the whole key: browsers and
+ * terminals stop a word selection at the + and / that base64 would include.
  */
-export function randomSecret(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(48));
-  return btoa(String.fromCharCode(...bytes));
+export function randomSecret(length = 64): string {
+  let out = '';
+  while (out.length < length) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(length))) {
+      if (byte < UNBIASED_LIMIT) out += ALPHABET[byte % ALPHABET.length];
+      if (out.length === length) break;
+    }
+  }
+  return out;
 }

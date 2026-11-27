@@ -27,9 +27,14 @@ it('fills in both secrets and nothing else', () => {
   expect(changed).toHaveLength(2);
 });
 
-it('generates secrets like openssl rand -base64 48', () => {
+it('generates 64-character alphanumeric secrets', () => {
   const a = randomSecret();
   const b = randomSecret();
-  expect(a).toMatch(/^[A-Za-z0-9+/]{64}$/);
+  expect(a).toMatch(/^[A-Za-z0-9]{64}$/);
   expect(a).not.toBe(b);
+});
+
+it('uses the whole alphabet', () => {
+  const seen = new Set(Array.from({ length: 50 }, () => randomSecret()).join(''));
+  expect(seen.size).toBe(62);
 });
