@@ -81,6 +81,30 @@ defmodule Mydia.Config.SmartSpaceTest do
       assert Map.has_key?(errors.smart_space, :watched_by)
     end
 
+    test "valid false and 0 still apply" do
+      assert %{enabled: false, grace_days: 0} =
+               env(%{"SMART_SPACE_ENABLED" => "false", "SMART_SPACE_GRACE_DAYS" => "0"})
+    end
+
+    test "unparseable boolean and integer become :invalid and fail validation" do
+      loaded = env(%{"SMART_SPACE_ENABLED" => "yes", "SMART_SPACE_GRACE_DAYS" => "7d"})
+      assert loaded.enabled == :invalid
+      assert loaded.grace_days == :invalid
+
+      cs = Schema.changeset(%Schema{}, %{smart_space: loaded})
+      refute cs.valid?
+
+      errors = Ecto.Changeset.traverse_errors(cs, fn {msg, _} -> msg end)
+      assert Map.has_key?(errors.smart_space, :enabled)
+      assert Map.has_key?(errors.smart_space, :grace_days)
+    end
+
+    test "absent boolean and integer stay absent" do
+      loaded = env(%{"SMART_SPACE_UNIT" => "season"})
+      refute Map.has_key?(loaded, :enabled)
+      refute Map.has_key?(loaded, :grace_days)
+    end
+
     test "selected users are split, trimmed and compacted" do
       assert env(%{"SMART_SPACE_SELECTED_USERS" => " alice, ,bob "}).selected_users ==
                ["alice", "bob"]

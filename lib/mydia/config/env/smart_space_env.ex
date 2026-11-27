@@ -7,7 +7,11 @@ defmodule Mydia.Config.Env.SmartSpaceEnv do
 
   Enum values go through a fixed-value parser that maps unknown strings to
   `:invalid`, so a typo fails validation by name instead of silently falling
-  back to the default. `Loader.parse_atom/1` must not be used here.
+  back to the default. `Loader.parse_atom/1` must not be used here. The
+  boolean and the integer get the same treatment: a present value that does
+  not parse becomes `:invalid`, which does not cast, so `SMART_SPACE_ENABLED=yes`
+  or `SMART_SPACE_GRACE_DAYS=7d` stops startup instead of being dropped. See
+  `lib/mydia/config/README.md`.
   """
 
   import Mydia.Config.Loader,
@@ -18,9 +22,13 @@ defmodule Mydia.Config.Env.SmartSpaceEnv do
   @spec load((String.t() -> String.t() | nil)) :: map()
   def load(getenv \\ &System.get_env/1) do
     %{}
-    |> put_if_present(:enabled, getenv.("SMART_SPACE_ENABLED"), &parse_boolean/1)
+    |> put_if_present(:enabled, getenv.("SMART_SPACE_ENABLED"), &or_invalid(&1, :boolean))
     |> put_if_present(:unit, getenv.("SMART_SPACE_UNIT"), &parse_enum(&1, SmartSpace.units()))
-    |> put_if_present(:grace_days, getenv.("SMART_SPACE_GRACE_DAYS"), &parse_integer/1)
+    |> put_if_present(
+      :grace_days,
+      getenv.("SMART_SPACE_GRACE_DAYS"),
+      &or_invalid(&1, :integer)
+    )
     |> put_if_present(
       :watched_by,
       getenv.("SMART_SPACE_WATCHED_BY"),
@@ -31,6 +39,15 @@ defmodule Mydia.Config.Env.SmartSpaceEnv do
       getenv.("SMART_SPACE_SELECTED_USERS"),
       &parse_users/1
     )
+  end
+
+  defp or_invalid(value, type) do
+    parsed = if type == :boolean, do: parse_boolean(value), else: parse_integer(value)
+
+    case parsed do
+      {:ok, _} = ok -> ok
+      :error -> {:ok, :invalid}
+    end
   end
 
   defp parse_enum(value, allowed) do
