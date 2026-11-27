@@ -15,7 +15,7 @@ msgstr ""
 #: lib/mydia_web/components/admin_list_components.ex:235
 #: lib/mydia_web/components/core_components.ex:332
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:228
-#: lib/mydia_web/live/admin_settings_live/components.ex:191
+#: lib/mydia_web/live/admin_settings_live/components.ex:202
 #: lib/mydia_web/live/search_live/index.html.heex:260
 #, elixir-autogen, elixir-format
 msgid "Actions"
@@ -1124,7 +1124,7 @@ msgid "OR PROVIDE AN IMAGE URL"
 msgstr ""
 
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:154
-#: lib/mydia_web/live/admin_settings_live/components.ex:211
+#: lib/mydia_web/live/admin_settings_live/components.ex:222
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:173
 #, elixir-autogen, elixir-format
 msgid "On"
@@ -1182,7 +1182,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_plugins_live/components.ex:276
 #: lib/mydia_web/live/admin_plugins_live/sources_component.ex:142
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:117
-#: lib/mydia_web/live/admin_settings_live/components.ex:43
+#: lib/mydia_web/live/admin_settings_live/components.ex:47
 #: lib/mydia_web/live/devices_live/components.ex:195
 #: lib/mydia_web/live/discover_live/regional_components.ex:206
 #: lib/mydia_web/live/downloads_live/remove_confirm.ex:172
@@ -1239,6 +1239,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/library_config_components.ex:122
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:259
 #: lib/mydia_web/live/admin_settings_live/proxy_components.ex:154
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:141
 #: lib/mydia_web/live/admin_storage_backends_live/components.ex:166
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:349
 #: lib/mydia_web/live/discover_live/regional_components.ex:222
@@ -1802,7 +1803,7 @@ msgid_plural "%{count} downloads reference '%{client}', which Mydia is no longer
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:176
+#: lib/mydia_web/live/admin_settings_live/components.ex:187
 #: lib/mydia_web/live/media_live/show/rescan_results.ex:241
 #, elixir-autogen, elixir-format
 msgid "%{count} error"
@@ -4242,7 +4243,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:623
 #: lib/mydia_web/live/admin_import_lists_live/modal_components.ex:146
 #: lib/mydia_web/live/admin_library_paths_live/components.ex:133
-#: lib/mydia_web/live/admin_settings_live/components.ex:145
+#: lib/mydia_web/live/admin_settings_live/components.ex:156
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:49
 #, elixir-autogen, elixir-format
 msgid "Default"
@@ -6886,7 +6887,7 @@ msgstr ""
 msgid "Not media (%{detail})"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:237
+#: lib/mydia_web/live/admin_settings_live/components.ex:248
 #: lib/mydia_web/live/media_live/show/modals.ex:1147
 #, elixir-autogen, elixir-format
 msgid "Not set"
@@ -12033,7 +12034,7 @@ msgctxt "date format"
 msgid "%b %d, %Y"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:81
+#: lib/mydia_web/live/admin_settings_live/components.ex:85
 #, elixir-autogen, elixir-format
 msgid "%{backend} on %{device}"
 msgstr ""
@@ -12672,7 +12673,7 @@ msgstr ""
 msgid "About Tailscale"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:100
+#: lib/mydia_web/live/admin_settings_live/components.ex:104
 #, elixir-autogen, elixir-format
 msgid "Accelerated"
 msgstr ""
@@ -13465,7 +13466,7 @@ msgstr ""
 msgid "Built-in names are fixed. Saving stores a local override of the shipped definition."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:145
+#: lib/mydia_web/live/admin_settings_live/components.ex:156
 #, elixir-autogen, elixir-format
 msgid "Built-in value"
 msgstr ""
@@ -13702,7 +13703,7 @@ msgstr ""
 msgid "Circuit open"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:186
+#: lib/mydia_web/live/admin_settings_live/components.ex:197
 #, elixir-autogen, elixir-format
 msgid "Clear all pending crash reports?"
 msgstr ""
@@ -13712,7 +13713,7 @@ msgstr ""
 msgid "Clear filter"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:192
+#: lib/mydia_web/live/admin_settings_live/components.ex:203
 #, elixir-autogen, elixir-format
 msgid "Clear pending reports"
 msgstr ""
@@ -13769,7 +13770,7 @@ msgstr ""
 msgid "Config > General > API Key in SABnzbd, not the NZB Key"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:142
+#: lib/mydia_web/live/admin_settings_live/components.ex:153
 #, elixir-autogen, elixir-format
 msgid "Config file"
 msgstr ""
@@ -13830,7 +13831,7 @@ msgstr ""
 msgid "Configuration - Remote Access"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:18
+#: lib/mydia_web/live/admin_settings_live/index.ex:19
 #, elixir-autogen, elixir-format
 msgid "Configuration - Settings"
 msgstr ""
@@ -14161,12 +14162,12 @@ msgstr ""
 msgid "Crash Reporting"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:162
+#: lib/mydia_web/live/admin_settings_live/components.ex:173
 #, elixir-autogen, elixir-format
 msgid "Crash Reports"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:274
+#: lib/mydia_web/live/admin_settings_live/index.ex:301
 #, elixir-autogen, elixir-format
 msgid "Crash report queue cleared"
 msgstr ""
@@ -14252,7 +14253,7 @@ msgstr ""
 msgid "Database Path"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:139
+#: lib/mydia_web/live/admin_settings_live/components.ex:150
 #, elixir-autogen, elixir-format
 msgid "Database stored"
 msgstr ""
@@ -14455,7 +14456,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/components.ex:285
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:50
 #: lib/mydia_web/live/admin_plugins_live/sources_component.ex:130
-#: lib/mydia_web/live/admin_settings_live/components.ex:229
+#: lib/mydia_web/live/admin_settings_live/components.ex:240
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:62
 #, elixir-autogen, elixir-format
 msgid "Disabled"
@@ -14795,7 +14796,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:133
 #: lib/mydia_web/live/admin_indexers_live/modal_components.ex:74
 #: lib/mydia_web/live/admin_media_servers_live/media_server_modal_components.ex:45
-#: lib/mydia_web/live/admin_settings_live/components.ex:229
+#: lib/mydia_web/live/admin_settings_live/components.ex:240
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:62
 #: lib/mydia_web/live/admin_subtitle_providers_live/components.ex:157
 #, elixir-autogen, elixir-format
@@ -14852,7 +14853,7 @@ msgstr ""
 msgid "Enter your username"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:136
+#: lib/mydia_web/live/admin_settings_live/components.ex:147
 #, elixir-autogen, elixir-format
 msgid "Environment (read-only)"
 msgstr ""
@@ -15110,7 +15111,7 @@ msgstr ""
 msgid "Failed to reject request: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:363
+#: lib/mydia_web/live/admin_settings_live/index.ex:390
 #, elixir-autogen, elixir-format
 msgid "Failed to remove %{key}"
 msgstr ""
@@ -15492,7 +15493,7 @@ msgstr ""
 msgid "HTTP error: %{status}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:75
+#: lib/mydia_web/live/admin_settings_live/components.ex:79
 #, elixir-autogen, elixir-format
 msgid "Hardware transcoding"
 msgstr ""
@@ -15725,13 +15726,14 @@ msgstr ""
 msgid "Invalid or expired authentication token"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:166
-#: lib/mydia_web/live/admin_settings_live/index.ex:398
+#: lib/mydia_web/live/admin_settings_live/index.ex:167
+#: lib/mydia_web/live/admin_settings_live/index.ex:425
 #, elixir-autogen, elixir-format
 msgid "Invalid setting value"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:180
+#: lib/mydia_web/live/admin_settings_live/index.ex:181
+#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:135
 #, elixir-autogen, elixir-format
 msgid "Invalid value for %{key}"
 msgstr ""
@@ -16704,7 +16706,7 @@ msgstr ""
 msgid "No searches yet"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:123
+#: lib/mydia_web/live/admin_settings_live/components.ex:127
 #, elixir-autogen, elixir-format
 msgid "No settings in this category."
 msgstr ""
@@ -16884,7 +16886,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:93
 #: lib/mydia_web/live/admin_download_clients_live/built_in_components.ex:281
 #: lib/mydia_web/live/admin_download_clients_live/built_in_form_components.ex:155
-#: lib/mydia_web/live/admin_settings_live/components.ex:211
+#: lib/mydia_web/live/admin_settings_live/components.ex:222
 #, elixir-autogen, elixir-format
 msgid "Off"
 msgstr ""
@@ -17424,7 +17426,7 @@ msgstr ""
 msgid "Quality profile saved, but custom format settings could not be saved: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:164
+#: lib/mydia_web/live/admin_settings_live/components.ex:175
 #, elixir-autogen, elixir-format
 msgid "Queued"
 msgstr ""
@@ -17701,8 +17703,8 @@ msgstr ""
 msgid "Remove this source? Plugins installed from it keep running but stop receiving updates."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:352
-#: lib/mydia_web/live/admin_settings_live/index.ex:368
+#: lib/mydia_web/live/admin_settings_live/index.ex:379
+#: lib/mydia_web/live/admin_settings_live/index.ex:395
 #, elixir-autogen, elixir-format
 msgid "Removed %{key}"
 msgstr ""
@@ -18294,19 +18296,20 @@ msgstr ""
 msgid "Setting any limit also hides titles with no rating. %{count} of your library items currently have none."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:330
+#: lib/mydia_web/live/admin_settings_live/index.ex:357
 #, elixir-autogen, elixir-format
 msgid "Setting saved, but the runtime config could not be reloaded because the merged configuration is invalid. The change will take effect once the configuration is valid. Check the logs for the validation error."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:144
-#: lib/mydia_web/live/admin_settings_live/index.ex:177
-#: lib/mydia_web/live/admin_settings_live/index.ex:429
+#: lib/mydia_web/live/admin_settings_live/index.ex:145
+#: lib/mydia_web/live/admin_settings_live/index.ex:178
+#: lib/mydia_web/live/admin_settings_live/index.ex:204
+#: lib/mydia_web/live/admin_settings_live/index.ex:456
 #, elixir-autogen, elixir-format
 msgid "Setting updated successfully"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:78
+#: lib/mydia_web/live/admin_settings_live/index.ex:79
 #, elixir-autogen, elixir-format
 msgid "Settings updated successfully"
 msgstr ""
@@ -18365,12 +18368,12 @@ msgstr[1] ""
 msgid "Skipped: %{reason}"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:99
+#: lib/mydia_web/live/admin_settings_live/components.ex:103
 #, elixir-autogen, elixir-format
 msgid "Software"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:27
+#: lib/mydia_web/live/admin_settings_live/components.ex:31
 #, elixir-autogen, elixir-format
 msgid "Some saved settings are not being applied"
 msgstr ""
@@ -18919,7 +18922,7 @@ msgstr ""
 msgid "These files are %{spread} apart in length, more than the %{tolerance} allowed, so they are not the same content. This is usually bonus features or a file matched to the wrong item."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:29
+#: lib/mydia_web/live/admin_settings_live/components.ex:33
 #, elixir-autogen, elixir-format
 msgid "These rows name a setting that no longer exists, or hold a value of the wrong type. They are skipped so the rest of your configuration still applies. Removing them is safe."
 msgstr ""
@@ -19108,7 +19111,7 @@ msgstr ""
 msgid "Total %{size}."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:174
+#: lib/mydia_web/live/admin_settings_live/components.ex:185
 #, elixir-autogen, elixir-format
 msgid "Tracked"
 msgstr ""
@@ -19259,7 +19262,7 @@ msgstr ""
 msgid "Unable to check health"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:79
+#: lib/mydia_web/live/admin_settings_live/components.ex:83
 #, elixir-autogen, elixir-format
 msgid "Unavailable: %{reason}"
 msgstr ""
@@ -19515,7 +19518,7 @@ msgstr ""
 msgid "View"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:178
+#: lib/mydia_web/live/admin_settings_live/components.ex:189
 #, elixir-autogen, elixir-format
 msgid "View all →"
 msgstr ""
@@ -19840,7 +19843,7 @@ msgstr ""
 msgid "conditions[%{index}]: within_last is only valid on date fields"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:86
+#: lib/mydia_web/live/admin_settings_live/components.ex:90
 #, elixir-autogen, elixir-format
 msgid "decodes %{profiles}"
 msgstr ""
@@ -20157,7 +20160,7 @@ msgstr ""
 msgid "unknown"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:83
+#: lib/mydia_web/live/admin_settings_live/components.ex:87
 #, elixir-autogen, elixir-format
 msgid "unknown device"
 msgstr ""
@@ -20307,7 +20310,7 @@ msgctxt "connection type"
 msgid "Relay"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/components.ex:188
+#: lib/mydia_web/live/admin_settings_live/components.ex:199
 #, elixir-autogen, elixir-format
 msgctxt "crash reports"
 msgid "Clear"
@@ -22367,7 +22370,7 @@ msgstr ""
 msgid "Proxy settings are unavailable."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:230
+#: lib/mydia_web/live/admin_settings_live/index.ex:257
 #, elixir-autogen, elixir-format
 msgid "Proxy settings saved"
 msgstr ""
@@ -22402,7 +22405,7 @@ msgstr ""
 msgid "none (local and private addresses always go direct)"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/index.ex:303
+#: lib/mydia_web/live/admin_settings_live/index.ex:330
 #, elixir-autogen, elixir-format
 msgid "the test stopped unexpectedly"
 msgstr ""
@@ -22943,4 +22946,81 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgctxt "trash reason"
 msgid "Smart Space"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:154
+#, elixir-autogen, elixir-format
+msgid "Any one person"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:37
+#, elixir-autogen, elixir-format
+msgid "Clean up watched TV"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:153
+#, elixir-autogen, elixir-format
+msgid "Everyone who started the show"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:69
+#, elixir-autogen, elixir-format
+msgid "Grace period (days)"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:82
+#, elixir-autogen, elixir-format
+msgid "How long a finished season or episode stays put after it was last watched, so a rewatch can still happen."
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:30
+#, elixir-autogen, elixir-format
+msgid "Moves watched TV to the trash for you, once everyone who matters has finished it. Nothing is deleted permanently."
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:85
+#, elixir-autogen, elixir-format
+msgid "Pick at least one person, or choose a different rule."
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:111
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:120
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:155
+#, elixir-autogen, elixir-format
+msgid "Selected people"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:151
+#, elixir-autogen, elixir-format
+msgid "Single episodes"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:28
+#, elixir-autogen, elixir-format
+msgid "Smart Space"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:143
+#, elixir-autogen, elixir-format
+msgid "Unknown user: %{names}"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:114
+#, elixir-autogen, elixir-format
+msgid "Used when the rule above is Selected people."
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:53
+#, elixir-autogen, elixir-format
+msgid "What to clean up"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:90
+#, elixir-autogen, elixir-format
+msgid "Who has to have watched it"
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:150
+#, elixir-autogen, elixir-format
+msgid "Whole seasons"
 msgstr ""
