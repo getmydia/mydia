@@ -10,7 +10,8 @@ defmodule Mydia.SmartSpace.Override do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @modes ~w(inherit off custom)
+  # "inherit" is never stored: it means no row (see Rules.put_override/2).
+  @modes ~w(off custom)
   @units ~w(season episode)
 
   @type t :: %__MODULE__{}

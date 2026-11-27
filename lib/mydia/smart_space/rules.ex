@@ -23,12 +23,16 @@ defmodule Mydia.SmartSpace.Rules do
   Sets a show's override. `mode: "inherit"` deletes the row and returns
   `{:ok, nil}`. Only TV shows may have an override.
   """
-  def put_override(media_item_id, %{mode: "inherit"}) do
-    from(o in Override, where: o.media_item_id == ^media_item_id) |> Repo.delete_all()
-    {:ok, nil}
+  def put_override(media_item_id, attrs) do
+    if (attrs[:mode] || attrs["mode"]) == "inherit" do
+      from(o in Override, where: o.media_item_id == ^media_item_id) |> Repo.delete_all()
+      {:ok, nil}
+    else
+      upsert_override(media_item_id, attrs)
+    end
   end
 
-  def put_override(media_item_id, attrs) do
+  defp upsert_override(media_item_id, attrs) do
     base = get_override(media_item_id) || %Override{media_item_id: media_item_id}
 
     changeset =

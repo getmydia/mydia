@@ -33,6 +33,17 @@ defmodule Mydia.SmartSpace.RulesTest do
       assert [_] = Rules.list_overrides()
     end
 
+    test "inherit with string keys deletes the row and is never stored" do
+      s = show()
+      {:ok, _} = Rules.put_override(s.id, %{"mode" => "off"})
+      assert {:ok, nil} = Rules.put_override(s.id, %{"mode" => "inherit"})
+      assert Rules.get_override(s.id) == nil
+      assert {:ok, nil} = Rules.put_override(s.id, %{"mode" => "inherit"})
+
+      cs = Override.changeset(%Override{media_item_id: s.id}, %{mode: "inherit"})
+      refute cs.valid?
+    end
+
     test "inherit deletes the row" do
       s = show()
       {:ok, _} = Rules.put_override(s.id, %{mode: "off"})
@@ -82,6 +93,15 @@ defmodule Mydia.SmartSpace.RulesTest do
         |> Keep.changeset()
 
       refute cs.valid?
+    end
+
+    test "database CHECK rejects season and episode together" do
+      s = show()
+      ep = episode_fixture(%{media_item_id: s.id})
+
+      assert_raise Ecto.ConstraintError, fn ->
+        Repo.insert!(%Keep{media_item_id: s.id, season_number: 1, episode_id: ep.id})
+      end
     end
 
     test "unique indexes backstop duplicates" do

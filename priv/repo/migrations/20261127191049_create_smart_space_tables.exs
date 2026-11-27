@@ -42,6 +42,10 @@ defmodule Mydia.Repo.Migrations.CreateSmartSpaceTables do
       timestamps(type: :utc_datetime, updated_at: false)
     end
 
+    create constraint(:smart_space_keeps, :smart_space_keeps_one_level,
+             check: "season_number IS NULL OR episode_id IS NULL"
+           )
+
     create index(:smart_space_keeps, [:media_item_id])
 
     create unique_index(:smart_space_keeps, [:media_item_id],
