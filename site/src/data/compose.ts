@@ -19,3 +19,29 @@ export const composeYaml = `services:
       - 4000:4000
     restart: unless-stopped
 `;
+
+export interface ComposeSecrets {
+  secretKeyBase: string;
+  guardianSecretKey: string;
+}
+
+const PLACEHOLDERS: Record<keyof ComposeSecrets, string> = {
+  secretKeyBase: 'SECRET_KEY_BASE=your-secret-key-base-here',
+  guardianSecretKey: 'GUARDIAN_SECRET_KEY=your-guardian-secret-key-here',
+};
+
+/** composeYaml with both placeholder secrets replaced by real values. */
+export function composeWithSecrets(secrets: ComposeSecrets): string {
+  return composeYaml
+    .replace(PLACEHOLDERS.secretKeyBase, `SECRET_KEY_BASE=${secrets.secretKeyBase}`)
+    .replace(PLACEHOLDERS.guardianSecretKey, `GUARDIAN_SECRET_KEY=${secrets.guardianSecretKey}`);
+}
+
+/**
+ * The browser equivalent of `openssl rand -base64 48`: 48 random bytes from
+ * the platform CSPRNG, base64 encoded to 64 characters with no padding.
+ */
+export function randomSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(48));
+  return btoa(String.fromCharCode(...bytes));
+}

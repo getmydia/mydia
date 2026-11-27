@@ -1,14 +1,18 @@
 ---
 import { composeYaml } from '../data/compose';
 
+// Steps 1 and 2 read differently when the page has filled in generated
+// keys. `body` is what renders without JavaScript, where nothing is filled in.
 const steps = [
   {
     title: 'Generate secret keys',
     body: 'Run openssl rand -base64 48 twice, once for SECRET_KEY_BASE and once for GUARDIAN_SECRET_KEY.',
+    withSecrets: 'Both keys in the Compose file below were generated in your browser. Turn off the toggle to use your own.',
   },
   {
     title: 'Create docker-compose.yml',
     body: 'Save the Compose file below as docker-compose.yml, paste both secret keys into it, and set the media volume path to your library directory.',
+    withSecrets: 'Save the Compose file below as docker-compose.yml and set the media volume path to your library directory.',
   },
   {
     title: 'Start Mydia Server',
@@ -30,11 +34,19 @@ const steps = [
           <span class="w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
           <div>
             <h3 class="font-semibold">{step.title}</h3>
-            <p class="text-base-content/60 text-sm">{step.body}</p>
+            <p class="text-base-content/60 text-sm" data-step-text data-without={step.body} data-with={step.withSecrets ?? step.body}>{step.body}</p>
           </div>
         </li>
       ))}
     </ol>
+
+    <div class="hidden flex-wrap items-center justify-between gap-2 mb-2" data-secrets-controls>
+      <label class="flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
+        <input type="checkbox" class="toggle toggle-primary toggle-sm" checked data-secrets-toggle />
+        Fill in generated secret keys
+      </label>
+      <button type="button" class="btn btn-xs btn-ghost" data-secrets-regenerate>Regenerate</button>
+    </div>
 
     <div class="relative" data-install-code>
       <button type="button" class="btn btn-sm btn-ghost absolute top-2 right-2" data-copy-button>Copy</button>
@@ -53,6 +65,39 @@ const steps = [
 </section>
 
 <script>
+  import { composeWithSecrets, composeYaml, randomSecret } from '../data/compose';
+
+  // Progressive enhancement: without JavaScript (or without Web Crypto) the
+  // section stays as rendered, with placeholders and the openssl step.
+  document.querySelectorAll<HTMLElement>('#install').forEach((section) => {
+    const controls = section.querySelector<HTMLElement>('[data-secrets-controls]');
+    const toggle = section.querySelector<HTMLInputElement>('[data-secrets-toggle]');
+    const regenerate = section.querySelector<HTMLButtonElement>('[data-secrets-regenerate]');
+    const code = section.querySelector<HTMLElement>('[data-copy-source]');
+    if (!controls || !toggle || !regenerate || !code || !globalThis.crypto?.getRandomValues) return;
+
+    const fresh = () => ({ secretKeyBase: randomSecret(), guardianSecretKey: randomSecret() });
+    let secrets = fresh();
+
+    const render = () => {
+      const on = toggle.checked;
+      code.textContent = on ? composeWithSecrets(secrets) : composeYaml;
+      regenerate.classList.toggle('invisible', !on);
+      section.querySelectorAll<HTMLElement>('[data-step-text]').forEach((el) => {
+        el.textContent = (on ? el.dataset.with : el.dataset.without) ?? el.textContent;
+      });
+    };
+
+    toggle.addEventListener('change', render);
+    regenerate.addEventListener('click', () => {
+      secrets = fresh();
+      render();
+    });
+    controls.classList.remove('hidden');
+    controls.classList.add('flex');
+    render();
+  });
+
   document.querySelectorAll<HTMLElement>('[data-install-code]').forEach((root) => {
     const button = root.querySelector<HTMLButtonElement>('[data-copy-button]');
     const source = root.querySelector<HTMLElement>('[data-copy-source]');
