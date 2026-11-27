@@ -99,7 +99,8 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettingsTest do
   test "the enabled toggle has an accessible name", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/settings")
 
-    assert has_element?(view, "label[for='smart-space-enabled']", "Clean up watched TV")
+    assert has_element?(view, "#smart-space-enabled-label", "Clean up watched TV")
+    assert has_element?(view, "#smart-space-enabled[aria-labelledby='smart-space-enabled-label']")
   end
 
   test "a negative grace period is rejected", %{conn: conn} do

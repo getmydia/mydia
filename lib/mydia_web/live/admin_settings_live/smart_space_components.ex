@@ -34,14 +34,18 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceComponents do
           </div>
 
           <div class="flex items-center gap-2 flex-wrap">
-            <label for="smart-space-enabled" class="font-medium cursor-pointer">
+            <%!-- A span, not a <label>: a label is a tap target, and a one-line
+                  label is too short for the mobile layout sweep. The toggle
+                  takes its accessible name from this span instead. --%>
+            <span id="smart-space-enabled-label" class="font-medium">
               {gettext("Clean up watched TV")}
-            </label>
+            </span>
             <.config_source_badge source={@enabled.source} />
             <input type="hidden" name="enabled" value="false" disabled={@enabled.source == :env} />
             <input
               id="smart-space-enabled"
               type="checkbox"
+              aria-labelledby="smart-space-enabled-label"
               name="enabled"
               value="true"
               class="toggle toggle-primary toggle-sm ml-auto"
