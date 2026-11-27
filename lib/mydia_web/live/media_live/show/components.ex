@@ -335,6 +335,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :season_order_options, :any, default: nil
   attr :can_update_media, :boolean, required: true
   attr :can_delete_media, :boolean, default: false
+  attr :smart_space, :map, default: nil
 
   def episodes_section(assigns) do
     ~H"""
@@ -388,7 +389,10 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               </label>
 
               <%!-- One-shot bulk actions. --%>
-              <MonitoringMenu.episode_monitoring_menu episodes={@media_item.episodes} />
+              <MonitoringMenu.episode_monitoring_menu
+                episodes={@media_item.episodes}
+                smart_space={@smart_space}
+              />
             </div>
           </div>
           <SegmentComponents.segment_unavailable_note :if={
@@ -426,6 +430,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
               segment_statuses={@segment_statuses}
               segment_detection_available={@segment_detection_available}
               can_delete_media={@can_delete_media}
+              smart_space={@smart_space}
             />
           <% end %>
         </div>

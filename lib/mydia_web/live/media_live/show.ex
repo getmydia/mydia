@@ -33,6 +33,8 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SearchEvents
   alias MydiaWeb.MediaLive.Show.SearchFilterEvents
   alias MydiaWeb.MediaLive.Show.SegmentEvents
+  alias MydiaWeb.MediaLive.Show.SmartSpaceComponents
+  alias MydiaWeb.MediaLive.Show.SmartSpaceEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
   alias MydiaWeb.MediaLive.Show.RecommendationComponents
@@ -226,6 +228,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # `overflow-y-auto` (see Components.hero_section/1), and an anchored
      # `.dropdown-content` gets clipped by that ancestor's overflow box.
      |> assign(:show_quality_profile_modal, false)
+     |> SmartSpaceEvents.assign_smart_space(media_item)
      # Download audio picker modal state, same page-level-modal reasoning.
      |> assign(:show_download_audio_modal, false)
      |> assign(:show_availability_modal, false)
@@ -256,6 +259,9 @@ defmodule MydiaWeb.MediaLive.Show do
   end
 
   @impl true
+  def handle_event("smart_space_" <> action, params, socket),
+    do: SmartSpaceEvents.handle(action, params, socket)
+
   def handle_event("toggle_monitored", params, socket),
     do: EpisodeEvents.toggle_monitored(params, socket)
 

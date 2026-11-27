@@ -384,6 +384,17 @@
             season_order_options={@season_order_options}
             can_update_media={@can_update_media}
             can_delete_media={@can_delete_media}
+            smart_space={
+              @smart_space? &&
+                %{
+                  rule: @smart_space_rule,
+                  override: @smart_space_override,
+                  due: @smart_space_due,
+                  keeps: @smart_space_keeps,
+                  can_edit?: @can_update_media,
+                  can_keep?: @can_delete_media
+                }
+            }
           />
           <%!-- Media Files Section --%>
           <Components.media_files_section
@@ -603,6 +614,7 @@
       default_quality_profile_name={@default_quality_profile_name}
     />
   <% end %>
+  <SmartSpaceComponents.override_modal :if={@show_smart_space_modal} form={@smart_space_form} />
   <%= if @show_download_audio_modal do %>
     <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_modal media_item={@media_item} />
   <% end %>
