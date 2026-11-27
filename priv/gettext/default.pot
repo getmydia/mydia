@@ -4646,9 +4646,9 @@ msgstr ""
 msgid "Download speed"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:664
-#: lib/mydia_web/live/media_live/show.ex:673
-#: lib/mydia_web/live/media_live/show.ex:677
+#: lib/mydia_web/live/media_live/show.ex:665
+#: lib/mydia_web/live/media_live/show.ex:674
+#: lib/mydia_web/live/media_live/show.ex:678
 #, elixir-autogen, elixir-format
 msgid "Download started: %{title}"
 msgstr ""
@@ -8545,12 +8545,12 @@ msgstr ""
 msgid "Search complete: %{indexers} indexer(s) searched, %{results} result(s) found, but none matched quality criteria"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:768
+#: lib/mydia_web/live/media_live/show.ex:769
 #, elixir-autogen, elixir-format
 msgid "Search completed but no suitable releases found for S%{season}E%{episode}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show.ex:747
+#: lib/mydia_web/live/media_live/show.ex:748
 #, elixir-autogen, elixir-format
 msgid "Search completed but no suitable releases found for season %{season}"
 msgstr ""
@@ -22908,7 +22908,7 @@ msgstr ""
 msgid "Rename skipped: a cleanup is running on this library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:111
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:114
 #, elixir-autogen, elixir-format
 msgid "%{count} file could not be removed"
 msgid_plural "%{count} files could not be removed"
@@ -22926,31 +22926,26 @@ msgstr ""
 msgid "Delete season files"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:147
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:150
 #, elixir-autogen, elixir-format
 msgid "Deleted %{count} file, including from disk"
 msgid_plural "Deleted %{count} files, including from disk"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:143
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:146
 #, elixir-autogen, elixir-format
 msgid "Moved %{count} file to trash"
 msgid_plural "Moved %{count} files to trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:155
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:158
 #, elixir-autogen, elixir-format
 msgid "Removed %{count} file from the library, kept on disk"
 msgid_plural "Removed %{count} files from the library, kept on disk"
 msgstr[0] ""
 msgstr[1] ""
-
-#: lib/mydia_web/live/admin_trash_live/components.ex:30
-#, elixir-autogen, elixir-format
-msgid "Removed by Smart Space after you watched it. Restoring does not re-monitor the episode"
-msgstr ""
 
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:182
 #, elixir-autogen, elixir-format
@@ -23219,4 +23214,9 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/smart_space_components.ex:213
 #, elixir-autogen, elixir-format
 msgid "season"
+msgstr ""
+
+#: lib/mydia_web/live/admin_trash_live/components.ex:30
+#, elixir-autogen, elixir-format
+msgid "Removed by Smart Space after you watched it. Restoring keeps it from being cleaned up again; it does not re-monitor the episode"
 msgstr ""

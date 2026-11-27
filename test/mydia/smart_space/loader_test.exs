@@ -70,6 +70,8 @@ defmodule Mydia.SmartSpace.LoaderTest do
     e1 = Enum.find(sa.episodes, &(&1.id == a1.id))
     assert e1.files == [{f.id, 42}]
     assert e1.air_date == ~D[2020-01-01]
+    assert e1.monitored
+    refute Enum.find(sa.episodes, &(&1.id == a2.id)).monitored
     assert [%{episode_id: id}] = sa.watches
     assert id == a1.id
     assert [%{episode_id: id}] = sb.watches

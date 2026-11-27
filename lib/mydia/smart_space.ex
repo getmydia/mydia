@@ -39,16 +39,19 @@ defmodule Mydia.SmartSpace do
   @doc """
   Cleanups that will be eligible within `opts[:within_days]` (default 30),
   with `eligible_at` set. Narrow to one show with `opts[:media_item_id]`.
+
+  Only the grace clock looks ahead: airing is judged against today, so a
+  season whose last episode has not aired yet is never previewed.
   """
   @spec upcoming(keyword()) :: [Cleanup.t()]
   def upcoming(opts \\ []) do
     within = Keyword.get(opts, :within_days, @default_within_days)
-    at = DateTime.add(Keyword.get_lazy(opts, :now, &DateTime.utc_now/0), within, :day)
+    now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
 
     opts
     |> Keyword.take([:media_item_id, :config])
     |> Loader.load()
-    |> evaluate(at)
+    |> Evaluator.eligible(DateTime.add(now, within, :day), DateTime.to_date(now))
   end
 
   @doc """

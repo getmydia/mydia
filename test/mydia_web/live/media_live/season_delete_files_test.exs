@@ -83,6 +83,29 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
     end
   end
 
+  describe "authorization" do
+    @describetag :tmp_dir
+
+    test "a guest pushing the events directly trashes nothing", %{
+      conn: conn,
+      show: show,
+      s1: s1
+    } do
+      {conn, _guest} = register_and_log_in_user(conn, %{role: "guest"})
+      {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+
+      render_click(view, "show_season_delete_confirm", %{"season-number" => "1"})
+      refute has_element?(view, "#season-delete-modal")
+
+      render_click(view, "delete_season_files", %{})
+
+      for {episode, file} <- s1 do
+        assert is_nil(Repo.reload!(file).trashed_at)
+        assert monitored?(episode)
+      end
+    end
+  end
+
   describe "dialog" do
     @describetag :tmp_dir
 

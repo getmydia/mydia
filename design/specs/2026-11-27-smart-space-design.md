@@ -99,10 +99,18 @@ Not configurable:
   `Ecto.Enum`; the column is `:text`, so no migration is needed for it.
 - Season 0 (specials) is never eligible.
 - A season is complete only when every episode has aired and every aired
-  episode that has files is watched. Aired episodes with no files need not be
-  watched. Unaired means `air_date` is nil or after today, where today is the
-  date of the evaluation instant. Unaired episodes keep a season ineligible
-  under the season unit.
+  episode that has files is watched. An aired episode with no files holds the
+  season while it is still monitored: it is wanted and not yet downloaded, so
+  the season is not done. Only file-less episodes that are already
+  unmonitored are skipped. Unaired means `air_date` is nil or after today,
+  where today is the date of the evaluation instant. Unaired episodes keep a
+  season ineligible under the season unit.
+- Restoring a file that Smart Space trashed (`trashed_reason: :smart_space`)
+  creates an episode keep for its episode, so the next run does not trash it
+  again. Under the season unit that keep holds the whole season. The keep is
+  made in `Library.restore_media_file/1`, which every restore path uses (the
+  trash page, the bulk restore job, the scanner). Restoring a file trashed for
+  any other reason creates no keep.
 - Episodes with an in-flight download are skipped. "In flight" means a
   `Download.occupying/1` row: an episode download marks that episode, and a
   season-pack download (`episode_id` nil) marks the whole show. Import
@@ -121,8 +129,9 @@ remote branch for version collisions before the filename is final.
 pure function: no Repo, no config reads, no clock. Inputs are plain structs:
 
 - the global rule and each show's override,
-- each show's episodes: id, season, episode number, air date, live (not
-  trashed) file ids and sizes, an "in flight" flag for downloads or imports,
+- each show's episodes: id, season, episode number, air date, whether it is
+  monitored, live (not trashed) file ids and sizes, an "in flight" flag for
+  downloads or imports,
 - the keeps,
 - per-user watch records: `user_id`, `episode_id`, `watched`,
   `last_watched_at`, from `playback_progress`,
@@ -165,8 +174,9 @@ An episode is **done** when every required user has `watched: true` on it
   users' records on that episode (under `any`, the earliest watched record,
   since one watcher is enough). The same holds for `done_at` under the `any`
   policy at season level.
-- Season unit: the season must have every episode aired, and every aired
-  episode with files done; `done_at` is the latest episode `done_at` in it.
+- Season unit: the season must have every episode aired, no monitored
+  episode without files, and every aired episode with files done; `done_at`
+  is the latest episode `done_at` in it.
   A season cleanup lists every episode of the season for unmonitoring, but its
   `file_ids` are only the approved non-extra files.
 - `eligible_at = done_at + grace_days`. A unit is returned when
@@ -228,8 +238,11 @@ run retries it.
 ### Preview
 
 `Mydia.SmartSpace.upcoming(within_days \\ 30)` runs the same Loader and
-Evaluator with `now + within_days`, returning cleanups with their
-`eligible_at`. The preview and the job share code, so they cannot disagree.
+Evaluator with `now + within_days` for the grace clock, returning cleanups
+with their `eligible_at`. Airing is still judged against today, not the
+future date, so a season whose last episode has not aired yet is never
+previewed as due (it could not be trashed at that run). The preview and the
+job share code, so they cannot disagree.
 
 ## UI
 
@@ -272,8 +285,9 @@ New admin page `AdminSmartSpaceLive.Index`, linked in the nav beside Trash.
 
 ### Trash page
 
-The reason column renders `:smart_space` as "Smart Space". Restoring a file
-does not re-monitor its episode; the page says so for this reason.
+The reason column renders `:smart_space` as "Smart Space". Restoring such a
+file keeps its episode from being cleaned up again but does not re-monitor
+it; the page says so for this reason.
 
 All new strings go through gettext. New interactive elements get stable DOM
 IDs.

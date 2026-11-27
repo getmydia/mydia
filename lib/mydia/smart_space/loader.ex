@@ -62,6 +62,7 @@ defmodule Mydia.SmartSpace.Loader do
                 episode_number: ep.episode_number,
                 air_date: ep.air_date,
                 files: Map.get(files, ep.id, []),
+                monitored: ep.monitored != false,
                 in_flight?: MapSet.member?(ep_flight, ep.id)
               }
             end,

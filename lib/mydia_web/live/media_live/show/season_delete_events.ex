@@ -14,8 +14,11 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
 
   @events ~w(show_season_delete_confirm hide_season_delete_confirm change_season_delete delete_season_files)
 
-  @doc "The `handle_event/3` names this module owns."
-  def events, do: @events
+  @doc """
+  True for the `handle_event/3` names this module owns. A guard, so the show
+  LiveView dispatches on the same list `handle/3` matches.
+  """
+  defguard is_season_delete_event(event) when event in @events
 
   def assign_defaults(socket) do
     socket

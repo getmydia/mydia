@@ -28,7 +28,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       {:manual, pgettext("trash reason", "Manual"), gettext("Someone deleted this file by hand")},
       {:smart_space, pgettext("trash reason", "Smart Space"),
        gettext(
-         "Removed by Smart Space after you watched it. Restoring does not re-monitor the episode"
+         "Removed by Smart Space after you watched it. Restoring keeps it from being cleaned up again; it does not re-monitor the episode"
        )},
       {:unknown, pgettext("trash reason", "Unknown"),
        gettext("Trashed before Mydia recorded a reason")}

@@ -20,7 +20,10 @@ defmodule Mydia.SmartSpace.Evaluator do
       earliest watched record).
     * An episode has aired when it has an `air_date` on or before `today`.
     * Season unit: every episode in the season must have aired; those with
-      files must be done; `done_at` is the latest of theirs.
+      files must be done; `done_at` is the latest of theirs. A monitored
+      episode without files is not done (it is still wanted), so it holds the
+      season; only file-less episodes that are already unmonitored are
+      skipped.
     * Episode unit: an aired, done episode with files.
     * `eligible_at = done_at + grace_days`, returned when `eligible_at <= now`.
     * Never: season 0, anything under a keep at its level or above (an
@@ -231,6 +234,7 @@ defmodule Mydia.SmartSpace.Evaluator do
     with false <- Enum.any?(episodes, & &1.in_flight?),
          false <- Enum.any?(episodes, &episode_kept?(ctx.show, &1)),
          true <- Enum.all?(episodes, &aired?(&1, ctx.today)),
+         false <- Enum.any?(episodes, &wanted_without_files?/1),
          [_ | _] <- with_files,
          {:ok, done_at} <- season_done_at(ctx.done, with_files) do
       # Every episode of the season is affected (so the job unmonitors the
@@ -240,6 +244,9 @@ defmodule Mydia.SmartSpace.Evaluator do
       _ -> :error
     end
   end
+
+  defp wanted_without_files?(%Episode{files: [], monitored: monitored}), do: monitored != false
+  defp wanted_without_files?(%Episode{}), do: false
 
   defp season_done_at(done, episodes) do
     Enum.reduce_while(episodes, {:ok, nil}, fn episode, {:ok, latest} ->

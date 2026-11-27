@@ -363,13 +363,32 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
 
   describe "files" do
     test "aired episode without files is not required to be watched" do
-      eps = season_one() ++ [ep("e3", 1, 3, files: [])]
+      eps = season_one() ++ [ep("e3", 1, 3, files: [], monitored: false)]
 
       assert [%Cleanup{episode_ids: ids, file_ids: files}] =
                run(inputs(show(eps, watched_by("a", season_one()))))
 
       assert ids == ["e1", "e2", "e3"]
       assert Enum.sort(files) == ["file-e1", "file-e2"]
+    end
+
+    test "an aired, monitored finale without files holds its season" do
+      eps = season_one() ++ [ep("e3", 1, 3, files: [], monitored: true)]
+
+      assert run(inputs(show(eps, watched_by("a", season_one())))) == []
+    end
+
+    test "the same finale, unmonitored, lets the season through" do
+      eps = season_one() ++ [ep("e3", 1, 3, files: [], monitored: false)]
+
+      assert [%Cleanup{season_number: 1}] = run(inputs(show(eps, watched_by("a", season_one()))))
+    end
+
+    test "a monitored episode without files does not affect the episode unit" do
+      eps = season_one() ++ [ep("e3", 1, 3, files: [], monitored: true)]
+
+      assert [_, _] =
+               run(inputs(show(eps, watched_by("a", season_one())), global: [unit: "episode"]))
     end
 
     test "season with no files yields nothing" do

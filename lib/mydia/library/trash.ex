@@ -10,6 +10,8 @@ defmodule Mydia.Library.Trash do
   alias Mydia.Repo
   alias Mydia.Library.{MediaFile, MediaFiles, TrashStore}
   alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Media.Episode
+  alias Mydia.SmartSpace.Rules
 
   @doc """
   Deletes a media file record, optionally removing the file from disk.
@@ -252,6 +254,12 @@ defmodule Mydia.Library.Trash do
   that two copies now exist and only one of them is the library's. This
   mirrors `delete_media_file/2`, which already signals a partial success the
   same way.
+
+  Restoring a file Smart Space trashed (`trashed_reason: :smart_space`) also
+  keeps its episode, so the next Smart Space run does not trash it again. An
+  episode keep holds its whole season under the season unit. Every restore
+  path (the trash page, the bulk job, the scanner) goes through here, which is
+  why the keep is created here rather than in a caller.
   """
   @spec restore_media_file(MediaFile.t()) ::
           {:ok, MediaFile.t()}
@@ -259,6 +267,12 @@ defmodule Mydia.Library.Trash do
           | {:error, Ecto.Changeset.t()}
           | {:error, term()}
   def restore_media_file(%MediaFile{} = media_file) do
+    media_file
+    |> do_restore_media_file()
+    |> tap(&keep_after_smart_space_restore(&1, media_file))
+  end
+
+  defp do_restore_media_file(media_file) do
     media_file = Repo.preload(media_file, :library_path)
 
     case TrashStore.restore(media_file, trashed_path(media_file)) do
@@ -289,6 +303,29 @@ defmodule Mydia.Library.Trash do
         {:error, {:trash_restore_failed, reason}}
     end
   end
+
+  # Episode files may carry a nil media_item_id (lib/mydia/media/README.md),
+  # so the show comes from the episode. A keep that fails is logged, not
+  # returned: the file is already back and the restore itself succeeded.
+  defp keep_after_smart_space_restore(result, %MediaFile{
+         trashed_reason: :smart_space,
+         episode_id: episode_id
+       })
+       when elem(result, 0) == :ok and is_binary(episode_id) do
+    with %Episode{media_item_id: media_item_id} when is_binary(media_item_id) <-
+           Repo.get(Episode, episode_id),
+         {:ok, _keep} <- Rules.keep({:episode, media_item_id, episode_id}, nil) do
+      :ok
+    else
+      other ->
+        Logger.warning("Could not keep a restored Smart Space episode",
+          episode_id: episode_id,
+          reason: inspect(other)
+        )
+    end
+  end
+
+  defp keep_after_smart_space_restore(_result, _media_file), do: :ok
 
   @doc """
   Permanently deletes all media files that have been trashed for longer than `days`,

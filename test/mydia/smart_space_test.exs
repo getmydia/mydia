@@ -13,6 +13,7 @@ defmodule Mydia.SmartSpaceTest do
   alias Mydia.Playback.Progress
   alias Mydia.Repo
   alias Mydia.SmartSpace
+  alias Mydia.SmartSpace.Keep
 
   setup do
     on_exit(fn -> Application.delete_env(:mydia, :trash_dir) end)
@@ -243,6 +244,36 @@ defmodule Mydia.SmartSpaceTest do
     end
   end
 
+  describe "restoring a trashed file" do
+    @tag :tmp_dir
+    test "a Smart Space file keeps its episode, so the next run leaves it", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      [{e1, f1}, {_e2, f2}] = watched_season(c, 1, 2)
+      assert {:ok, %{files: 2}} = SmartSpace.run(config: cfg())
+
+      assert {:ok, restored} = Library.restore_media_file(Repo.get!(MediaFile, f1.id))
+      assert is_nil(restored.trashed_at)
+
+      assert [%Keep{media_item_id: show_id, episode_id: episode_id}] = Repo.all(Keep)
+      assert show_id == c.show.id
+      assert episode_id == e1.id
+
+      assert {:ok, %{files: 0}} = SmartSpace.run(config: cfg())
+      assert is_nil(Repo.get!(MediaFile, f1.id).trashed_at)
+      assert Repo.get!(MediaFile, f2.id).trashed_reason == :smart_space
+    end
+
+    @tag :tmp_dir
+    test "a manually trashed file creates no keep", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      [{_e1, f1}] = watched_season(c, 1, 1)
+      assert {:ok, %{trashed: [_]}} = Library.trash_media_files([f1.id], reason: :manual)
+
+      assert {:ok, _restored} = Library.restore_media_file(Repo.get!(MediaFile, f1.id))
+      assert Repo.all(Keep) == []
+    end
+  end
+
   describe "upcoming/1" do
     @tag :tmp_dir
     test "lists a season due soon, which run/1 leaves alone", %{tmp_dir: tmp} do
@@ -260,6 +291,18 @@ defmodule Mydia.SmartSpaceTest do
       assert [] = SmartSpace.upcoming(within_days: 1, config: cfg())
       assert {:ok, %{files: 0}} = SmartSpace.run(config: cfg())
       assert is_nil(Repo.get!(MediaFile, f.id).trashed_at)
+    end
+
+    @tag :tmp_dir
+    test "a season whose finale airs in 20 days is not listed", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      ep = episode(c, 1, 1)
+      file(c, ep, "s1e1.mkv")
+      watch(c, ep, days_ago(20))
+      # Unmonitored and file-less, so only its air date can hold the season.
+      episode(c, 1, 2, %{air_date: Date.add(Date.utc_today(), 20), monitored: false})
+
+      assert [] = SmartSpace.upcoming(within_days: 30, config: cfg())
     end
   end
 end

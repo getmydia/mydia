@@ -52,6 +52,7 @@ defmodule MydiaWeb.MediaLive.Show do
   import MydiaWeb.MediaLive.Show.Helpers
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Loaders
+  import MydiaWeb.MediaLive.Show.SeasonDeleteEvents, only: [is_season_delete_event: 1]
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -379,7 +380,7 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FileEvents.hide_file_delete_confirm(params, socket)
 
   def handle_event(event, params, socket)
-      when event in ~w(show_season_delete_confirm hide_season_delete_confirm change_season_delete delete_season_files),
+      when is_season_delete_event(event),
       do: SeasonDeleteEvents.handle(event, params, socket)
 
   def handle_event("toggle_file_delete_mode", params, socket),
