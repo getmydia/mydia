@@ -368,7 +368,7 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
       assert [%Cleanup{episode_ids: ids, file_ids: files}] =
                run(inputs(show(eps, watched_by("a", season_one()))))
 
-      assert Enum.sort(ids) == ["e1", "e2"]
+      assert ids == ["e1", "e2", "e3"]
       assert Enum.sort(files) == ["file-e1", "file-e2"]
     end
 
@@ -437,6 +437,23 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
                run(
                  inputs(show(eps, watched_by("a", eps), keeps: keeps), global: [unit: "episode"])
                )
+    end
+
+    test "a malformed keep blocks the whole show" do
+      eps = season_one() ++ [ep("e3", 2, 1)]
+
+      for keep <- [
+            %KeepRef{level: :decade},
+            %KeepRef{level: :season, season_number: nil},
+            %KeepRef{level: :episode, episode_id: nil},
+            %KeepRef{level: :season, season_number: 2, episode_id: "e3"},
+            %KeepRef{level: :episode, episode_id: "e3", season_number: 2}
+          ],
+          unit <- ["season", "episode"] do
+        assert run(inputs(show(eps, watched_by("a", eps), keeps: [keep]), global: [unit: unit])) ==
+                 [],
+               "expected #{inspect(keep)} to block the show under the #{unit} unit"
+      end
     end
 
     test "an episode keep under the season unit blocks the whole season" do

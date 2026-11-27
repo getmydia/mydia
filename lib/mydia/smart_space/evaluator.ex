@@ -99,7 +99,18 @@ defmodule Mydia.SmartSpace.Evaluator do
     end
   end
 
-  defp show_kept?(%Show{keeps: keeps}), do: Enum.any?(keeps, &(&1.level == :show))
+  defp show_kept?(%Show{keeps: keeps}), do: Enum.any?(keeps, &(keep_scope(&1) == :show))
+
+  # The scope a keep covers. Anything that is not exactly a season keep (a
+  # season number, no episode) or an episode keep (an episode id, no season)
+  # is treated as a show keep, so a malformed keep holds the whole show.
+  defp keep_scope(%{level: :season, season_number: s, episode_id: nil}) when is_integer(s),
+    do: {:season, s}
+
+  defp keep_scope(%{level: :episode, episode_id: id, season_number: nil}) when is_binary(id),
+    do: {:episode, id}
+
+  defp keep_scope(_keep), do: :show
 
   # `{:ok, users}` with a non-empty list of required user ids, `{:ok, :any}`,
   # or `:none` when nobody can satisfy the policy.
@@ -194,7 +205,8 @@ defmodule Mydia.SmartSpace.Evaluator do
            true <- aired?(episode, ctx.today),
            [_ | _] <- episode.files,
            %DateTime{} = done_at <- Map.get(ctx.done, episode.id),
-           {:ok, cleanup} <- build(ctx, :episode, episode.season_number, [episode], done_at) do
+           {:ok, cleanup} <-
+             build(ctx, :episode, episode.season_number, {[episode], [episode]}, done_at) do
         [cleanup]
       else
         _ -> []
@@ -221,7 +233,9 @@ defmodule Mydia.SmartSpace.Evaluator do
          true <- Enum.all?(episodes, &aired?(&1, ctx.today)),
          [_ | _] <- with_files,
          {:ok, done_at} <- season_done_at(ctx.done, with_files) do
-      build(ctx, :season, season, with_files, done_at)
+      # Every episode of the season is affected (so the job unmonitors the
+      # file-less ones too); only those with files contribute files.
+      build(ctx, :season, season, {episodes, with_files}, done_at)
     else
       _ -> :error
     end
@@ -239,22 +253,23 @@ defmodule Mydia.SmartSpace.Evaluator do
   # A keep covers its own level and everything below it. Under the season
   # unit an episode keep also holds its whole season back.
   defp episode_kept?(%Show{keeps: keeps}, %Episode{} = episode) do
-    Enum.any?(keeps, fn
-      %{level: :show} -> true
-      %{level: :season, season_number: s} -> s == episode.season_number
-      %{level: :episode, episode_id: id} -> id == episode.id
-      _ -> false
+    Enum.any?(keeps, fn keep ->
+      case keep_scope(keep) do
+        :show -> true
+        {:season, s} -> s == episode.season_number
+        {:episode, id} -> id == episode.id
+      end
     end)
   end
 
   defp aired?(%Episode{air_date: %Date{} = date}, today), do: Date.compare(date, today) != :gt
   defp aired?(_episode, _today), do: false
 
-  defp build(ctx, unit, season, episodes, done_at) do
+  defp build(ctx, unit, season, {episodes, file_episodes}, done_at) do
     eligible_at = DateTime.add(done_at, ctx.rule.grace_days * @seconds_per_day, :second)
 
     if DateTime.compare(eligible_at, ctx.now) != :gt do
-      files = Enum.flat_map(episodes, & &1.files)
+      files = Enum.flat_map(file_episodes, & &1.files)
 
       {:ok,
        %Cleanup{
