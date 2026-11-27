@@ -112,18 +112,18 @@ void main() {
   vec2 q = abs(fp) - (vec2(.3333, .5) - .09);
   float sd = length(max(q, 0.)) + min(max(q.x, q.y), 0.) - .05;
   float aa = dist * .006;
-  float mask = smoothstep(aa, -aa, sd);
+  float mask = 1. - smoothstep(-aa, aa, sd);
 
   // Each pane refracts its own slice of the flow.
   vec2 w;
   vec3 c = palette(field(id * .37 + fp * .9 + 3., w), w) * 1.15;
   c += smoothstep(-.07, -.005, sd) * (.2 + hover * .55) * vec3(.8, .86, 1.); // bevelled rim
-  c += .12 * smoothstep(.05, 0., abs(fp.x + fp.y * .5 - .08));               // resting glare
+  c += .12 * (1. - smoothstep(0., .05, abs(fp.x + fp.y * .5 - .08)));               // resting glare
   c *= .6 + .9 * pow(.5 + .5 * sin(t * .7 + hash(id) * 6.283), 10.);         // now and then, a pane lights up
   vec2 away = pc - pointer;
   c *= 1. + m.z * .9 * exp(-dot(away, away) * .55);                          // glow near the pointer
   c *= 1. + hover * .45;
-  c += hover * .5 * smoothstep(.16, 0., abs((fp.x + fp.y * .5) - (fm.x + fm.y * .5))) * vec3(.85, .9, 1.); // glare follows the pointer
+  c += hover * .5 * (1. - smoothstep(0., .16, abs((fp.x + fp.y * .5) - (fm.x + fm.y * .5)))) * vec3(.85, .9, 1.); // glare follows the pointer
 
   float fog = exp(-dist * .13);
   gl_FragColor = vec4(mix(vec3(.03, .035, .065), c, mask) * fog + (1. - fog) * vec3(.07, .07, .15), 1.);

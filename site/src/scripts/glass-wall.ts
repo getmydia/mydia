@@ -49,10 +49,11 @@ export function mountGlassWall(canvas: HTMLCanvasElement): void {
   const time = gl.getUniformLocation(prog, 't');
   const pointer = gl.getUniformLocation(prog, 'm');
 
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const current = [0, 0, 0];
   let target = [0, 0, 0];
   let frame = 0;
+  let visible = false;
 
   const draw = (seconds: number) => {
     current.forEach((value, i) => (current[i] = value + (target[i] - value) * POINTER_EASE));
@@ -69,26 +70,39 @@ export function mountGlassWall(canvas: HTMLCanvasElement): void {
     frame = requestAnimationFrame(tick);
   };
 
+  // Runs on load and whenever visibility or the motion preference changes.
+  const sync = () => {
+    cancelAnimationFrame(frame);
+    if (reduced.matches) {
+      target = [0, 0, 0];
+      current.fill(0);
+      draw(STILL_SECONDS);
+    } else if (visible) {
+      frame = requestAnimationFrame(tick);
+    }
+  };
+
   new ResizeObserver(() => {
     const scale = Math.min(devicePixelRatio || 1, MAX_PIXEL_RATIO) * RESOLUTION;
     canvas.width = Math.max(2, Math.round(canvas.clientWidth * scale));
     canvas.height = Math.max(2, Math.round(canvas.clientHeight * scale));
-    if (still) draw(STILL_SECONDS);
+    // Resizing clears the canvas; a running loop repaints it, a still frame does not.
+    if (reduced.matches) draw(STILL_SECONDS);
   }).observe(canvas);
-
-  if (still) return;
 
   new IntersectionObserver(([entry]) => {
-    cancelAnimationFrame(frame);
-    if (entry.isIntersecting) frame = requestAnimationFrame(tick);
+    visible = entry.isIntersecting;
+    sync();
   }).observe(canvas);
+
+  reduced.addEventListener('change', sync);
 
   // The canvas sits behind the hero copy, so it never receives pointer events
   // itself. Touch is ignored: a scrolling finger is not pointing at anything.
   addEventListener(
     'pointermove',
     (event) => {
-      if (event.pointerType !== 'mouse') return;
+      if (event.pointerType !== 'mouse' || reduced.matches) return;
       const box = canvas.getBoundingClientRect();
       const x = event.clientX - box.left;
       const y = event.clientY - box.top;
