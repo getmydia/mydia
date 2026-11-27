@@ -91,7 +91,7 @@ defmodule Mydia.Library.Trash do
   library.
 
     * `:reason` - why this file is being trashed, one of `:missing`,
-      `:upgraded`, `:upgrade_rejected`, `:pruned` or `:manual`. Optional;
+      `:upgraded`, `:upgrade_rejected`, `:pruned`, `:manual` or `:smart_space`. Optional;
       omitting it leaves `trashed_reason` nil, which the trash page renders as
       "Unknown". Every caller in this codebase passes one.
   """
@@ -130,6 +130,81 @@ defmodule Mydia.Library.Trash do
         {:error, {:trash_move_failed, reason}}
     end
   end
+
+  @doc """
+  Trashes every live (non-trashed) media file on the given episodes, all
+  versions included, and keeps going when one file fails.
+
+  `opts[:reason]` is passed to `trash_media_file/2`. Returns the trashed rows,
+  the `{file, reason}` pairs that failed, and the summed `size` of the trashed
+  files. Episode rows are never touched.
+  """
+  @spec trash_episode_files([binary()], keyword()) ::
+          {:ok,
+           %{
+             trashed: [MediaFile.t()],
+             failed: [{MediaFile.t(), term()}],
+             bytes: non_neg_integer()
+           }}
+  def trash_episode_files(episode_ids, opts \\ []) do
+    {trashed, failed} =
+      episode_ids
+      |> live_episode_files()
+      |> Enum.reduce({[], []}, fn file, {ok, bad} ->
+        case trash_media_file(file, opts) do
+          {:ok, trashed} -> {[trashed | ok], bad}
+          {:error, reason} -> {ok, [{file, reason} | bad]}
+        end
+      end)
+
+    {:ok,
+     %{trashed: Enum.reverse(trashed), failed: Enum.reverse(failed), bytes: sum_bytes(trashed)}}
+  end
+
+  @doc """
+  Deletes every live media file row on the given episodes, all versions
+  included, and keeps going when one file fails.
+
+  With `delete_files: true` the bytes go too; a `{:ok, file, :file_delete_failed}`
+  result (row gone, bytes left behind) is reported under `failed`.
+  """
+  @spec delete_episode_files([binary()], keyword()) ::
+          {:ok,
+           %{
+             deleted: [MediaFile.t()],
+             failed: [{MediaFile.t(), term()}],
+             bytes: non_neg_integer()
+           }}
+  def delete_episode_files(episode_ids, opts \\ []) do
+    delete_files = Keyword.get(opts, :delete_files, false)
+
+    {deleted, failed} =
+      episode_ids
+      |> live_episode_files()
+      |> Enum.reduce({[], []}, fn file, {ok, bad} ->
+        case delete_media_file(file, delete_files: delete_files) do
+          {:ok, deleted} -> {[deleted | ok], bad}
+          {:ok, deleted, :file_delete_failed} -> {ok, [{deleted, :file_delete_failed} | bad]}
+          {:error, reason} -> {ok, [{file, reason} | bad]}
+        end
+      end)
+
+    {:ok,
+     %{deleted: Enum.reverse(deleted), failed: Enum.reverse(failed), bytes: sum_bytes(deleted)}}
+  end
+
+  defp live_episode_files([]), do: []
+
+  defp live_episode_files(episode_ids) do
+    Repo.all(
+      from(f in MediaFile,
+        where: f.episode_id in ^episode_ids and is_nil(f.trashed_at),
+        order_by: [asc: f.inserted_at, asc: f.id]
+      )
+    )
+  end
+
+  defp sum_bytes(files), do: Enum.reduce(files, 0, &((&1.size || 0) + &2))
 
   @doc """
   Restores a trashed media file: the file moves back to its library path and

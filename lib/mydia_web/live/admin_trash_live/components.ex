@@ -26,6 +26,10 @@ defmodule MydiaWeb.AdminTrashLive.Components do
       {:pruned, pgettext("trash reason", "Pruned"),
        gettext("A redundant copy, removed in favour of a keeper")},
       {:manual, pgettext("trash reason", "Manual"), gettext("Someone deleted this file by hand")},
+      {:smart_space, pgettext("trash reason", "Smart Space"),
+       gettext(
+         "Removed by Smart Space after you watched it. Restoring does not re-monitor the episode"
+       )},
       {:unknown, pgettext("trash reason", "Unknown"),
        gettext("Trashed before Mydia recorded a reason")}
     ]
@@ -451,6 +455,7 @@ defmodule MydiaWeb.AdminTrashLive.Components do
   defp badge_class(:upgrade_rejected), do: "badge-error"
   defp badge_class(:pruned), do: "badge-info"
   defp badge_class(:manual), do: "badge-neutral"
+  defp badge_class(:smart_space), do: "badge-accent"
   defp badge_class(_), do: "badge-ghost"
 
   # An episode's media_files row carries episode_id with media_item_id NULL;
