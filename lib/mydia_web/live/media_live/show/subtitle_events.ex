@@ -702,4 +702,58 @@ defmodule MydiaWeb.MediaLive.Show.SubtitleEvents do
 
   defp download_error_message(_reason),
     do: gettext("check the server logs for details.")
+
+  def subtitles_updated(socket) do
+    tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+
+    socket = assign(socket, :media_file_subtitle_tracks, tracks)
+
+    # The manage modal renders from :manage_tracks, not
+    # :media_file_subtitle_tracks, so a season fetch finishing while the
+    # modal is open must also refresh :manage_tracks or newly downloaded
+    # tracks never appear in it. Same pattern as rescan, delete, and offset.
+    socket =
+      case socket.assigns.selected_media_file do
+        nil -> socket
+        media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
+      end
+
+    {:noreply, socket}
+  end
+
+  def season_finished(media_item_id, season_number, socket) do
+    socket =
+      if media_item_id == socket.assigns.media_item.id do
+        assign(
+          socket,
+          :media_file_subtitle_tracks,
+          load_media_file_subtitle_tracks(socket.assigns.media_item)
+        )
+      else
+        socket
+      end
+
+    # Only clear the spinner when the finishing season is the one being
+    # tracked. A user can start season 2's fetch while season 1's is still in
+    # flight; season 1 finishing must not clear season 2's spinner and
+    # re-enable its button while that job is still running. The reload above
+    # still happens regardless, since the work did happen.
+    socket =
+      if media_item_id == socket.assigns.media_item.id &&
+           socket.assigns.fetching_season_subtitles == season_number do
+        assign(socket, :fetching_season_subtitles, nil)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  def season_timeout(season_num, socket) do
+    if socket.assigns.fetching_season_subtitles == season_num do
+      {:noreply, assign(socket, :fetching_season_subtitles, nil)}
+    else
+      {:noreply, socket}
+    end
+  end
 end

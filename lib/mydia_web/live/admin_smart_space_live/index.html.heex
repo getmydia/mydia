@@ -1,0 +1,55 @@
+<Layouts.app {assigns}>
+  <.admin_page page={:smart_space}>
+    <div
+      id="smart-space-summary"
+      class="stats stats-vertical sm:stats-horizontal bg-base-200 mb-6"
+    >
+      <div class="stat">
+        <div class="stat-title">{gettext("Due in the next 30 days")}</div>
+        <div class="stat-value text-2xl">{size(@bytes_due)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">{gettext("Last run")}</div>
+        <div class="stat-value text-2xl">
+          <.local_time :if={@last_run_at} at={@last_run_at} display={@time_display} />
+          <span :if={!@last_run_at}>{gettext("never")}</span>
+        </div>
+      </div>
+    </div>
+
+    <div role="tablist" class="tabs tabs-border mb-4">
+      <.link
+        id="smart-space-tab-upcoming"
+        role="tab"
+        aria-selected={to_string(@tab == :upcoming)}
+        patch={~p"/admin/smart-space"}
+        class={["tab", @tab == :upcoming && "tab-active"]}
+      >
+        {gettext("Upcoming")}
+        <span class="badge badge-sm ml-2">{@upcoming_count}</span>
+      </.link>
+      <.link
+        id="smart-space-tab-kept"
+        role="tab"
+        aria-selected={to_string(@tab == :kept)}
+        patch={~p"/admin/smart-space?tab=kept"}
+        class={["tab", @tab == :kept && "tab-active"]}
+      >
+        {gettext("Kept")}
+        <span class="badge badge-sm ml-2">{@keeps_count}</span>
+      </.link>
+    </div>
+
+    <MydiaWeb.AdminSmartSpaceLive.Components.upcoming_tab
+      :if={@tab == :upcoming}
+      rows={@streams.upcoming}
+      count={@upcoming_count}
+      enabled?={@enabled?}
+    />
+    <MydiaWeb.AdminSmartSpaceLive.Components.kept_tab
+      :if={@tab == :kept}
+      keeps={@streams.keeps}
+      count={@keeps_count}
+    />
+  </.admin_page>
+</Layouts.app>

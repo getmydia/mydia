@@ -15,7 +15,8 @@ defmodule Mydia.EventsFixtures do
     "media_request" => "requests",
     "playback" => "playback",
     "plugin" => "plugin",
-    "search" => "search"
+    "search" => "search",
+    "smart_space" => "media"
   }
 
   @doc """

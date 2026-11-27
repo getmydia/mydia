@@ -8,8 +8,10 @@ defmodule Mydia.Library.Trash do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Library.{MediaFile, MediaFiles, TrashStore}
+  alias Mydia.Library.{MediaFile, MediaFileEpisode, MediaFiles, TrashStore}
   alias Mydia.Library.Structs.FileMetadata
+  alias Mydia.Media.Episode
+  alias Mydia.SmartSpace.Rules
 
   @doc """
   Deletes a media file record, optionally removing the file from disk.
@@ -91,7 +93,7 @@ defmodule Mydia.Library.Trash do
   library.
 
     * `:reason` - why this file is being trashed, one of `:missing`,
-      `:upgraded`, `:upgrade_rejected`, `:pruned` or `:manual`. Optional;
+      `:upgraded`, `:upgrade_rejected`, `:pruned`, `:manual` or `:smart_space`. Optional;
       omitting it leaves `trashed_reason` nil, which the trash page renders as
       "Unknown". Every caller in this codebase passes one.
   """
@@ -132,6 +134,183 @@ defmodule Mydia.Library.Trash do
   end
 
   @doc """
+  Trashes every live (non-trashed) media file on the given episodes, all
+  versions included, and keeps going when one file fails. The files are those
+  of `episode_files_for_removal/1`: a multi-episode file that also covers an
+  episode outside the set is left alone and reported under `failed` with
+  `:covers_other_episodes`.
+
+  `opts[:reason]` is passed to `trash_media_file/2`. Returns the trashed rows,
+  the `{file, reason}` pairs that failed, the summed `size` of the trashed
+  files, and `covered` (see `episode_files_for_removal/1`), read before any
+  row changed. Episode rows are never touched.
+  """
+  @spec trash_episode_files([binary()], keyword()) ::
+          {:ok,
+           %{
+             trashed: [MediaFile.t()],
+             failed: [{MediaFile.t(), term()}],
+             bytes: non_neg_integer(),
+             covered: %{binary() => [binary()]}
+           }}
+  def trash_episode_files(episode_ids, opts \\ []) do
+    %{removable: files, blocked: blocked, covered: covered} =
+      episode_files_for_removal(episode_ids)
+
+    {:ok, result} = trash_files(files, opts)
+
+    {:ok,
+     result
+     |> Map.put(:failed, result.failed ++ blocked_failures(blocked))
+     |> Map.put(:covered, covered)}
+  end
+
+  @doc """
+  The live files on the given episodes, each listed once, found through
+  `media_files.episode_id` or a `media_file_episodes` link. `removable` holds
+  the files that cover only episodes in the set; `blocked` holds multi-episode
+  files that also cover an episode outside it, which removing the set must not
+  take. `covered` maps every listed file's id to the episodes it covers
+  (`episode_id` plus links). Read it before removing anything: deleting a row
+  cascades its links away.
+
+  This is the selection `trash_episode_files/2` and `delete_episode_files/2`
+  act on, so a confirmation dialog can count exactly what will go.
+  """
+  @spec episode_files_for_removal([binary()]) :: %{
+          removable: [MediaFile.t()],
+          blocked: [MediaFile.t()],
+          covered: %{binary() => [binary()]}
+        }
+  def episode_files_for_removal([]), do: %{removable: [], blocked: [], covered: %{}}
+
+  def episode_files_for_removal(episode_ids) do
+    linked =
+      from(l in MediaFileEpisode, where: l.episode_id in ^episode_ids, select: l.media_file_id)
+
+    files =
+      Repo.all(
+        from(f in MediaFile,
+          where:
+            (f.episode_id in ^episode_ids or f.id in subquery(linked)) and is_nil(f.trashed_at),
+          order_by: [asc: f.inserted_at, asc: f.id]
+        )
+      )
+
+    file_ids = Enum.map(files, & &1.id)
+
+    links =
+      from(l in MediaFileEpisode,
+        where: l.media_file_id in ^file_ids,
+        select: {l.media_file_id, l.episode_id}
+      )
+      |> Repo.all()
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    wanted = MapSet.new(episode_ids)
+
+    covered =
+      Map.new(files, fn file ->
+        {file.id,
+         [file.episode_id | Map.get(links, file.id, [])] |> Enum.reject(&is_nil/1) |> Enum.uniq()}
+      end)
+
+    {removable, blocked} =
+      Enum.split_with(files, fn file ->
+        Enum.all?(covered[file.id], &MapSet.member?(wanted, &1))
+      end)
+
+    %{removable: removable, blocked: blocked, covered: covered}
+  end
+
+  defp blocked_failures(blocked), do: Enum.map(blocked, &{&1, :covers_other_episodes})
+
+  @doc """
+  Trashes exactly the listed media files that are still live (not trashed),
+  and keeps going when one fails. Ids that no longer exist or are already
+  trashed are ignored; nothing else on the same episodes is touched.
+
+  Same result shape as `trash_episode_files/2`.
+  """
+  @spec trash_media_files([binary()], keyword()) ::
+          {:ok,
+           %{
+             trashed: [MediaFile.t()],
+             failed: [{MediaFile.t(), term()}],
+             bytes: non_neg_integer()
+           }}
+  def trash_media_files(file_ids, opts \\ [])
+  def trash_media_files([], _opts), do: trash_files([], [])
+
+  def trash_media_files(file_ids, opts) do
+    Repo.all(
+      from(f in MediaFile,
+        where: f.id in ^file_ids and is_nil(f.trashed_at),
+        order_by: [asc: f.inserted_at, asc: f.id]
+      )
+    )
+    |> trash_files(opts)
+  end
+
+  defp trash_files(files, opts) do
+    {trashed, failed} =
+      Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
+        case trash_media_file(file, opts) do
+          {:ok, trashed} -> {[trashed | ok], bad}
+          {:error, reason} -> {ok, [{file, reason} | bad]}
+        end
+      end)
+
+    {:ok,
+     %{trashed: Enum.reverse(trashed), failed: Enum.reverse(failed), bytes: sum_bytes(trashed)}}
+  end
+
+  @doc """
+  Deletes every live media file row on the given episodes, all versions
+  included, and keeps going when one file fails. Like `trash_episode_files/2`
+  it acts on `episode_files_for_removal/1`, reporting a multi-episode file
+  that also covers another episode under `failed` with `:covers_other_episodes`.
+
+  With `delete_files: true` the bytes go too; a `{:ok, file, :file_delete_failed}`
+  result (row gone, bytes left behind) is reported under `failed`. Such a row's
+  `media_file_episodes` links cascade away with it, so `covered` is read
+  before any delete.
+  """
+  @spec delete_episode_files([binary()], keyword()) ::
+          {:ok,
+           %{
+             deleted: [MediaFile.t()],
+             failed: [{MediaFile.t(), term()}],
+             bytes: non_neg_integer(),
+             covered: %{binary() => [binary()]}
+           }}
+  def delete_episode_files(episode_ids, opts \\ []) do
+    delete_files = Keyword.get(opts, :delete_files, false)
+
+    %{removable: files, blocked: blocked, covered: covered} =
+      episode_files_for_removal(episode_ids)
+
+    {deleted, failed} =
+      Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
+        case delete_media_file(file, delete_files: delete_files) do
+          {:ok, deleted} -> {[deleted | ok], bad}
+          {:ok, deleted, :file_delete_failed} -> {ok, [{deleted, :file_delete_failed} | bad]}
+          {:error, reason} -> {ok, [{file, reason} | bad]}
+        end
+      end)
+
+    {:ok,
+     %{
+       deleted: Enum.reverse(deleted),
+       failed: Enum.reverse(failed) ++ blocked_failures(blocked),
+       bytes: sum_bytes(deleted),
+       covered: covered
+     }}
+  end
+
+  defp sum_bytes(files), do: Enum.reduce(files, 0, &((&1.size || 0) + &2))
+
+  @doc """
   Restores a trashed media file: the file moves back to its library path and
   `trashed_at` is cleared.
 
@@ -148,6 +327,12 @@ defmodule Mydia.Library.Trash do
   that two copies now exist and only one of them is the library's. This
   mirrors `delete_media_file/2`, which already signals a partial success the
   same way.
+
+  Restoring a file Smart Space trashed (`trashed_reason: :smart_space`) also
+  keeps its episode, so the next Smart Space run does not trash it again. An
+  episode keep holds its whole season under the season unit. Every restore
+  path (the trash page, the bulk job, the scanner) goes through here, which is
+  why the keep is created here rather than in a caller.
   """
   @spec restore_media_file(MediaFile.t()) ::
           {:ok, MediaFile.t()}
@@ -155,6 +340,12 @@ defmodule Mydia.Library.Trash do
           | {:error, Ecto.Changeset.t()}
           | {:error, term()}
   def restore_media_file(%MediaFile{} = media_file) do
+    media_file
+    |> do_restore_media_file()
+    |> tap(&keep_after_smart_space_restore(&1, media_file))
+  end
+
+  defp do_restore_media_file(media_file) do
     media_file = Repo.preload(media_file, :library_path)
 
     case TrashStore.restore(media_file, trashed_path(media_file)) do
@@ -185,6 +376,29 @@ defmodule Mydia.Library.Trash do
         {:error, {:trash_restore_failed, reason}}
     end
   end
+
+  # Episode files may carry a nil media_item_id (lib/mydia/media/README.md),
+  # so the show comes from the episode. A keep that fails is logged, not
+  # returned: the file is already back and the restore itself succeeded.
+  defp keep_after_smart_space_restore(result, %MediaFile{
+         trashed_reason: :smart_space,
+         episode_id: episode_id
+       })
+       when elem(result, 0) == :ok and is_binary(episode_id) do
+    with %Episode{media_item_id: media_item_id} when is_binary(media_item_id) <-
+           Repo.get(Episode, episode_id),
+         {:ok, _keep} <- Rules.keep({:episode, media_item_id, episode_id}, nil) do
+      :ok
+    else
+      other ->
+        Logger.warning("Could not keep a restored Smart Space episode",
+          episode_id: episode_id,
+          reason: inspect(other)
+        )
+    end
+  end
+
+  defp keep_after_smart_space_restore(_result, _media_file), do: :ok
 
   @doc """
   Permanently deletes all media files that have been trashed for longer than `days`,

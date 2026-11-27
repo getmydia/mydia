@@ -14,7 +14,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
   import MydiaWeb.AuthHelpers
 
   alias Mydia.Events
-  alias MydiaWeb.MediaLive.Show.Components
+  alias MydiaWeb.MediaLive.Show.TimelineComponents
 
   @display %Mydia.TimeDisplay{time_zone: "Etc/UTC", clock: :h12}
 
@@ -34,7 +34,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
   describe "timeline_section/1" do
     test "renders at most five events when collapsed" do
       html =
-        render_component(&Components.timeline_section/1,
+        render_component(&TimelineComponents.timeline_section/1,
           display: @display,
           timeline_events: fake_events(9),
           expanded: false
@@ -46,7 +46,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
 
     test "renders every event it was given when expanded" do
       html =
-        render_component(&Components.timeline_section/1,
+        render_component(&TimelineComponents.timeline_section/1,
           display: @display,
           timeline_events: fake_events(9),
           expanded: true
@@ -59,7 +59,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
       # load_timeline_events/2 caps its query at 50, so "Show all" would be a
       # lie on an item with more history than that.
       html =
-        render_component(&Components.timeline_section/1,
+        render_component(&TimelineComponents.timeline_section/1,
           display: @display,
           timeline_events: fake_events(9),
           expanded: false
@@ -70,7 +70,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
 
     test "the control reads Show less when expanded" do
       html =
-        render_component(&Components.timeline_section/1,
+        render_component(&TimelineComponents.timeline_section/1,
           display: @display,
           timeline_events: fake_events(9),
           expanded: true
@@ -81,7 +81,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
 
     test "there is no control at all when nothing is hidden" do
       html =
-        render_component(&Components.timeline_section/1,
+        render_component(&TimelineComponents.timeline_section/1,
           display: @display,
           timeline_events: fake_events(5),
           expanded: false
@@ -92,7 +92,7 @@ defmodule MydiaWeb.MediaLive.Show.TimelineCapTest do
 
     test "renders nothing for an item with no events" do
       html =
-        render_component(&Components.timeline_section/1,
+        render_component(&TimelineComponents.timeline_section/1,
           display: @display,
           timeline_events: [],
           expanded: false

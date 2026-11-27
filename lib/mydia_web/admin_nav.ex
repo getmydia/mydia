@@ -43,6 +43,7 @@ defmodule MydiaWeb.AdminNav do
     :release_blacklist,
     :duplicates,
     :trash,
+    :smart_space,
     :status,
     :dashboard,
     :settings,
@@ -79,6 +80,7 @@ defmodule MydiaWeb.AdminNav do
   def page_label(:release_blacklist), do: gettext("Release Blacklist")
   def page_label(:duplicates), do: gettext("Duplicates")
   def page_label(:trash), do: gettext("Trash")
+  def page_label(:smart_space), do: gettext("Smart Space")
   def page_label(:status), do: gettext("Status")
   def page_label(:dashboard), do: gettext("Dashboard")
   def page_label(:settings), do: gettext("Settings")
@@ -116,6 +118,10 @@ defmodule MydiaWeb.AdminNav do
   def page_description(:release_blacklist), do: gettext("Releases blocked from future searches")
   def page_description(:duplicates), do: gettext("Items with more than one file to review")
   def page_description(:trash), do: gettext("Deleted files waiting to be purged")
+
+  def page_description(:smart_space),
+    do: gettext("Watched shows that will move to the trash, and the ones you keep")
+
   def page_description(:status), do: gettext("Server, database and service health")
   def page_description(:dashboard), do: gettext("Playback activity and active sessions")
   def page_description(:settings), do: gettext("Runtime server settings")
@@ -225,6 +231,12 @@ defmodule MydiaWeb.AdminNav do
         hub: :administration,
         icon: "hero-trash",
         path: ~p"/admin/trash"
+      },
+      %Page{
+        key: :smart_space,
+        hub: :administration,
+        icon: "hero-sparkles",
+        path: ~p"/admin/smart-space"
       },
       %Page{
         key: :status,

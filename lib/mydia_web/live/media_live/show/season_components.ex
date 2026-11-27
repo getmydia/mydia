@@ -14,6 +14,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   alias MydiaWeb.MediaLive.Show.DownloadComponents
   alias MydiaWeb.MediaLive.Show.DownloadSummary
   alias MydiaWeb.MediaLive.Show.SegmentComponents
+  alias MydiaWeb.MediaLive.Show.SmartSpaceComponents
 
   @doc """
   One season: the disclosure header, the segment status row, and the episode
@@ -28,6 +29,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
   attr :fetching_season_subtitles, :any, default: nil
+  attr :can_delete_media, :boolean, default: false
+  attr :smart_space, :map, default: nil
   attr :auto_searching_episode, :any, default: nil
   attr :player_enabled, :boolean, required: true
   attr :current_user_id, :string, default: nil
@@ -47,6 +50,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         auto_searching_season={@auto_searching_season}
         rescanning_season={@rescanning_season}
         fetching_season_subtitles={@fetching_season_subtitles}
+        can_delete_media={@can_delete_media}
+        smart_space={@smart_space}
       />
 
       <%= if @expanded? do %>
@@ -72,6 +77,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   current_user_id={@current_user_id}
                   transcode_jobs={@transcode_jobs}
                   media_file_subtitle_tracks={@media_file_subtitle_tracks}
+                  smart_space={@smart_space}
                 />
               </div>
             <% else %>
@@ -108,6 +114,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                   current_user_id={@current_user_id}
                   transcode_jobs={@transcode_jobs}
                   media_file_subtitle_tracks={@media_file_subtitle_tracks}
+                  smart_space={@smart_space}
                 />
               </div>
             <% end %>
@@ -136,6 +143,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   # Shared between the unlabelled (single-chunk) and labelled-range branches of
   # season_section/1 so both render identical rows.
   attr :episodes, :list, required: true
+  attr :smart_space, :map, default: nil
   attr :download_summary, :any, default: nil
   attr :expanded_episodes, :any, required: true
   attr :auto_searching_episode, :any, default: nil
@@ -364,6 +372,12 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     <.icon name="hero-magnifying-glass" class="w-4 h-4" />
                   </button>
 
+                  <SmartSpaceComponents.episode_keep
+                    episode_id={episode.id}
+                    season_number={episode.season_number}
+                    smart_space={@smart_space}
+                  />
+
                   <%!-- Muting moves to the icon. opacity-40 on the button dimmed
                         the focus ring with it. --%>
                   <button
@@ -512,6 +526,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
   attr :auto_searching_season, :any, default: nil
   attr :rescanning_season, :any, default: nil
   attr :fetching_season_subtitles, :any, default: nil
+  attr :can_delete_media, :boolean, default: false
+  attr :smart_space, :map, default: nil
 
   def season_header(assigns) do
     downloading =
@@ -558,6 +574,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
       |> assign(:downloading_count, length(downloading))
       |> assign(:season_state, season_state)
       |> assign(:season_size, season_size)
+      |> assign(:has_files?, Enum.any?(assigns.episodes, &(&1.media_files != [])))
       |> assign(:chip, chip)
 
     ~H"""
@@ -604,6 +621,8 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           </span>
         <% end %>
       </button>
+
+      <SmartSpaceComponents.season_controls season_number={@season_number} smart_space={@smart_space} />
 
       <%!-- Season actions: siblings of the toggle, so they never collapse it.
             One join group, matching the per-episode toolbar. The tooltip wrappers
@@ -690,6 +709,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
           <% else %>
             <.icon name="hero-language" class="w-4 h-4" />
           <% end %>
+        </button>
+
+        <button
+          :if={@can_delete_media and @has_files?}
+          type="button"
+          id={"season-#{@season_number}-delete-files"}
+          phx-click="show_season_delete_confirm"
+          phx-value-season-number={@season_number}
+          aria-label={gettext("Delete season files")}
+          title={gettext("Delete season files")}
+          class="join-item btn btn-sm btn-square btn-ghost text-error"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" />
         </button>
       </div>
     </div>

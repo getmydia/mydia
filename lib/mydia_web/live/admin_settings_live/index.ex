@@ -5,6 +5,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
   alias MydiaWeb.AdminSettingsLive.Components
   alias MydiaWeb.AdminSettingsLive.Labels
   alias MydiaWeb.AdminSettingsLive.LanguageSettings
+  alias MydiaWeb.AdminSettingsLive.SmartSpaceSettings
   alias MydiaWeb.AdminSettingsLive.ProxyComponents
   alias MydiaWeb.AdminSettingsLive.ProxySettings
 
@@ -191,6 +192,14 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
         {:noreply,
          put_flash(socket, :error, OperationErrors.user_error_message(:update_setting, reason))}
     end
+  end
+
+  @impl true
+  def handle_event("save_smart_space_settings", params, socket) do
+    {:noreply,
+     SmartSpaceSettings.handle_save(params, socket, fn socket ->
+       after_config_write(socket, gettext("Setting updated successfully"))
+     end)}
   end
 
   ## Outbound proxy (row + edit modal + test)
@@ -453,6 +462,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     |> assign(:invalid_config_settings, Settings.invalid_config_settings())
     |> assign(:hwaccel, Mydia.Streaming.HardwareAccel.capabilities())
     |> assign(:language_settings, LanguageSettings.current())
+    |> SmartSpaceSettings.assign_defaults()
     |> assign(:proxy_settings, ProxySettings.current())
     |> assign(:player_enabled?, Mydia.Player.enabled?())
   end

@@ -347,6 +347,8 @@ config :mydia, Oban,
        {"15 5 * * *", Mydia.Jobs.MetadataBackfill},
        # Permanently delete trashed media files past retention period daily at 5 AM
        {"0 5 * * *", Mydia.Jobs.TrashCleanup},
+       # Move watched TV to the trash when Smart Space is enabled, daily at 5:30 AM
+       {"30 5 * * *", Mydia.Jobs.SmartSpaceCleanup},
        # Sync runs accrue per server per user per tick, so they need pruning
        {"0 4 * * *", Mydia.Jobs.SyncRunCleanup},
        # Sync watched status with media servers every 30 minutes

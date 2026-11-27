@@ -17,9 +17,6 @@ defmodule Mydia.Config.Schema do
   }
 
   alias Mydia.Indexers.NewznabEndpoint
-  alias Mydia.Plugins.Index.Signature
-
-  @default_index_url "https://plugins.mydia.dev/index.json"
 
   @primary_key false
 
@@ -59,6 +56,7 @@ defmodule Mydia.Config.Schema do
           media: __MODULE__.Media.t() | nil,
           metadata: __MODULE__.Metadata.t() | nil,
           ui: __MODULE__.Ui.t() | nil,
+          smart_space: __MODULE__.SmartSpace.t() | nil,
           downloads: __MODULE__.Downloads.t() | nil,
           upgrades: __MODULE__.Upgrades.t() | nil,
           streaming: __MODULE__.Streaming.t() | nil,
@@ -325,6 +323,7 @@ defmodule Mydia.Config.Schema do
     embeds_one :built_in_torrent, Mydia.Config.Schema.BuiltInTorrent, on_replace: :update
     embeds_one :cardigann, Mydia.Config.Schema.Cardigann, on_replace: :update
     embeds_one :ui, Mydia.Config.Schema.Ui, on_replace: :update
+    embeds_one :smart_space, Mydia.Config.Schema.SmartSpace, on_replace: :update
 
     embeds_one :remote_access, Mydia.Config.Schema.RemoteAccess, on_replace: :update
 
@@ -480,12 +479,13 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:media, with: &MediaChangeset.changeset/2)
     |> cast_embed(:metadata)
     |> cast_embed(:ui)
+    |> cast_embed(:smart_space)
     |> cast_embed(:downloads, with: &downloads_changeset/2)
     |> cast_embed(:upgrades, with: &upgrades_changeset/2)
     |> cast_embed(:streaming, with: &streaming_changeset/2)
     |> cast_embed(:logging)
     |> cast_embed(:oban)
-    |> cast_embed(:plugins, with: &plugins_changeset/2)
+    |> cast_embed(:plugins, with: &Mydia.Config.Schema.PluginsChangeset.changeset/2)
     |> cast_embed(:flaresolverr)
     |> cast_embed(:proxy)
     |> cast_embed(:built_in_torrent)
@@ -499,7 +499,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:library_paths, with: &library_path_changeset/2)
     |> cast_embed(:plugin_settings, with: &plugin_settings_changeset/2)
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
-    |> cast_embed(:plugin_sources, with: &plugin_source_changeset/2)
+    |> cast_embed(:plugin_sources, with: &Mydia.Config.Schema.PluginsChangeset.source_changeset/2)
     |> cast_embed(:path_mappings, with: &PathMappingChangeset.changeset/2)
     |> cast_embed(:tracker_rules)
     |> validate_configuration()
@@ -647,83 +647,6 @@ defmodule Mydia.Config.Schema do
         add_error(changeset, :subtitle_language, "must be a list of language codes")
     end
   end
-
-  defp plugins_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [
-      :fuel_enabled,
-      :fuel_limit,
-      :memory_limit_bytes,
-      :invocation_timeout_ms,
-      :schedule_timeout_ms,
-      :setup_timeout_ms,
-      :pool_size,
-      :store_max_keys,
-      :store_max_bytes,
-      :page_timeout_ms,
-      :page_http_timeout_ms,
-      :index_url,
-      :index_public_key,
-      :override_dir
-    ])
-    |> validate_required([:fuel_enabled])
-    |> validate_positive(
-      ~w(fuel_limit memory_limit_bytes invocation_timeout_ms schedule_timeout_ms setup_timeout_ms)a ++
-        ~w(pool_size store_max_keys store_max_bytes page_timeout_ms page_http_timeout_ms)a
-    )
-    |> validate_https_source(:index_url)
-    |> validate_index_public_key()
-  end
-
-  defp validate_index_public_key(changeset) do
-    url = get_field(changeset, :index_url)
-    key = get_field(changeset, :index_public_key)
-
-    cond do
-      key not in [nil, ""] and match?({:error, _}, Signature.parse_public_key(key)) ->
-        add_error(changeset, :index_public_key, "is not a minisign public key")
-
-      url not in [nil, "", @default_index_url] and key in [nil, ""] ->
-        add_error(changeset, :index_public_key, "is required when index_url is overridden")
-
-      true ->
-        changeset
-    end
-  end
-
-  defp plugin_source_changeset(schema, attrs) do
-    schema
-    |> cast(attrs, [:url, :public_key])
-    |> validate_required([:url, :public_key])
-    |> validate_https_source(:url)
-    |> validate_change(:public_key, fn :public_key, key ->
-      case Signature.parse_public_key(key) do
-        {:ok, _} -> []
-        {:error, _} -> [public_key: "is not a minisign public key"]
-      end
-    end)
-  end
-
-  # KTD10: the index/source transport is the v1 trust anchor, so a non-HTTPS
-  # source URL is rejected at config-validation time (no downgrade).
-  defp validate_https_source(changeset, field) do
-    case get_field(changeset, field) do
-      nil ->
-        changeset
-
-      "" ->
-        changeset
-
-      url ->
-        if https?(url), do: changeset, else: add_error(changeset, field, "must be an https URL")
-    end
-  end
-
-  defp https?(url) when is_binary(url), do: URI.parse(url).scheme == "https"
-  defp https?(_), do: false
-
-  defp validate_positive(changeset, fields),
-    do: Enum.reduce(fields, changeset, &validate_number(&2, &1, greater_than: 0))
 
   defp indexer_changeset(schema, attrs) do
     schema
@@ -952,6 +875,7 @@ defmodule Mydia.Config.Schema do
       media: %__MODULE__.Media{},
       metadata: %__MODULE__.Metadata{},
       ui: %__MODULE__.Ui{},
+      smart_space: %__MODULE__.SmartSpace{},
       downloads: %__MODULE__.Downloads{},
       upgrades: %__MODULE__.Upgrades{},
       streaming: %__MODULE__.Streaming{},

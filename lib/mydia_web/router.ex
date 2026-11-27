@@ -320,6 +320,7 @@ defmodule MydiaWeb.Router do
       live "/library-paths", AdminLibraryPathsLive.Index, :index
       live "/duplicates", AdminDuplicatesLive.Index, :index
       live "/trash", AdminTrashLive.Index, :index
+      live "/smart-space", AdminSmartSpaceLive.Index, :index
       live "/media-servers", AdminMediaServersLive.Index, :index
       live "/storage-backends", AdminStorageBackendsLive.Index, :index
       live "/plugins", AdminPluginsLive.Index, :index

@@ -383,6 +383,18 @@
             season_order_suggestion={@season_order_suggestion}
             season_order_options={@season_order_options}
             can_update_media={@can_update_media}
+            can_delete_media={@can_delete_media}
+            smart_space={
+              @smart_space? &&
+                %{
+                  rule: @smart_space_rule,
+                  override: @smart_space_override,
+                  due: @smart_space_due,
+                  keeps: @smart_space_keeps,
+                  can_edit?: @can_update_media,
+                  can_keep?: @can_delete_media
+                }
+            }
           />
           <%!-- Media Files Section --%>
           <Components.media_files_section
@@ -450,7 +462,7 @@
           id="history-rail"
           class="md:col-span-2 @7xl:col-span-1 @7xl:col-start-3 @7xl:row-start-1 @7xl:overflow-y-auto @7xl:overscroll-contain @7xl:px-2 @7xl:pb-8 @7xl:[scrollbar-gutter:stable]"
         >
-          <Components.timeline_section
+          <TimelineComponents.timeline_section
             timeline_events={@timeline_events}
             expanded={@timeline_expanded}
             display={@time_display}
@@ -469,10 +481,13 @@
     />
   <% end %>
   <%= if @show_file_delete_confirm && @file_to_delete do %>
-    <Modals.file_delete_confirm_modal
+    <DeleteModals.file_delete_confirm_modal
       file_to_delete={@file_to_delete}
       file_delete_mode={@file_delete_mode}
     />
+  <% end %>
+  <%= if @show_season_delete_confirm && @season_delete do %>
+    <DeleteModals.season_delete_confirm_modal season_delete={@season_delete} />
   <% end %>
   <%= if @show_file_details_modal && @file_details do %>
     <Modals.file_details_modal
@@ -599,6 +614,7 @@
       default_quality_profile_name={@default_quality_profile_name}
     />
   <% end %>
+  <SmartSpaceComponents.override_modal :if={@show_smart_space_modal} form={@smart_space_form} />
   <%= if @show_download_audio_modal do %>
     <MydiaWeb.MediaLive.Show.DownloadAudioComponents.download_audio_modal media_item={@media_item} />
   <% end %>

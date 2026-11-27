@@ -10,6 +10,8 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringMenu do
 
   import MydiaWeb.MediaLive.Show.Helpers, only: [monitoring_preset_label: 1]
 
+  alias MydiaWeb.MediaLive.Show.SmartSpaceComponents
+
   @doc """
   The preset menu. Each option shows how many episodes it would monitor, from
   `Mydia.Media.monitoring_preview/1` over the episodes already on the page.
@@ -24,6 +26,7 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringMenu do
   picked, so a manual season toggle shows as Custom instead of going stale.
   """
   attr :episodes, :list, required: true
+  attr :smart_space, :map, default: nil
 
   def episode_monitoring_menu(assigns) do
     preview = Mydia.Media.monitoring_preview(assigns.episodes)
@@ -90,6 +93,7 @@ defmodule MydiaWeb.MediaLive.Show.MonitoringMenu do
             </span>
           </button>
         </li>
+        <SmartSpaceComponents.menu_entry smart_space={@smart_space} />
       </ul>
     </div>
     """

@@ -123,6 +123,7 @@ defmodule MydiaWeb.I18nSmokeTest do
     release_blacklist: "Lista de bloqueo de lanzamientos",
     duplicates: "Duplicados",
     trash: "Papelera",
+    smart_space: "Smart Space",
     status: "Estado",
     dashboard: "Panel",
     settings: "Ajustes",

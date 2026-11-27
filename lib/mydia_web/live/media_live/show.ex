@@ -4,6 +4,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias Mydia.Media.ShowStatus
   alias Mydia.Metadata.Ref
   alias Mydia.Settings
+  alias MydiaWeb.MediaLive.Show.DeleteModals
   alias MydiaWeb.MediaLive.Show.Modals
   alias MydiaWeb.MediaLive.Show.SubtitleModal
   alias MydiaWeb.MediaLive.Show.Components
@@ -33,6 +34,10 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.SearchEvents
   alias MydiaWeb.MediaLive.Show.SearchFilterEvents
   alias MydiaWeb.MediaLive.Show.SegmentEvents
+  alias MydiaWeb.MediaLive.Show.SeasonDeleteEvents
+  alias MydiaWeb.MediaLive.Show.SmartSpaceComponents
+  alias MydiaWeb.MediaLive.Show.TimelineComponents
+  alias MydiaWeb.MediaLive.Show.SmartSpaceEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
   alias MydiaWeb.MediaLive.Show.RecommendationComponents
@@ -47,6 +52,7 @@ defmodule MydiaWeb.MediaLive.Show do
   import MydiaWeb.MediaLive.Show.Helpers
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Loaders
+  import MydiaWeb.MediaLive.Show.SeasonDeleteEvents, only: [is_season_delete_event: 1]
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -97,6 +103,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:show_file_delete_confirm, false)
      |> assign(:file_to_delete, nil)
      |> assign(:file_delete_mode, :trash)
+     |> SeasonDeleteEvents.assign_defaults()
      |> assign(:show_file_details_modal, false)
      |> assign(:file_details, nil)
      |> assign(:file_origin, nil)
@@ -210,6 +217,10 @@ defmodule MydiaWeb.MediaLive.Show do
        :can_update_media,
        Mydia.Accounts.Authorization.can_update_media?(socket.assigns.current_user)
      )
+     |> assign(
+       :can_delete_media,
+       Mydia.Accounts.Authorization.can_delete_media?(socket.assigns.current_user)
+     )
      |> SearchEvents.assign_manual_search_defaults()
      # Category modal state
      |> assign(:show_category_modal, false)
@@ -220,6 +231,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # `overflow-y-auto` (see Components.hero_section/1), and an anchored
      # `.dropdown-content` gets clipped by that ancestor's overflow box.
      |> assign(:show_quality_profile_modal, false)
+     |> SmartSpaceEvents.assign_smart_space(media_item)
      # Download audio picker modal state, same page-level-modal reasoning.
      |> assign(:show_download_audio_modal, false)
      |> assign(:show_availability_modal, false)
@@ -250,6 +262,9 @@ defmodule MydiaWeb.MediaLive.Show do
   end
 
   @impl true
+  def handle_event("smart_space_" <> action, params, socket),
+    do: SmartSpaceEvents.handle(action, params, socket)
+
   def handle_event("toggle_monitored", params, socket),
     do: EpisodeEvents.toggle_monitored(params, socket)
 
@@ -363,6 +378,10 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("hide_file_delete_confirm", params, socket),
     do: FileEvents.hide_file_delete_confirm(params, socket)
+
+  def handle_event(event, params, socket)
+      when is_season_delete_event(event),
+      do: SeasonDeleteEvents.handle(event, params, socket)
 
   def handle_event("toggle_file_delete_mode", params, socket),
     do: FileEvents.toggle_file_delete_mode(params, socket)
@@ -769,59 +788,14 @@ defmodule MydiaWeb.MediaLive.Show do
     {:noreply, assign(socket, :transcode_jobs, load_transcode_jobs(media_item))}
   end
 
-  def handle_info({:subtitles_updated, _media_file_id}, socket) do
-    tracks = load_media_file_subtitle_tracks(socket.assigns.media_item)
+  def handle_info({:subtitles_updated, _media_file_id}, socket),
+    do: SubtitleEvents.subtitles_updated(socket)
 
-    socket = assign(socket, :media_file_subtitle_tracks, tracks)
+  def handle_info({:subtitle_season_finished, media_item_id, season_number}, socket),
+    do: SubtitleEvents.season_finished(media_item_id, season_number, socket)
 
-    # The manage modal renders from :manage_tracks, not
-    # :media_file_subtitle_tracks, so a season fetch finishing while the
-    # modal is open must also refresh :manage_tracks or newly downloaded
-    # tracks never appear in it. Same pattern as rescan, delete, and offset.
-    socket =
-      case socket.assigns.selected_media_file do
-        nil -> socket
-        media_file -> assign(socket, :manage_tracks, Map.get(tracks, media_file.id, []))
-      end
-
-    {:noreply, socket}
-  end
-
-  def handle_info({:subtitle_season_finished, media_item_id, season_number}, socket) do
-    socket =
-      if media_item_id == socket.assigns.media_item.id do
-        assign(
-          socket,
-          :media_file_subtitle_tracks,
-          load_media_file_subtitle_tracks(socket.assigns.media_item)
-        )
-      else
-        socket
-      end
-
-    # Only clear the spinner when the finishing season is the one being
-    # tracked. A user can start season 2's fetch while season 1's is still in
-    # flight; season 1 finishing must not clear season 2's spinner and
-    # re-enable its button while that job is still running. The reload above
-    # still happens regardless, since the work did happen.
-    socket =
-      if media_item_id == socket.assigns.media_item.id &&
-           socket.assigns.fetching_season_subtitles == season_number do
-        assign(socket, :fetching_season_subtitles, nil)
-      else
-        socket
-      end
-
-    {:noreply, socket}
-  end
-
-  def handle_info({:subtitle_season_timeout, season_num}, socket) do
-    if socket.assigns.fetching_season_subtitles == season_num do
-      {:noreply, assign(socket, :fetching_season_subtitles, nil)}
-    else
-      {:noreply, socket}
-    end
-  end
+  def handle_info({:subtitle_season_timeout, season_num}, socket),
+    do: SubtitleEvents.season_timeout(season_num, socket)
 
   def handle_info({:grab_completed, payload}, socket),
     do: SearchEvents.handle_grab_completed(payload, socket)

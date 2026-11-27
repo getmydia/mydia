@@ -332,6 +332,27 @@ defmodule Mydia.Events.Presentation do
       icon: "hero-eye-slash",
       color: "text-info",
       title: "Marked unwatched"
+    },
+
+    # smart_space.*
+    %{
+      type: "smart_space.cleanup",
+      icon: "hero-sparkles",
+      color: "text-info",
+      title: "Smart Space moved watched TV to the trash"
+    },
+    %{
+      type: "smart_space.run",
+      icon: "hero-sparkles",
+      color: "text-info",
+      title: "Smart Space ran",
+      feed?: false
+    },
+    %{
+      type: "smart_space.misconfigured",
+      icon: "hero-exclamation-triangle",
+      color: "text-warning",
+      title: "Smart Space skipped: selected users not found"
     }
   ]
 

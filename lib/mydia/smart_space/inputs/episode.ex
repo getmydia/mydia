@@ -1,0 +1,28 @@
+defmodule Mydia.SmartSpace.Inputs.Episode do
+  @moduledoc """
+  One episode: its live (not trashed) files, including a multi-episode file
+  linked to it through `media_file_episodes` rather than `episode_id`, and
+  whether a download or import is in flight for it. `air_date: nil` counts
+  as unaired. `monitored` defaults to `true` so a missing value keeps media:
+  under the season unit a monitored episode without files holds its season.
+  """
+
+  @enforce_keys [:id, :season_number]
+  defstruct id: nil,
+            season_number: nil,
+            episode_number: nil,
+            air_date: nil,
+            files: [],
+            monitored: true,
+            in_flight?: false
+
+  @type t :: %__MODULE__{
+          id: binary(),
+          season_number: integer(),
+          episode_number: integer() | nil,
+          air_date: Date.t() | nil,
+          files: [Mydia.SmartSpace.Inputs.FileRef.t()],
+          monitored: boolean(),
+          in_flight?: boolean()
+        }
+end

@@ -5,6 +5,7 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   alias MydiaWeb.AdminSettingsLive.Labels
   alias MydiaWeb.AdminSettingsLive.LanguageComponents
   alias MydiaWeb.AdminSettingsLive.ProxyComponents
+  alias MydiaWeb.AdminSettingsLive.SmartSpaceComponents
 
   attr :config_settings_with_sources, :map, required: true
   attr :crash_report_stats, :map, required: true
@@ -14,6 +15,9 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
   attr :proxy_settings, MydiaWeb.AdminSettingsLive.ProxySettings, required: true
   attr :proxy_test_result, :any, default: nil
   attr :player_enabled?, :boolean, required: true
+  attr :smart_space_settings, :map, required: true
+  attr :smart_space_usernames, :list, required: true
+  attr :smart_space_error, :string, default: nil
 
   def general_settings_tab(assigns) do
     ~H"""
@@ -122,6 +126,13 @@ defmodule MydiaWeb.AdminSettingsLive.Components do
           </:row>
           <:empty>{gettext("No settings in this category.")}</:empty>
         </.admin_list>
+
+        <SmartSpaceComponents.smart_space_card
+          :if={category == "Media"}
+          settings={@smart_space_settings}
+          usernames={@smart_space_usernames}
+          error={@smart_space_error}
+        />
 
         <.crash_report_stats
           :if={category == "Crash Reporting" and @crash_report_stats.enabled}

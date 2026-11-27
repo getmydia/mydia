@@ -259,6 +259,7 @@ defmodule Mydia.Config.Loader do
       media: Mydia.Config.Env.MediaEnv.load(),
       metadata: Mydia.Config.Env.MetadataEnv.load(),
       ui: Mydia.Config.Env.UiEnv.load(),
+      smart_space: Mydia.Config.Env.SmartSpaceEnv.load(),
       downloads: load_downloads_env(),
       upgrades: load_upgrades_env(),
       streaming: load_streaming_env(),
@@ -277,19 +278,11 @@ defmodule Mydia.Config.Loader do
       plugin_settings: load_plugin_settings_env(),
       plugin_instances: load_plugin_instances_env(),
       plugin_sources: load_plugin_sources_env(),
-      plugins: load_plugins_runtime_env(),
+      plugins: Mydia.Config.Env.PluginsEnv.load(),
       path_mappings: load_path_mappings_env(),
       tracker_rules: Mydia.Config.Env.TrackerRulesEnv.load()
     }
     |> remove_empty_maps()
-  end
-
-  # Runtime keys for the plugin platform (the singular :plugins embed), distinct
-  # from the PLUGIN_<N>_* settings handled by load_plugin_settings_env/0. Only the filesystem
-  # override directory is env-configurable today.
-  defp load_plugins_runtime_env do
-    %{}
-    |> put_if_present(:override_dir, System.get_env("PLUGINS_OVERRIDE_DIR"))
   end
 
   defp load_server_env do

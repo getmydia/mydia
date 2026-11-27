@@ -100,6 +100,7 @@ defmodule Mydia.Jobs.TrashAction do
   defp parse_reason("upgrade_rejected"), do: :upgrade_rejected
   defp parse_reason("pruned"), do: :pruned
   defp parse_reason("manual"), do: :manual
+  defp parse_reason("smart_space"), do: :smart_space
   defp parse_reason("unknown"), do: :unknown
   defp parse_reason(_), do: nil
 
