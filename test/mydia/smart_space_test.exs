@@ -372,6 +372,30 @@ defmodule Mydia.SmartSpaceTest do
     end
 
     @tag :tmp_dir
+    test "a shared file waits for the later of its episodes", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      e9 = episode(c, 1, 9)
+      e10 = episode(c, 1, 10)
+      f = file(c, e9, "s1e09e10.mkv")
+      Repo.insert!(%MediaFileEpisode{media_file_id: f.id, episode_id: e10.id})
+      # Grace 7 days: e9 was due yesterday, e10 is due in 6 days.
+      watch(c, e9, days_ago(8))
+      e10_watched = days_ago(1)
+      watch(c, e10, e10_watched)
+      config = cfg(%{unit: "episode"})
+
+      assert [%{file_ids: [id], eligible_at: at}] =
+               SmartSpace.upcoming(within_days: 30, config: config)
+
+      assert id == f.id
+      assert at == DateTime.add(e10_watched, 7, :day)
+
+      assert {:ok, %{files: 0}} = SmartSpace.run(config: config)
+      assert is_nil(Repo.get!(MediaFile, f.id).trashed_at)
+      assert Repo.get!(Episode, e9.id).monitored
+    end
+
+    @tag :tmp_dir
     test "a season whose finale airs in 20 days is not listed", %{tmp_dir: tmp} do
       c = ctx(tmp)
       ep = episode(c, 1, 1)

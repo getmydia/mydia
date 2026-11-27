@@ -63,6 +63,7 @@ defmodule Mydia.SmartSpace.Evaluator do
     |> Enum.sort_by(&{&1.media_item_id, &1.season_number, &1.episode_ids})
     |> Enum.sort_by(& &1.eligible_at, DateTime)
     |> settle_files()
+    |> Enum.sort_by(& &1.eligible_at, DateTime)
   end
 
   def eligible(%Inputs{}, _now, _today), do: []
@@ -359,12 +360,23 @@ defmodule Mydia.SmartSpace.Evaluator do
   # cleanups that share an episode together. A cleanup left without files is
   # dropped; any episode only it listed is file-less and already unmonitored.
   # A kept cleanup always lists at least the episodes its own files cover.
+  #
+  # A cleanup that absorbs another cleanup's episode through a shared file can
+  # only go once that episode is due too, so its eligible_at becomes the
+  # latest eligible_at of any cleanup listing an episode it now covers.
   defp assign_files_once(cleanups) do
-    {kept, _seen} = Enum.reduce(cleanups, {[], MapSet.new()}, &claim/2)
+    due = latest_due_by_episode(cleanups)
+    {kept, _seen} = Enum.reduce(cleanups, {[], MapSet.new()}, &claim(&1, &2, due))
     Enum.reverse(kept)
   end
 
-  defp claim(cleanup, {acc, seen}) do
+  defp latest_due_by_episode(cleanups) do
+    for cleanup <- cleanups, id <- cleanup.episode_ids, reduce: %{} do
+      acc -> Map.update(acc, id, cleanup.eligible_at, &later(&1, cleanup.eligible_at))
+    end
+  end
+
+  defp claim(cleanup, {acc, seen}, due) do
     case Enum.reject(cleanup.files, &MapSet.member?(seen, &1.id)) do
       [] ->
         {acc, seen}
@@ -373,8 +385,14 @@ defmodule Mydia.SmartSpace.Evaluator do
         episode_ids =
           Enum.uniq(cleanup.episode_ids ++ Enum.flat_map(files, & &1.episode_ids))
 
+        eligible_at =
+          episode_ids
+          |> Enum.map(&Map.get(due, &1, cleanup.eligible_at))
+          |> Enum.reduce(cleanup.eligible_at, &later/2)
+
         seen = Enum.reduce(files, seen, &MapSet.put(&2, &1.id))
-        {[put_files(%{cleanup | episode_ids: episode_ids}, files) | acc], seen}
+        cleanup = %{cleanup | episode_ids: episode_ids, eligible_at: eligible_at}
+        {[put_files(cleanup, files) | acc], seen}
     end
   end
 end

@@ -165,8 +165,12 @@ fails this is held back, and the episodes it covers leave their cleanups'
 `episode_ids` (they are not unmonitored, since the file stays). Dropping an
 episode can strand another file on it, so this repeats until nothing more is
 held. Each file then goes to exactly one cleanup, the earliest eligible,
-which also lists every episode the file covers; each episode is listed once,
-and bytes count once. A cleanup left without files is dropped.
+which also lists every episode the file covers, and bytes count once. An
+episode may appear in two cleanups when a later one still trashes another
+version of it; the job's cap takes or skips cleanups that share an episode
+together. A cleanup that takes a shared file becomes eligible only when every
+episode it absorbed is due: its `eligible_at` is the latest of the cleanups
+listing those episodes. A cleanup left without files is dropped.
 
 ### Effective rule
 
@@ -319,7 +323,8 @@ New admin page `AdminSmartSpaceLive.Index`, linked in the nav beside Trash.
   Files that also hold an episode of another season are skipped, and the
   dialog says how many; when every file is skipped it still opens, explains
   why, and disables the confirm button. "Stop monitoring" leaves monitored
-  every episode a skipped or failed file still covers.
+  every episode a skipped or failed file still covers, using the coverage
+  read before any row was removed (a deleted row's links cascade away).
 - When Smart Space applies to the show, each season header shows a "Cleans up
   in N days" badge (from the show-scoped preview) and a **Keep** toggle;
   under the episode unit, episode rows get the toggle instead.
