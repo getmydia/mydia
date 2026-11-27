@@ -291,7 +291,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
     test "defaults to moving the file to trash" do
       html =
-        render_component(&Modals.file_delete_confirm_modal/1,
+        render_component(&MydiaWeb.MediaLive.Show.DeleteModals.file_delete_confirm_modal/1,
           file_to_delete: file_to_delete(),
           file_delete_mode: :trash
         )
@@ -307,7 +307,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
     test "reflects the library-only choice" do
       html =
-        render_component(&Modals.file_delete_confirm_modal/1,
+        render_component(&MydiaWeb.MediaLive.Show.DeleteModals.file_delete_confirm_modal/1,
           file_to_delete: file_to_delete(),
           file_delete_mode: :library_only
         )
@@ -320,7 +320,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
 
     test "reflects the permanent choice and warns it cannot be undone" do
       html =
-        render_component(&Modals.file_delete_confirm_modal/1,
+        render_component(&MydiaWeb.MediaLive.Show.DeleteModals.file_delete_confirm_modal/1,
           file_to_delete: file_to_delete(),
           file_delete_mode: :permanent
         )

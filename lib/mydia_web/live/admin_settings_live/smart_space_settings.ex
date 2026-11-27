@@ -10,9 +10,14 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettings do
 
   use Gettext, backend: MydiaWeb.Gettext
 
+  import Phoenix.Component, only: [assign: 3]
+  import Phoenix.LiveView, only: [put_flash: 3]
+
   alias Mydia.Accounts
   alias Mydia.Config.Schema.SmartSpace
+  alias Mydia.Logger, as: MydiaLogger
   alias Mydia.Settings
+  alias MydiaWeb.OperationErrors
 
   @env_vars %{
     "smart_space.enabled" => "SMART_SPACE_ENABLED",
@@ -23,6 +28,42 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettings do
   }
 
   @type setting :: %{value: term(), source: :env | :database | :default}
+
+  @doc "Assigns the card's settings, usernames and an empty error."
+  def assign_defaults(socket) do
+    socket
+    |> assign(:smart_space_settings, current())
+    |> assign(:smart_space_usernames, usernames())
+    |> assign(:smart_space_error, nil)
+  end
+
+  @doc """
+  Handles the card's save event and returns the updated socket. `on_written`
+  runs when at least one setting was written and returns the socket to use.
+  """
+  def handle_save(params, socket, on_written) do
+    case save(params, socket.assigns.current_user.id) do
+      {:ok, []} ->
+        assign(socket, :smart_space_error, nil)
+
+      {:ok, _written} ->
+        on_written.(socket)
+
+      {:error, :validation, message} ->
+        assign(socket, :smart_space_error, message)
+
+      {:error, key, reason} ->
+        MydiaLogger.log_error(:liveview, "Failed to update Smart Space setting",
+          error: reason,
+          error_details: inspect(reason, pretty: true),
+          operation: :update_setting,
+          setting_key: key,
+          user_id: socket.assigns.current_user.id
+        )
+
+        put_flash(socket, :error, OperationErrors.user_error_message(:update_setting, reason))
+    end
+  end
 
   @doc "Each key's resolved value and the layer it came from."
   @spec current() :: %{String.t() => setting()}
@@ -150,20 +191,20 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettings do
   defp same?(current, value), do: current == value
 
   defp write(changes, user_id) do
-    fn ->
-      Enum.reduce(changes, [], fn {key, value}, written ->
-        attrs = %{key: key, value: encode(value), category: :general, updated_by_id: user_id}
-
-        case Settings.upsert_config_setting(attrs) do
-          {:ok, _setting} -> [key | written]
-          {:error, reason} -> Mydia.Repo.rollback({key, reason})
-        end
-      end)
-    end
+    fn -> Enum.reduce(changes, [], &write_one(&1, &2, user_id)) end
     |> Mydia.Repo.transaction()
     |> case do
       {:ok, written} -> {:ok, written}
       {:error, {key, reason}} -> {:error, key, reason}
+    end
+  end
+
+  defp write_one({key, value}, written, user_id) do
+    attrs = %{key: key, value: encode(value), category: :general, updated_by_id: user_id}
+
+    case Settings.upsert_config_setting(attrs) do
+      {:ok, _setting} -> [key | written]
+      {:error, reason} -> Mydia.Repo.rollback({key, reason})
     end
   end
 

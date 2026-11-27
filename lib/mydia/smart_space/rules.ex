@@ -93,19 +93,17 @@ defmodule Mydia.SmartSpace.Rules do
 
   defp do_keep(target, user) do
     Repo.transaction(fn ->
-      case find_keep(target) do
-        %Keep{} = existing ->
-          existing
-
-        nil ->
-          struct = %Keep{created_by_id: user && user.id} |> put_target(target)
-
-          case Repo.insert(Keep.changeset(struct)) do
-            {:ok, keep} -> keep
-            {:error, changeset} -> Repo.rollback(changeset)
-          end
-      end
+      find_keep(target) || insert_keep(target, user)
     end)
+  end
+
+  defp insert_keep(target, user) do
+    struct = %Keep{created_by_id: user && user.id} |> put_target(target)
+
+    case Repo.insert(Keep.changeset(struct)) do
+      {:ok, keep} -> keep
+      {:error, changeset} -> Repo.rollback(changeset)
+    end
   end
 
   @doc "Removes the keep at a level. Missing keeps are fine."

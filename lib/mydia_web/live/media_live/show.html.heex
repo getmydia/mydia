@@ -462,7 +462,7 @@
           id="history-rail"
           class="md:col-span-2 @7xl:col-span-1 @7xl:col-start-3 @7xl:row-start-1 @7xl:overflow-y-auto @7xl:overscroll-contain @7xl:px-2 @7xl:pb-8 @7xl:[scrollbar-gutter:stable]"
         >
-          <Components.timeline_section
+          <TimelineComponents.timeline_section
             timeline_events={@timeline_events}
             expanded={@timeline_expanded}
             display={@time_display}
@@ -481,13 +481,13 @@
     />
   <% end %>
   <%= if @show_file_delete_confirm && @file_to_delete do %>
-    <Modals.file_delete_confirm_modal
+    <DeleteModals.file_delete_confirm_modal
       file_to_delete={@file_to_delete}
       file_delete_mode={@file_delete_mode}
     />
   <% end %>
   <%= if @show_season_delete_confirm && @season_delete do %>
-    <Modals.season_delete_confirm_modal season_delete={@season_delete} />
+    <DeleteModals.season_delete_confirm_modal season_delete={@season_delete} />
   <% end %>
   <%= if @show_file_details_modal && @file_details do %>
     <Modals.file_details_modal

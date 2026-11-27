@@ -196,28 +196,10 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
 
   @impl true
   def handle_event("save_smart_space_settings", params, socket) do
-    case SmartSpaceSettings.save(params, socket.assigns.current_user.id) do
-      {:ok, []} ->
-        {:noreply, assign(socket, :smart_space_error, nil)}
-
-      {:ok, _written} ->
-        {:noreply, after_config_write(socket, gettext("Setting updated successfully"))}
-
-      {:error, :validation, message} ->
-        {:noreply, assign(socket, :smart_space_error, message)}
-
-      {:error, key, reason} ->
-        MydiaLogger.log_error(:liveview, "Failed to update Smart Space setting",
-          error: reason,
-          error_details: inspect(reason, pretty: true),
-          operation: :update_setting,
-          setting_key: key,
-          user_id: socket.assigns.current_user.id
-        )
-
-        {:noreply,
-         put_flash(socket, :error, OperationErrors.user_error_message(:update_setting, reason))}
-    end
+    {:noreply,
+     SmartSpaceSettings.handle_save(params, socket, fn socket ->
+       after_config_write(socket, gettext("Setting updated successfully"))
+     end)}
   end
 
   ## Outbound proxy (row + edit modal + test)
@@ -480,9 +462,7 @@ defmodule MydiaWeb.AdminSettingsLive.Index do
     |> assign(:invalid_config_settings, Settings.invalid_config_settings())
     |> assign(:hwaccel, Mydia.Streaming.HardwareAccel.capabilities())
     |> assign(:language_settings, LanguageSettings.current())
-    |> assign(:smart_space_settings, SmartSpaceSettings.current())
-    |> assign(:smart_space_usernames, SmartSpaceSettings.usernames())
-    |> assign(:smart_space_error, nil)
+    |> SmartSpaceSettings.assign_defaults()
     |> assign(:proxy_settings, ProxySettings.current())
     |> assign(:player_enabled?, Mydia.Player.enabled?())
   end
