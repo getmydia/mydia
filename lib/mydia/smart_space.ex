@@ -80,9 +80,9 @@ defmodule Mydia.SmartSpace do
         {:error, :misconfigured}
 
       true ->
-        {chosen, skipped} = inputs |> evaluate(now) |> apply_cap(cap)
+        {chosen, skipped, oversized} = inputs |> evaluate(now) |> apply_cap(cap)
         capped? = skipped != []
-        log_capped(skipped, cap)
+        log_capped(skipped, oversized, cap)
         run = %{unmonitored: MapSet.new(), held: MapSet.new()}
 
         {summary, _run} =
@@ -112,16 +112,17 @@ defmodule Mydia.SmartSpace do
   # other) form a group that is taken or skipped whole: taking only the first
   # would unmonitor an episode whose other file stays live. A group that does
   # not fit in what is left of the cap is skipped, never split; later, smaller
-  # ones may still fit. Chosen cleanups keep their order. Returns
-  # {chosen, skipped}.
+  # ones may still fit. Chosen cleanups keep their order. A group larger than
+  # the cap on its own can never fit, so it is skipped on every run; those are
+  # counted as oversized. Returns {chosen, skipped, oversized_groups}.
   defp apply_cap(cleanups, cap) do
     indexed = Enum.with_index(cleanups)
+    groups = episode_groups(indexed)
+    oversized = Enum.count(groups, &(group_files(&1) > cap))
 
     {taken, _total} =
-      indexed
-      |> episode_groups()
-      |> Enum.reduce({MapSet.new(), 0}, fn group, {taken, total} ->
-        count = group |> Enum.map(fn {c, _i} -> length(c.file_ids) end) |> Enum.sum()
+      Enum.reduce(groups, {MapSet.new(), 0}, fn group, {taken, total} ->
+        count = group_files(group)
 
         if total + count <= cap,
           do:
@@ -130,8 +131,11 @@ defmodule Mydia.SmartSpace do
       end)
 
     {chosen, skipped} = Enum.split_with(indexed, fn {_c, i} -> MapSet.member?(taken, i) end)
-    {Enum.map(chosen, &elem(&1, 0)), Enum.map(skipped, &elem(&1, 0))}
+    {Enum.map(chosen, &elem(&1, 0)), Enum.map(skipped, &elem(&1, 0)), oversized}
   end
+
+  defp group_files(group),
+    do: group |> Enum.map(fn {c, _i} -> length(c.file_ids) end) |> Enum.sum()
 
   # Connected groups of {cleanup, index} sharing an episode, ordered by their
   # earliest member.
@@ -150,14 +154,18 @@ defmodule Mydia.SmartSpace do
     %{members: group.members ++ acc.members, episodes: MapSet.union(group.episodes, acc.episodes)}
   end
 
-  defp log_capped([], _cap), do: :ok
+  defp log_capped([], _oversized, _cap), do: :ok
 
-  defp log_capped(skipped, cap) do
-    Logger.warning("Smart Space hit its per-run cap; the rest waits for the next run",
+  defp log_capped(skipped, oversized, cap) do
+    # An oversized group never fits, so it is skipped on every run and needs
+    # the season's "Delete season files" action instead.
+    Logger.warning(
+      "Smart Space hit its per-run cap; skipped cleanups wait for a later run, " <>
+        "oversized ones are never taken automatically",
       cap: cap,
       skipped_cleanups: length(skipped),
       skipped_files: skipped |> Enum.map(&length(&1.file_ids)) |> Enum.sum(),
-      oversized: Enum.count(skipped, &(length(&1.file_ids) > cap))
+      oversized_groups: oversized
     )
   end
 

@@ -259,7 +259,13 @@ covers the manual dialog's other two modes (`delete_files: true | false`).
 3. If the rule is misconfigured, write one warning event and stop.
 4. Take cleanups in `eligible_at` order up to a cap of 200 files per run. A
    cleanup that would push the run over 200 files is skipped and logged once
-   per run; later, smaller cleanups may still be taken.
+   per run; later, smaller cleanups may still be taken. Cleanups that share an
+   episode are taken or skipped as one group. A cleanup or group with more
+   than 200 files on its own can never fit, so it is never cleaned
+   automatically: every run skips it and counts it in `oversized_groups` in the
+   warning. Partial progress is not attempted, since taking part of a linked
+   group could unmonitor an episode whose other file stays on disk. The
+   operator clears it with "Delete season files" on the affected seasons.
 5. For each cleanup, in this order: unmonitor its `episode_ids`
    (`Mydia.Media.Monitoring.set_episodes_monitored/2`), then
    `Library.trash_media_files(file_ids, reason: :smart_space)`, then monitor
