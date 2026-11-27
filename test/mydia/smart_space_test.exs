@@ -195,6 +195,32 @@ defmodule Mydia.SmartSpaceTest do
     end
 
     @tag :tmp_dir
+    test "the cap keeps or skips cleanups sharing an episode together", %{tmp_dir: tmp} do
+      c = ctx(tmp)
+      e9 = episode(c, 1, 9)
+      e10 = episode(c, 1, 10)
+      f = file(c, e9, "s1e09e10.mkv")
+      Repo.insert!(%MediaFileEpisode{media_file_id: f.id, episode_id: e10.id})
+      g = file(c, e10, "s1e10-alt.mkv", "bb")
+      watch(c, e9, days_ago(40))
+      watch(c, e10, days_ago(30))
+      config = cfg(%{unit: "episode"})
+
+      # C1 (f, e9 + e10) fits a cap of 1, but C2 (g, e10) shares e10: neither runs.
+      assert {:ok, %{files: 0, capped?: true}} = SmartSpace.run(config: config, cap: 1)
+      assert is_nil(Repo.get!(MediaFile, f.id).trashed_at)
+      assert is_nil(Repo.get!(MediaFile, g.id).trashed_at)
+      assert Repo.get!(Episode, e9.id).monitored
+      assert Repo.get!(Episode, e10.id).monitored
+
+      assert {:ok, %{files: 2, capped?: false}} = SmartSpace.run(config: config, cap: 2)
+      assert Repo.get!(MediaFile, f.id).trashed_at
+      assert Repo.get!(MediaFile, g.id).trashed_at
+      refute Repo.get!(Episode, e9.id).monitored
+      refute Repo.get!(Episode, e10.id).monitored
+    end
+
+    @tag :tmp_dir
     test "cap never splits a season", %{tmp_dir: tmp} do
       c = ctx(tmp)
       [{_, a1}, {_, a2}] = watched_season(c, 1, 2)

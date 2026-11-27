@@ -652,6 +652,36 @@ defmodule Mydia.SmartSpace.EvaluatorTest do
       assert cleanup.bytes == 100
     end
 
+    test "episode unit: a later cleanup trashing another version keeps its episode" do
+      f = double("f910", ["e9", "e10"])
+      eps = [ep("e9", 1, 9, files: [f]), ep("e10", 1, 10, files: [f, {"g10", 40}])]
+      later = ~U[2026-11-02 10:00:00Z]
+      watches = [watch("a", "e9"), watch("a", "e10", later)]
+
+      assert [c1, c2] = run(inputs(show(eps, watches), global: [unit: "episode"]))
+      assert c1.file_ids == ["f910"]
+      assert Enum.sort(c1.episode_ids) == ["e10", "e9"]
+      assert c2.file_ids == ["g10"]
+      assert c2.episode_ids == ["e10"]
+    end
+
+    test "no cleanup with files ever lists no episodes" do
+      f = double("f910", ["e9", "e10"])
+      span = double("f-span", ["e10", "s2e1"])
+
+      eps = [
+        ep("e9", 1, 9, files: [f]),
+        ep("e10", 1, 10, files: [f, span, {"g10", 40}]),
+        ep("s2e1", 2, 1, files: [span])
+      ]
+
+      for unit <- ["episode", "season"] do
+        result = run(inputs(show(eps, watched_by("a", eps)), global: [unit: unit]))
+        assert result != []
+        assert Enum.all?(result, &(&1.episode_ids != [] and &1.file_ids != []))
+      end
+    end
+
     test "season unit: an episode covered only through a link is not file-less" do
       f = double("f910", ["e9", "e10"])
       # e10 is monitored and its only file is the e9 release: it does not hold

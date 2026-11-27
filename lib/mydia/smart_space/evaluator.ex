@@ -32,8 +32,8 @@ defmodule Mydia.SmartSpace.Evaluator do
       is in some cleanup of the same evaluation; otherwise it is held back and
       the episodes it covers leave their cleanups (they stay monitored). Each
       file lands in exactly one cleanup, the earliest eligible, which also
-      lists every episode the file covers; each episode is listed once, and a
-      cleanup left without files is dropped.
+      lists every episode the file covers (so an episode can appear in two
+      cleanups), and a cleanup left without files is dropped.
     * Never: season 0, anything under a keep at its level or above (an
       episode keep holds its whole season under the season unit), a unit
       without live files, a unit containing an in-flight episode, or any unit
@@ -353,29 +353,27 @@ defmodule Mydia.SmartSpace.Evaluator do
   # Cleanups arrive in eligibility order. A file listed by several goes to the
   # first, so its bytes count once, and that cleanup also takes every episode
   # the file covers: otherwise an episode whose own cleanup ends up without
-  # files would lose its file yet stay monitored. Each episode is listed once.
-  # A cleanup left without files is dropped; any episode only it listed is
-  # file-less and already unmonitored.
+  # files would lose its file yet stay monitored. An episode may then be listed
+  # by more than one cleanup (a later one may still trash another version of
+  # it); unmonitoring twice is harmless, and the job's cap keeps or skips
+  # cleanups that share an episode together. A cleanup left without files is
+  # dropped; any episode only it listed is file-less and already unmonitored.
+  # A kept cleanup always lists at least the episodes its own files cover.
   defp assign_files_once(cleanups) do
-    {kept, _seen} = Enum.reduce(cleanups, {[], {MapSet.new(), MapSet.new()}}, &claim/2)
+    {kept, _seen} = Enum.reduce(cleanups, {[], MapSet.new()}, &claim/2)
     Enum.reverse(kept)
   end
 
-  defp claim(cleanup, {acc, {seen_files, seen_episodes} = seen}) do
-    case Enum.reject(cleanup.files, &MapSet.member?(seen_files, &1.id)) do
+  defp claim(cleanup, {acc, seen}) do
+    case Enum.reject(cleanup.files, &MapSet.member?(seen, &1.id)) do
       [] ->
         {acc, seen}
 
       files ->
         episode_ids =
-          (cleanup.episode_ids ++ Enum.flat_map(files, & &1.episode_ids))
-          |> Enum.uniq()
-          |> Enum.reject(&MapSet.member?(seen_episodes, &1))
+          Enum.uniq(cleanup.episode_ids ++ Enum.flat_map(files, & &1.episode_ids))
 
-        seen =
-          {Enum.reduce(files, seen_files, &MapSet.put(&2, &1.id)),
-           Enum.reduce(episode_ids, seen_episodes, &MapSet.put(&2, &1))}
-
+        seen = Enum.reduce(files, seen, &MapSet.put(&2, &1.id))
         {[put_files(%{cleanup | episode_ids: episode_ids}, files) | acc], seen}
     end
   end

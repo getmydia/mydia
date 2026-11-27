@@ -107,20 +107,47 @@ defmodule Mydia.SmartSpace do
 
   defp empty_summary, do: %{cleanups: 0, files: 0, failed: 0, bytes: 0, capped?: false}
 
-  # Cleanups arrive sorted by eligible_at. One that does not fit in what is
-  # left of the cap is skipped, never split; later, smaller ones may still fit.
-  # Returns {chosen, skipped}.
+  # Cleanups arrive sorted by eligible_at. Cleanups that share an episode (a
+  # multi-episode file on one, another version of the same episode on the
+  # other) form a group that is taken or skipped whole: taking only the first
+  # would unmonitor an episode whose other file stays live. A group that does
+  # not fit in what is left of the cap is skipped, never split; later, smaller
+  # ones may still fit. Chosen cleanups keep their order. Returns
+  # {chosen, skipped}.
   defp apply_cap(cleanups, cap) do
-    {chosen, _total, skipped} =
-      Enum.reduce(cleanups, {[], 0, []}, fn cleanup, {acc, total, skipped} ->
-        count = length(cleanup.file_ids)
+    indexed = Enum.with_index(cleanups)
+
+    {taken, _total} =
+      indexed
+      |> episode_groups()
+      |> Enum.reduce({MapSet.new(), 0}, fn group, {taken, total} ->
+        count = group |> Enum.map(fn {c, _i} -> length(c.file_ids) end) |> Enum.sum()
 
         if total + count <= cap,
-          do: {[cleanup | acc], total + count, skipped},
-          else: {acc, total, [cleanup | skipped]}
+          do:
+            {Enum.reduce(group, taken, fn {_c, i}, acc -> MapSet.put(acc, i) end), total + count},
+          else: {taken, total}
       end)
 
-    {Enum.reverse(chosen), Enum.reverse(skipped)}
+    {chosen, skipped} = Enum.split_with(indexed, fn {_c, i} -> MapSet.member?(taken, i) end)
+    {Enum.map(chosen, &elem(&1, 0)), Enum.map(skipped, &elem(&1, 0))}
+  end
+
+  # Connected groups of {cleanup, index} sharing an episode, ordered by their
+  # earliest member.
+  defp episode_groups(indexed) do
+    indexed
+    |> Enum.reduce([], fn {cleanup, _i} = member, groups ->
+      episodes = MapSet.new(cleanup.episode_ids)
+      {touching, rest} = Enum.split_with(groups, &(not MapSet.disjoint?(&1.episodes, episodes)))
+      [Enum.reduce(touching, %{members: [member], episodes: episodes}, &merge_group/2) | rest]
+    end)
+    |> Enum.map(fn group -> Enum.sort_by(group.members, &elem(&1, 1)) end)
+    |> Enum.sort_by(fn [{_c, i} | _] -> i end)
+  end
+
+  defp merge_group(group, acc) do
+    %{members: group.members ++ acc.members, episodes: MapSet.union(group.episodes, acc.episodes)}
   end
 
   defp log_capped([], _cap), do: :ok
