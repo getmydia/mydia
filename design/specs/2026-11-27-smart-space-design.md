@@ -87,7 +87,16 @@ Exactly one level per row: show (both nullable columns null), season
 enforces that `season_number` and `episode_id` are not both set; a unique
 index per level prevents duplicates. A keep lasts until someone removes it. `Rules.keep` rejects non-TV items,
 episodes that belong to another show, and seasons with no episodes; a
-malformed keep row counts as a show keep.
+malformed keep row counts as a show keep. When a concurrent keep on the same
+target wins the unique index between the lookup and the insert, `Rules.keep`
+returns that row.
+
+A provider switch (`ProviderSwitch.adopt_provider_switch/5`) deletes and
+recreates every episode, and an episode keep would cascade away with its row.
+Inside the switch's transaction, before the episodes go, each episode keep
+becomes a season keep for that episode's season
+(`Rules.carry_episode_keeps_to_seasons/1`), unless the season is already
+kept. A season keep protects at least as much as the episode keep did.
 
 ### Fixed behaviour
 
@@ -130,16 +139,34 @@ pure function: no Repo, no config reads, no clock. Inputs are plain structs:
 
 - the global rule and each show's override,
 - each show's episodes: id, season, episode number, air date, whether it is
-  monitored, live (not trashed) file ids and sizes, an "in flight" flag for
-  downloads or imports,
+  monitored, live (not trashed) files, an "in flight" flag for downloads or
+  imports. Each file (`Inputs.FileRef`) carries its id, size and every episode
+  it covers,
 - the keeps,
 - per-user watch records: `user_id`, `episode_id`, `watched`,
   `last_watched_at`, from `playback_progress`,
 - the resolved selected user ids, or `:misconfigured`.
 
 Output, one `%Mydia.SmartSpace.Cleanup{}` per unit to remove:
-`media_item_id`, `season_number`, `episode_ids`, `file_ids`, `bytes`,
-`eligible_at`.
+`media_item_id`, `season_number`, `episode_ids`, `files`, `file_ids`,
+`bytes`, `eligible_at`.
+
+### Multi-episode files
+
+One file can cover several episodes (`S01E09E10`, see
+`lib/mydia/media/README.md`): `media_files.episode_id` names the primary one
+and `media_file_episodes` the full set. An episode's files are every live
+non-extra file linked to it either way, so E10 inside an E09E10 file is not
+file-less and does not hold its season as a wanted episode.
+
+After computing candidate cleanups, a file may be trashed only if every
+episode it covers is part of some cleanup in the same evaluation. A file that
+fails this is held back, and the episodes it covers leave their cleanups'
+`episode_ids` (they are not unmonitored, since the file stays). Dropping an
+episode can strand another file on it, so this repeats until nothing more is
+held. Each file then goes to exactly one cleanup, the earliest eligible,
+which also lists every episode the file covers; each episode is listed once,
+and bytes count once. A cleanup left without files is dropped.
 
 ### Effective rule
 
@@ -205,8 +232,13 @@ watch records, and in-flight markers. It resolves `selected_users` to ids.
 
 `Mydia.Library.trash_episode_files(episode_ids, opts)` trashes every live
 media file on the given episodes, including additional versions, by calling
-the existing `trash_media_file/2` per file with `opts[:reason]`. The manual
-season dialog uses it and so trashes all live files of the season's episodes.
+the existing `trash_media_file/2` per file with `opts[:reason]`. Files are
+found through `media_files.episode_id` and `media_file_episodes`, each once
+(`Library.episode_files_for_removal/1`). A multi-episode file that also
+covers an episode outside the set is left alone and reported under `failed`
+with `:covers_other_episodes`. The manual season dialog uses it, and counts
+its files and bytes from the same selection, so the numbers it shows match
+what goes.
 The job instead trashes exactly the evaluator's `file_ids` through
 `Library.trash_media_files/2`. It never
 stops on a failure: it returns `{:ok, %{trashed: [file], failed: [{file,
@@ -224,16 +256,21 @@ covers the manual dialog's other two modes (`delete_files: true | false`).
 4. Take cleanups in `eligible_at` order up to a cap of 200 files per run. A
    cleanup that would push the run over 200 files is skipped and logged once
    per run; later, smaller cleanups may still be taken.
-5. For each cleanup: `Library.trash_media_files(file_ids, reason:
-   :smart_space)`, then `Mydia.Media.Monitoring.set_episodes_monitored/2`
-   with `false` for the episodes whose files all trashed. Episodes with a
-   failed file stay monitored.
+5. For each cleanup, in this order: unmonitor its `episode_ids`
+   (`Mydia.Media.Monitoring.set_episodes_monitored/2`), then
+   `Library.trash_media_files(file_ids, reason: :smart_space)`, then monitor
+   again every episode a failed file covers (from the file's covered
+   episodes), limited to episodes this run unmonitored, so one the user had
+   already unmonitored stays that way. An episode held by a failed file is not
+   unmonitored by a later cleanup in the same run.
 6. Write one `Mydia.Events` entry per cleanup with show, season or episode,
    file count and bytes.
 
 Re-running is safe: trashed files are no longer live, so the evaluator stops
 returning them. A file that failed is still live and eligible, so the next
-run retries it.
+run retries it. Unmonitoring first is the crash-safe order: a crash after it
+leaves the files live on unmonitored episodes, and eligibility does not look
+at `monitored` for an episode with files, so the next run finishes the job.
 
 ### Preview
 
@@ -296,7 +333,7 @@ IDs.
 
 | failure | behaviour |
 | ------- | --------- |
-| One file cannot be trashed (permissions, `{:trash_move_failed, _}`) | Logged; its episode stays monitored; the rest of the cleanup continues; retried next run. |
+| One file cannot be trashed (permissions, `{:trash_move_failed, _}`) | Logged; every episode it covers is monitored again; the rest of the cleanup continues; retried next run. |
 | Misconfigured rule reaches runtime via yaml or env | No deletions; one warning event per run. |
 | Job crashes mid-run | Completed cleanups stand; Oban retries; re-evaluation skips what is already trashed. |
 | A rule broader than intended | At most 200 files per run, and every file is in the trash for `trash_retention_days`. |
