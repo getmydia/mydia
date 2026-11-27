@@ -96,6 +96,17 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettingsTest do
     end
   end
 
+  test "non-string selected users are a validation error, not a crash" do
+    alias MydiaWeb.AdminSettingsLive.SmartSpaceSettings
+
+    for users <- [[123], ["ok", nil], "alice"] do
+      assert {:error, :validation, _} =
+               SmartSpaceSettings.save(%{"selected_users" => users}, nil)
+    end
+
+    assert Settings.get_config_setting_by_key("smart_space.selected_users") == nil
+  end
+
   test "the enabled toggle has an accessible name", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/admin/settings")
 

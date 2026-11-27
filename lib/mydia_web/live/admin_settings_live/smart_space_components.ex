@@ -28,7 +28,7 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceComponents do
             <h3 class="card-title text-base">{gettext("Smart Space")}</h3>
             <p class="text-xs opacity-60">
               {gettext(
-                "Moves watched TV to the trash for you, once everyone who matters has finished it. Nothing is deleted permanently."
+                "Moves watched TV to the trash for you, once everyone who matters has finished it. The usual trash retention applies from there."
               )}
             </p>
           </div>

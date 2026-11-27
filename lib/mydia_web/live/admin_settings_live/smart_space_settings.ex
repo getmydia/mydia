@@ -167,8 +167,14 @@ defmodule MydiaWeb.AdminSettingsLive.SmartSpaceSettings do
 
   # The chips submit only when the form carries the user group at all; a
   # present-but-empty group is a hidden "" marker, meaning nobody is selected.
-  defp parse_users(%{"selected_users" => users}) when is_list(users),
-    do: {:ok, "smart_space.selected_users", users |> Enum.reject(&(&1 == "")) |> Enum.uniq()}
+  defp parse_users(%{"selected_users" => users}) when is_list(users) do
+    if Enum.all?(users, &is_binary/1),
+      do: {:ok, "smart_space.selected_users", users |> Enum.reject(&(&1 == "")) |> Enum.uniq()},
+      else: {:error, :validation, invalid("smart_space.selected_users")}
+  end
+
+  defp parse_users(%{"selected_users" => _not_a_list}),
+    do: {:error, :validation, invalid("smart_space.selected_users")}
 
   defp parse_users(_), do: :skip
 

@@ -15740,7 +15740,7 @@ msgid "Invalid setting value"
 msgstr ""
 
 #: lib/mydia_web/live/admin_settings_live/index.ex:181
-#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:176
+#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:182
 #, elixir-autogen, elixir-format
 msgid "Invalid value for %{key}"
 msgstr ""
@@ -22926,21 +22926,21 @@ msgstr ""
 msgid "Delete season files"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:172
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:178
 #, elixir-autogen, elixir-format
 msgid "Deleted %{count} file, including from disk"
 msgid_plural "Deleted %{count} files, including from disk"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:168
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:174
 #, elixir-autogen, elixir-format
 msgid "Moved %{count} file to trash"
 msgid_plural "Moved %{count} files to trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:180
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:186
 #, elixir-autogen, elixir-format
 msgid "Removed %{count} file from the library, kept on disk"
 msgid_plural "Removed %{count} files from the library, kept on disk"
@@ -22983,11 +22983,6 @@ msgstr ""
 msgid "How long a finished season or episode stays put after it was last watched, so a rewatch can still happen."
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:30
-#, elixir-autogen, elixir-format
-msgid "Moves watched TV to the trash for you, once everyone who matters has finished it. Nothing is deleted permanently."
-msgstr ""
-
 #: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:126
 #, elixir-autogen, elixir-format
 msgid "Pick at least one person, or choose a different rule."
@@ -23012,7 +23007,7 @@ msgstr ""
 msgid "Smart Space"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:194
+#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:200
 #, elixir-autogen, elixir-format
 msgid "Unknown user: %{names}"
 msgstr ""
@@ -23221,7 +23216,7 @@ msgstr ""
 msgid "Removed by Smart Space after you watched it. Restoring keeps it from being cleaned up again; it does not re-monitor the episode"
 msgstr ""
 
-#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:188
+#: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:194
 #, elixir-autogen, elixir-format
 msgid "These names cannot be saved, because they contain a comma or start or end with a space: %{names}"
 msgstr ""
@@ -23236,4 +23231,9 @@ msgstr[1] ""
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:175
 #, elixir-autogen, elixir-format
 msgid "Every file in this season also holds episodes from another season, so they are skipped and nothing will be removed."
+msgstr ""
+
+#: lib/mydia_web/live/admin_settings_live/smart_space_components.ex:30
+#, elixir-autogen, elixir-format
+msgid "Moves watched TV to the trash for you, once everyone who matters has finished it. The usual trash retention applies from there."
 msgstr ""
