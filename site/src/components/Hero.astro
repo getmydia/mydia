@@ -1,5 +1,5 @@
 ---
-import PosterWall from './PosterWall.astro';
+import GlassWall from './GlassWall.astro';
 
 interface Link {
   label: string;
@@ -8,9 +8,8 @@ interface Link {
 }
 
 interface Wall {
-  rows?: number;
+  /** CSS min-height of the hero. */
   height?: string;
-  posters?: number[];
 }
 
 interface Props {
@@ -20,7 +19,7 @@ interface Props {
   subtitle: string;
   primary?: Link;
   secondary?: Link;
-  /** Draw a drifting poster wall behind the hero. */
+  /** Draw the glass wall behind the hero. */
   wall?: Wall;
 }
 
@@ -36,9 +35,9 @@ const external = (link: Link) =>
 >
   {wall && (
     <div class="absolute inset-0 -z-10">
-      <PosterWall rows={wall.rows} posters={wall.posters} />
-      <div class="absolute inset-0 bg-base-100/65"></div>
-      <div class="absolute inset-0 hero-spotlight"></div>
+      <GlassWall />
+      <div class="absolute inset-0 bg-base-100/25"></div>
+      <div class="absolute inset-0 hero-spotlight opacity-70"></div>
       <div class="absolute inset-x-0 top-0 h-24 bg-linear-to-b from-base-100 to-transparent"></div>
       <div class="absolute inset-x-0 bottom-0 h-48 bg-linear-to-t from-base-100 via-base-100/80 to-transparent"></div>
     </div>

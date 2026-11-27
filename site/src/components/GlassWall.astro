@@ -1,0 +1,15 @@
+---
+// A floor of poster-shaped glass panes behind a hero. It fills its positioned
+// parent. The shader is src/lib/glass.frag; the CSS gradient on the wrapper
+// shows until the first frame, and for good where WebGL is unavailable.
+---
+
+<div class="glass-wall" aria-hidden="true">
+  <canvas data-glass-wall></canvas>
+</div>
+
+<script>
+  import { mountGlassWall } from '../scripts/glass-wall';
+
+  document.querySelectorAll<HTMLCanvasElement>('canvas[data-glass-wall]').forEach(mountGlassWall);
+</script>

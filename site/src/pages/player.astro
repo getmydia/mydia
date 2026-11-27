@@ -8,14 +8,9 @@ import Platforms from '../components/Platforms.astro';
 import CrossSell from '../components/CrossSell.astro';
 import { Image } from 'astro:assets';
 import { playerThemes } from '../data/themes';
-import { postersFrom } from '../data/posters';
 import playerHome from '../assets/screenshots/player-home.png';
 import playerShows from '../assets/screenshots/player-shows.png';
 import playerDesktop from '../assets/screenshots/player-desktop.png';
-
-// A third of the way in, so the wall opens on different posters than the
-// homepage and server walls.
-const wallPosters = postersFrom(1 / 3);
 
 const features = [
   { icon: 'devices', title: 'Cross-platform', description: 'Native apps for Android, Android TV, iOS, iPadOS, macOS, Windows and Linux, plus a web player.' },
@@ -37,7 +32,7 @@ const features = [
     subtitle="Play from Plex, Jellyfin, Mydia Server, and soon local folders, on Android, iOS, desktop and the web."
     primary={{ label: 'Download', href: '/download' }}
     secondary={{ label: 'See platforms', href: '/download#platforms' }}
-    wall={{ rows: 3, height: '34rem', posters: wallPosters }}
+    wall={{ height: '34rem' }}
   />
 
   <Sources />

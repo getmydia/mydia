@@ -4,16 +4,21 @@ import Hero from '../components/Hero.astro';
 import ProductCard from '../components/ProductCard.astro';
 import LatestPosts from '../components/LatestPosts.astro';
 import { Image } from 'astro:assets';
-import { poster } from '../data/posters';
+import pane1 from '../assets/glass/pane-1.jpg';
+import pane2 from '../assets/glass/pane-2.jpg';
+import pane3 from '../assets/glass/pane-3.jpg';
 import playerHome from '../assets/screenshots/player-home.png';
 import playerDesktop from '../assets/screenshots/player-desktop.png';
 import serverHome from '../assets/screenshots/homepage.png';
 
+// Three still panes of the hero's glass (assets/export-glass-panes.js).
 const fan = [
-  { poster: 1, class: '-rotate-12 -translate-x-[7.5rem] translate-y-6' },
-  { poster: 3, class: 'rotate-0 -translate-y-1' },
-  { poster: 5, class: 'rotate-12 translate-x-[7.5rem] translate-y-6' },
+  { pane: pane1, class: '-rotate-12 -translate-x-[7.5rem] translate-y-6' },
+  { pane: pane2, class: 'rotate-0 -translate-y-1' },
+  { pane: pane3, class: 'rotate-12 translate-x-[7.5rem] translate-y-6' },
 ];
+// daisyUI's hover-3d tilts its first child from eight hover zones that follow it.
+const hoverZones = Array.from({ length: 8 });
 
 const together = [
   { title: 'Remote streaming', body: 'Connect Mydia Player to Mydia Server from outside your home network over an encrypted peer-to-peer link without port forwarding.' },
@@ -30,7 +35,7 @@ const together = [
     title="Open-source media player"
     accent="and library server"
     subtitle="Play from Plex, Jellyfin and Mydia Server on your devices, or run Mydia Server to organize and download movies and TV shows."
-    wall={{ rows: 4, height: '40rem' }}
+    wall={{ height: '40rem' }}
   />
 
   <section class="px-4 -mt-16 sm:-mt-20 pb-24 relative overflow-x-clip">
@@ -67,13 +72,16 @@ const together = [
       >
         <div slot="media" class="absolute inset-0">
           {fan.map((p) => (
-            <Image
-              src={poster(p.poster)}
-              alt=""
-              width={320}
-              loading="lazy"
-              class={`absolute left-1/2 top-8 -ml-[4.5rem] w-36 rounded-lg shadow-2xl shadow-black/60 ${p.class}`}
-            />
+            <div class={`hover-3d absolute left-1/2 top-8 -ml-[4.5rem] w-36 ${p.class}`}>
+              <Image
+                src={p.pane}
+                alt=""
+                width={320}
+                loading="lazy"
+                class="w-full h-auto rounded-lg ring-1 ring-white/20 shadow-2xl shadow-black/60"
+              />
+              {hoverZones.map(() => <div></div>)}
+            </div>
           ))}
           <div class="absolute left-1/2 -translate-x-1/2 top-24 w-48 rounded-[1.75rem] border-4 border-base-content/25 bg-base-300 p-1 shadow-2xl shadow-black/70">
             <div class="rounded-[1.4rem] overflow-hidden">
