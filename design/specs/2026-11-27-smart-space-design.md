@@ -316,6 +316,10 @@ New admin page `AdminSmartSpaceLive.Index`, linked in the nav beside Trash.
   and "Stop monitoring this season", checked by default. The radio group is
   extracted from `Modals.file_delete_confirm_modal/1` into a shared component
   so both dialogs use one copy. Authorized with `authorize_delete_media`.
+  Files that also hold an episode of another season are skipped, and the
+  dialog says how many; when every file is skipped it still opens, explains
+  why, and disables the confirm button. "Stop monitoring" leaves monitored
+  every episode a skipped or failed file still covers.
 - When Smart Space applies to the show, each season header shows a "Cleans up
   in N days" badge (from the show-scoped preview) and a **Keep** toggle;
   under the episode unit, episode rows get the toggle instead.

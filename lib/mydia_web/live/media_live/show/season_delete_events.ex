@@ -7,7 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
   import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Mydia.Library
-  alias Mydia.Media
+  alias Mydia.Media.{Episode, Monitoring}
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.MediaLive.Show.{Loaders, SeasonDelete}
 
@@ -40,18 +40,21 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
             do: e.id
 
       # The same selection the delete acts on, so the numbers match what goes.
-      case Library.episode_files_for_removal(episode_ids).removable do
-        [] ->
+      # A season whose files are all blocked still opens, to say why nothing
+      # can be removed.
+      case Library.episode_files_for_removal(episode_ids) do
+        %{removable: [], blocked: []} ->
           {:noreply, socket}
 
-        files ->
+        %{removable: files, blocked: blocked} ->
           {:noreply,
            socket
            |> assign(:season_delete, %SeasonDelete{
              season_number: season_number,
              episode_ids: episode_ids,
              file_count: length(files),
-             bytes: Enum.reduce(files, 0, &((&1.size || 0) + &2))
+             bytes: Enum.reduce(files, 0, &((&1.size || 0) + &2)),
+             blocked_count: length(blocked)
            })
            |> assign(:show_season_delete_confirm, true)}
       end
@@ -88,6 +91,9 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
 
   defp change(_params, socket), do: {:noreply, socket}
 
+  defp delete_files(_params, %{assigns: %{season_delete: %SeasonDelete{file_count: 0}}} = socket),
+    do: {:noreply, socket}
+
   defp delete_files(_params, %{assigns: %{season_delete: %SeasonDelete{} = state}} = socket) do
     with :ok <- Authorization.authorize_delete_media(socket) do
       media_item_id = socket.assigns.media_item.id
@@ -95,10 +101,10 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
 
       {count, failed} = run_season_delete(state)
 
-      # The user asked for the season to stop being monitored; honour it even
-      # when some files failed, since the failure count is shown below.
-      if state.unmonitor,
-        do: Media.update_season_monitoring(media_item_id, state.season_number, false)
+      # The user asked for the season to stop being monitored. Honour it for
+      # every episode except those a file still holds: one that failed, or
+      # one skipped because it also covers another season.
+      if state.unmonitor, do: unmonitor_released(state.episode_ids, failed)
 
       media_item = Loaders.load_media_item(socket.assigns.current_scope, media_item_id)
       # The hero links the next episode's file; recompute it as mount does.
@@ -132,6 +138,15 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
   end
 
   defp delete_files(_params, socket), do: {:noreply, socket}
+
+  defp unmonitor_released(episode_ids, failed) do
+    held = failed |> Enum.map(&elem(&1, 0)) |> Library.covered_episode_ids()
+
+    episode_ids
+    |> Enum.reject(&MapSet.member?(held, &1))
+    |> Enum.map(&%Episode{id: &1})
+    |> Monitoring.set_episodes_monitored(false)
+  end
 
   # Returns {removed_count, failed}. A `:file_delete_failed` entry is a row
   # that is already gone from the DB, so it counts as failed, not removed.

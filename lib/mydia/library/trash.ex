@@ -211,6 +211,27 @@ defmodule Mydia.Library.Trash do
   defp blocked_failures(blocked), do: Enum.map(blocked, &{&1, :covers_other_episodes})
 
   @doc """
+  Every episode the given files cover: each file's `episode_id` plus its
+  `media_file_episodes` links. A file whose row is already gone still counts
+  its `episode_id`.
+  """
+  @spec covered_episode_ids([MediaFile.t()]) :: MapSet.t(binary())
+  def covered_episode_ids([]), do: MapSet.new()
+
+  def covered_episode_ids(files) do
+    file_ids = Enum.map(files, & &1.id)
+
+    linked =
+      Repo.all(
+        from(l in MediaFileEpisode, where: l.media_file_id in ^file_ids, select: l.episode_id)
+      )
+
+    (Enum.map(files, & &1.episode_id) ++ linked)
+    |> Enum.reject(&is_nil/1)
+    |> MapSet.new()
+  end
+
+  @doc """
   Trashes exactly the listed media files that are still live (not trashed),
   and keeps going when one fails. Ids that no longer exist or are already
   trashed are ignored; nothing else on the same episodes is touched.

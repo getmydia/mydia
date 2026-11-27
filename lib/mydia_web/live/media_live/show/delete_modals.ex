@@ -164,6 +164,35 @@ defmodule MydiaWeb.MediaLive.Show.DeleteModals do
           </p>
         </div>
 
+        <div
+          :if={@season_delete.file_count == 0}
+          id="season-delete-all-skipped"
+          role="alert"
+          class="alert alert-info text-sm mb-4"
+        >
+          <.icon name="hero-information-circle" class="w-5 h-5" />
+          <span>
+            {gettext(
+              "Every file in this season also holds episodes from another season, so they are skipped and nothing will be removed."
+            )}
+          </span>
+        </div>
+        <div
+          :if={@season_delete.file_count > 0 and @season_delete.blocked_count > 0}
+          id="season-delete-skipped"
+          role="alert"
+          class="alert alert-info text-sm mb-4"
+        >
+          <.icon name="hero-information-circle" class="w-5 h-5" />
+          <span>
+            {ngettext(
+              "%{count} file is skipped because it also holds episodes from another season",
+              "%{count} files are skipped because they also hold episodes from another season",
+              @season_delete.blocked_count
+            )}
+          </span>
+        </div>
+
         <.delete_mode_options
           mode={@season_delete.mode}
           form_id="season-delete-form"
@@ -191,6 +220,7 @@ defmodule MydiaWeb.MediaLive.Show.DeleteModals do
             id="season-delete-confirm"
             type="button"
             phx-click="delete_season_files"
+            disabled={@season_delete.file_count == 0}
             class={["btn", confirm_class(@season_delete.mode)]}
           >
             <.icon name="hero-trash" class="w-4 h-4" />

@@ -145,6 +145,45 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
       assert is_nil(Repo.reload!(f3).trashed_at)
     end
 
+    test "says how many files are skipped for holding another season", %{
+      conn: conn,
+      show: show,
+      s1: [_, _, {_e3, f3}],
+      s2: [{s2e1, _} | _]
+    } do
+      Repo.insert!(%MediaFileEpisode{media_file_id: f3.id, episode_id: s2e1.id})
+
+      {conn, _user} = register_and_log_in_user(conn)
+      view = open_dialog(conn, show)
+
+      assert has_element?(view, "#season-delete-skipped", "1 file is skipped")
+      refute has_element?(view, "#season-delete-all-skipped")
+      refute has_element?(view, "#season-delete-confirm[disabled]")
+    end
+
+    test "opens with the confirm disabled when every file is skipped", %{
+      conn: conn,
+      show: show,
+      s1: s1,
+      s2: [{s2e1, _} | _]
+    } do
+      for {_episode, file} <- s1,
+          do: Repo.insert!(%MediaFileEpisode{media_file_id: file.id, episode_id: s2e1.id})
+
+      {conn, _user} = register_and_log_in_user(conn)
+      view = open_dialog(conn, show)
+
+      assert has_element?(view, "#season-delete-all-skipped")
+      assert has_element?(view, "#season-delete-confirm[disabled]")
+
+      render_click(view, "delete_season_files", %{})
+
+      for {episode, file} <- s1 do
+        assert is_nil(Repo.reload!(file).trashed_at)
+        assert monitored?(episode)
+      end
+    end
+
     test "trash is selected and unmonitor is checked by default", %{conn: conn, show: show} do
       {conn, _user} = register_and_log_in_user(conn)
       view = open_dialog(conn, show)
@@ -197,6 +236,25 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
 
       view |> element("#season-delete-confirm") |> render_click()
       assert next_episode_id(view) == s2e1.id
+    end
+
+    test "stop monitoring spares episodes a skipped file still holds", %{
+      conn: conn,
+      show: show,
+      s1: [{e1, _}, {e2, _}, {e3, f3}],
+      s2: [{s2e1, _} | _]
+    } do
+      Repo.insert!(%MediaFileEpisode{media_file_id: f3.id, episode_id: s2e1.id})
+
+      {conn, _user} = register_and_log_in_user(conn)
+      view = open_dialog(conn, show)
+      view |> element("#season-delete-confirm") |> render_click()
+
+      refute monitored?(e1)
+      refute monitored?(e2)
+      assert monitored?(e3)
+      assert monitored?(s2e1)
+      assert is_nil(Repo.reload!(f3).trashed_at)
     end
 
     test "unchecking unmonitor keeps the season monitored", %{conn: conn, show: show, s1: s1} do

@@ -239,7 +239,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/index/section_components.ex:66
 #: lib/mydia_web/live/media_live/show/availability_components.ex:87
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:45
-#: lib/mydia_web/live/media_live/show/delete_modals.ex:188
+#: lib/mydia_web/live/media_live/show/delete_modals.ex:217
 #: lib/mydia_web/live/media_live/show/download_audio_components.ex:98
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:147
 #: lib/mydia_web/live/media_live/show/modals.ex:113
@@ -4356,7 +4356,7 @@ msgstr ""
 #: lib/mydia_web/live/admin_trash_live/components.ex:216
 #: lib/mydia_web/live/admin_trash_live/components.ex:270
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:132
-#: lib/mydia_web/live/media_live/show/delete_modals.ex:210
+#: lib/mydia_web/live/media_live/show/delete_modals.ex:240
 #, elixir-autogen, elixir-format
 msgid "Delete permanently"
 msgstr ""
@@ -6349,7 +6349,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:343
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:112
-#: lib/mydia_web/live/media_live/show/delete_modals.ex:211
+#: lib/mydia_web/live/media_live/show/delete_modals.ex:241
 #, elixir-autogen, elixir-format
 msgid "Move to trash"
 msgstr ""
@@ -8003,7 +8003,7 @@ msgstr ""
 msgid "Remove from collection"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/delete_modals.ex:212
+#: lib/mydia_web/live/media_live/show/delete_modals.ex:242
 #, elixir-autogen, elixir-format
 msgid "Remove from library"
 msgstr ""
@@ -22908,7 +22908,7 @@ msgstr ""
 msgid "Rename skipped: a cleanup is running on this library"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:121
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:127
 #, elixir-autogen, elixir-format
 msgid "%{count} file could not be removed"
 msgid_plural "%{count} files could not be removed"
@@ -22926,28 +22926,28 @@ msgstr ""
 msgid "Delete season files"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:157
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:172
 #, elixir-autogen, elixir-format
 msgid "Deleted %{count} file, including from disk"
 msgid_plural "Deleted %{count} files, including from disk"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:153
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:168
 #, elixir-autogen, elixir-format
 msgid "Moved %{count} file to trash"
 msgid_plural "Moved %{count} files to trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/season_delete_events.ex:165
+#: lib/mydia_web/live/media_live/show/season_delete_events.ex:180
 #, elixir-autogen, elixir-format
 msgid "Removed %{count} file from the library, kept on disk"
 msgid_plural "Removed %{count} files from the library, kept on disk"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/delete_modals.ex:182
+#: lib/mydia_web/live/media_live/show/delete_modals.ex:211
 #, elixir-autogen, elixir-format
 msgid "Stop monitoring this season"
 msgstr ""
@@ -23224,4 +23224,16 @@ msgstr ""
 #: lib/mydia_web/live/admin_settings_live/smart_space_settings.ex:188
 #, elixir-autogen, elixir-format
 msgid "These names cannot be saved, because they contain a comma or start or end with a space: %{names}"
+msgstr ""
+
+#: lib/mydia_web/live/media_live/show/delete_modals.ex:188
+#, elixir-autogen, elixir-format
+msgid "%{count} file is skipped because it also holds episodes from another season"
+msgid_plural "%{count} files are skipped because they also hold episodes from another season"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/mydia_web/live/media_live/show/delete_modals.ex:175
+#, elixir-autogen, elixir-format
+msgid "Every file in this season also holds episodes from another season, so they are skipped and nothing will be removed."
 msgstr ""
