@@ -128,14 +128,15 @@ defmodule Mydia.SmartSpace.Rules do
 
   @doc """
   Turns each episode keep of a show into a season keep for that episode's
-  season, unless the season is already kept. Returns the number of season keeps
-  added.
+  season, unless the season is already kept. Returns `{:ok, added}`, or the
+  first failed insert's `{:error, changeset}` so the caller can roll back.
 
   For a provider switch, which deletes and recreates every episode row: an
   episode keep would cascade away with its row. A season keep protects at least
   as much, so call this inside the switch's transaction before the episodes go.
   """
-  @spec carry_episode_keeps_to_seasons(binary()) :: non_neg_integer()
+  @spec carry_episode_keeps_to_seasons(binary()) ::
+          {:ok, non_neg_integer()} | {:error, Ecto.Changeset.t()}
   def carry_episode_keeps_to_seasons(media_item_id) do
     kept_seasons =
       from(k in Keep,
@@ -155,13 +156,15 @@ defmodule Mydia.SmartSpace.Rules do
       |> Repo.all()
       |> Enum.uniq_by(&elem(&1, 0))
 
-    for {season, created_by_id} <- seasons do
+    Enum.reduce_while(seasons, {:ok, 0}, fn {season, created_by_id}, {:ok, count} ->
       %Keep{media_item_id: media_item_id, season_number: season, created_by_id: created_by_id}
       |> Keep.changeset()
-      |> Repo.insert!()
-    end
-
-    length(seasons)
+      |> Repo.insert()
+      |> case do
+        {:ok, _keep} -> {:cont, {:ok, count + 1}}
+        {:error, changeset} -> {:halt, {:error, changeset}}
+      end
+    end)
   end
 
   @doc "Removes the keep at a level. Missing keeps are fine."

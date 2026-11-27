@@ -99,6 +99,13 @@ defmodule Mydia.Config.SmartSpaceTest do
       assert Map.has_key?(errors.smart_space, :grace_days)
     end
 
+    test "boolean and integer tolerate case and surrounding space" do
+      assert env(%{"SMART_SPACE_ENABLED" => "TRUE"}).enabled == true
+      assert env(%{"SMART_SPACE_ENABLED" => " true "}).enabled == true
+      assert env(%{"SMART_SPACE_GRACE_DAYS" => " 7"}).grace_days == 7
+      assert env(%{"SMART_SPACE_ENABLED" => " nope "}).enabled == :invalid
+    end
+
     test "absent boolean and integer stay absent" do
       loaded = env(%{"SMART_SPACE_UNIT" => "season"})
       refute Map.has_key?(loaded, :enabled)

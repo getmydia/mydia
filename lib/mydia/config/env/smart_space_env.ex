@@ -8,7 +8,8 @@ defmodule Mydia.Config.Env.SmartSpaceEnv do
   Enum values go through a fixed-value parser that maps unknown strings to
   `:invalid`, so a typo fails validation by name instead of silently falling
   back to the default. `Loader.parse_atom/1` must not be used here. The
-  boolean and the integer get the same treatment: a present value that does
+  boolean (trimmed, any case) and the integer (trimmed) get the same
+  treatment: a present value that does
   not parse becomes `:invalid`, which does not cast, so `SMART_SPACE_ENABLED=yes`
   or `SMART_SPACE_GRACE_DAYS=7d` stops startup instead of being dropped. See
   `lib/mydia/config/README.md`.
@@ -42,7 +43,12 @@ defmodule Mydia.Config.Env.SmartSpaceEnv do
   end
 
   defp or_invalid(value, type) do
-    parsed = if type == :boolean, do: parse_boolean(value), else: parse_integer(value)
+    trimmed = String.trim(value)
+
+    parsed =
+      if type == :boolean,
+        do: parse_boolean(String.downcase(trimmed)),
+        else: parse_integer(trimmed)
 
     case parsed do
       {:ok, _} = ok -> ok

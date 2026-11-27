@@ -50,4 +50,13 @@ defmodule Mydia.Media.ProviderSwitchKeepsTest do
     assert Enum.all?(keeps, &is_nil(&1.episode_id))
     assert keeps |> Enum.map(& &1.season_number) |> Enum.sort() == [2, 3]
   end
+
+  test "carry_episode_keeps_to_seasons returns {:ok, added}" do
+    item = media_item_fixture(%{type: "tv_show", title: "Lantern Harbor"})
+    ep = episode_fixture(%{media_item_id: item.id, season_number: 4, episode_number: 1})
+    {:ok, _} = Rules.keep({:episode, item.id, ep.id}, nil)
+
+    assert {:ok, 1} = Rules.carry_episode_keeps_to_seasons(item.id)
+    assert {:ok, 0} = Rules.carry_episode_keeps_to_seasons(item.id)
+  end
 end

@@ -324,7 +324,7 @@ defmodule Mydia.Media.ProviderSwitch do
           end)
 
           # Episode keeps cascade away with their rows; keep the seasons instead.
-          Mydia.SmartSpace.Rules.carry_episode_keeps_to_seasons(item.id)
+          carry_keeps_or_rollback(item.id)
 
           Repo.delete_all(from(e in Episode, where: e.media_item_id == ^item.id))
 
@@ -389,6 +389,14 @@ defmodule Mydia.Media.ProviderSwitch do
 
   def adopt_provider_switch(%Scope{}, %MediaItem{type: type}, _candidate, _target, _config) do
     {:error, {:invalid_type, "Expected tv_show, got #{type}"}}
+  end
+
+  # Inside the switch transaction: a failed insert rolls the switch back.
+  defp carry_keeps_or_rollback(media_item_id) do
+    case Mydia.SmartSpace.Rules.carry_episode_keeps_to_seasons(media_item_id) do
+      {:ok, _added} -> :ok
+      {:error, reason} -> Repo.rollback(reason)
+    end
   end
 
   defp prefetch_provider_seasons(provider_id, target_provider, seasons, config, original_language) do
