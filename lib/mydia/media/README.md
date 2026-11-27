@@ -704,3 +704,17 @@ restore flow: move the files back by hand, the preview and the completion
 message say where they went. The container has no `media_files` row, and
 `TrashStore.audit/0` classifies non-UUID containers as orphaned without querying
 them, so the Trash page can sweep it.
+
+## Smart Space trashes watched TV and stops monitoring it
+
+`Mydia.Jobs.SmartSpaceCleanup` (design: `design/specs/2026-11-27-smart-space-design.md`)
+moves the files of watched seasons or episodes to the trash with
+`trashed_reason: :smart_space`, never deleting them permanently, and then
+unmonitors the episodes whose files all trashed (episodes with a failed file
+stay monitored). The Trash page labels the reason "Smart Space".
+
+Restoring such a file does not re-monitor its episode. Monitoring is the
+user's decision, so the restore puts the file back and leaves the episode
+unmonitored; the Trash page says so. Turn monitoring back on by hand if you
+want the episode searched again, or add a Keep so the automation leaves it
+alone.

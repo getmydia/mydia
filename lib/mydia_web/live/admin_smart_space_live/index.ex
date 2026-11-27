@@ -164,9 +164,5 @@ defmodule MydiaWeb.AdminSmartSpaceLive.Index do
   def keep_label(_), do: gettext("Whole show")
 
   @doc false
-  def format_run(nil), do: gettext("never")
-  def format_run(%DateTime{} = at), do: Calendar.strftime(at, "%Y-%m-%d %H:%M UTC")
-
-  @doc false
   def size(bytes), do: format_file_size(bytes)
 end

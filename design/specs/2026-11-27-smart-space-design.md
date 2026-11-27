@@ -45,7 +45,9 @@ Enum-valued env vars get a dedicated fixed-value parser that maps unknown
 strings to `:invalid`, following `parse_external_torrents/1`, never
 `Loader.parse_atom/1` (see `lib/mydia/config/README.md`). Config validation
 rejects invalid enums, a negative `grace_days`, and a `"selected"` policy
-with an empty list or a username that does not exist.
+with an empty list. Whether the usernames exist is not a config validation:
+it is checked when the job loads its inputs and when the settings card saves.
+Config rows for `smart_space.*` are stored under category `:general`.
 
 The watched policy is global only. Whose viewing counts is a household
 decision, not a per-show one.
@@ -83,7 +85,9 @@ New table `smart_space_keeps`:
 Exactly one level per row: show (both nullable columns null), season
 (`season_number` set) or episode (`episode_id` set). A changeset check
 enforces that `season_number` and `episode_id` are not both set; a unique
-index per level prevents duplicates. A keep lasts until someone removes it.
+index per level prevents duplicates. A keep lasts until someone removes it. `Rules.keep` rejects non-TV items,
+episodes that belong to another show, and seasons with no episodes; a
+malformed keep row counts as a show keep.
 
 ### Fixed behaviour
 
@@ -94,10 +98,17 @@ Not configurable:
   `:smart_space` is a new value on `MediaFile.trashed_reason`'s
   `Ecto.Enum`; the column is `:text`, so no migration is needed for it.
 - Season 0 (specials) is never eligible.
-- A season is complete only when every episode has aired and is watched.
-  Unaired episodes keep a season ineligible under the season unit.
-- Episodes with an active download or a pending import candidate are
-  skipped.
+- A season is complete only when every episode has aired and every aired
+  episode that has files is watched. Aired episodes with no files need not be
+  watched. Unaired means `air_date` is nil or after today, where today is the
+  date of the evaluation instant. Unaired episodes keep a season ineligible
+  under the season unit.
+- Episodes with an in-flight download are skipped. "In flight" means a
+  `Download.occupying/1` row: an episode download marks that episode, and a
+  season-pack download (`episode_id` nil) marks the whole show. Import
+  candidates carry no episode link, so they are not part of this check.
+- Extras (files with `extra_kind` set) are neither counted nor trashed by the
+  automation.
 
 Migrations use `:text` for strings, a real timestamp, and a check of every
 remote branch for version collisions before the filename is final.
@@ -139,7 +150,11 @@ For a show, the required users are:
   for them".
 
 `:misconfigured` (a selected username that does not resolve) makes the
-evaluator return no cleanups at all.
+evaluator return no cleanups at all. Usernames are resolved when the job
+loads its inputs; an unknown name means misconfigured, nothing is trashed and
+one warning event is written. When nothing is in scope (no rule enabled
+anywhere), the job does nothing and writes no event, even if `selected_users`
+is stale.
 
 An episode is **done** when every required user has `watched: true` on it
 (or, under `any`, at least one user has).
@@ -148,9 +163,12 @@ An episode is **done** when every required user has `watched: true` on it
 
 - Episode unit: `done_at` is the latest `last_watched_at` among the required
   users' records on that episode (under `any`, the earliest watched record,
-  since one watcher is enough).
-- Season unit: the season must have every episode aired and done; `done_at`
-  is the latest episode `done_at` in it.
+  since one watcher is enough). The same holds for `done_at` under the `any`
+  policy at season level.
+- Season unit: the season must have every episode aired, and every aired
+  episode with files done; `done_at` is the latest episode `done_at` in it.
+  A season cleanup lists every episode of the season for unmonitoring, but its
+  `file_ids` are only the approved non-extra files.
 - `eligible_at = done_at + grace_days`. A unit is returned when
   `eligible_at <= now`.
 
@@ -177,7 +195,10 @@ watch records, and in-flight markers. It resolves `selected_users` to ids.
 
 `Mydia.Library.trash_episode_files(episode_ids, opts)` trashes every live
 media file on the given episodes, including additional versions, by calling
-the existing `trash_media_file/2` per file with `opts[:reason]`. It never
+the existing `trash_media_file/2` per file with `opts[:reason]`. The manual
+season dialog uses it and so trashes all live files of the season's episodes.
+The job instead trashes exactly the evaluator's `file_ids` through
+`Library.trash_media_files/2`. It never
 stops on a failure: it returns `{:ok, %{trashed: [file], failed: [{file,
 reason}], bytes: n}}`. A sibling `delete_episode_files(episode_ids, opts)`
 covers the manual dialog's other two modes (`delete_files: true | false`).
@@ -190,9 +211,10 @@ covers the manual dialog's other two modes (`delete_files: true | false`).
    exists.
 2. Load, evaluate with `DateTime.utc_now()`.
 3. If the rule is misconfigured, write one warning event and stop.
-4. Take cleanups in `eligible_at` order up to a cap of 200 files per run;
-   log when the cap truncates the list.
-5. For each cleanup: `trash_episode_files(episode_ids, reason:
+4. Take cleanups in `eligible_at` order up to a cap of 200 files per run. A
+   cleanup that would push the run over 200 files is skipped and logged once
+   per run; later, smaller cleanups may still be taken.
+5. For each cleanup: `Library.trash_media_files(file_ids, reason:
    :smart_space)`, then `Mydia.Media.Monitoring.set_episodes_monitored/2`
    with `false` for the episodes whose files all trashed. Episodes with a
    failed file stay monitored.

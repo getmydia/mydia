@@ -105,6 +105,7 @@ defmodule MydiaWeb.MobileLayoutManifest do
       "/admin/library-paths" => page("/admin/library-paths"),
       "/admin/duplicates" => page("/admin/duplicates"),
       "/admin/trash" => page("/admin/trash"),
+      "/admin/smart-space" => page("/admin/smart-space"),
       "/admin/media-servers" => page("/admin/media-servers"),
       "/admin/storage-backends" => page("/admin/storage-backends"),
       "/admin/plugins" => page("/admin/plugins"),
