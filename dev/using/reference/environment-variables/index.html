@@ -1917,6 +1917,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#smart-space" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Smart Space
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#language" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3997,6 +4008,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#smart-space" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Smart Space
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#language" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5159,6 +5181,43 @@ before raising it. Also settable under <strong>Admin &gt; System &gt; Settings &
 </ul>
 <p>The relay keeps one record per install per week and does not store your IP address. That record is also how the developers count active installs and decide which versions and platforms to prioritise. Nothing about your library, accounts or network is sent.</p>
 <p>To turn it off, set <code>UPDATE_CHECK_ENABLED=false</code>, or switch off <strong>Check for updates</strong> under <strong>Admin → Settings → Updates</strong>. When the variable is set, it overrides the switch.</p>
+<h2 id="smart-space">Smart Space</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SMART_SPACE_ENABLED</code></td>
+<td>Automatically move watched TV to the trash to free space</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>SMART_SPACE_UNIT</code></td>
+<td>What gets trashed at a time: <code>season</code> or <code>episode</code></td>
+<td><code>season</code></td>
+</tr>
+<tr>
+<td><code>SMART_SPACE_GRACE_DAYS</code></td>
+<td>Days to wait after the last watch before trashing. <code>0</code> or more</td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>SMART_SPACE_WATCHED_BY</code></td>
+<td>Who must have watched it: <code>all_started</code> (everyone who started it), <code>any</code> (one user is enough) or <code>selected</code></td>
+<td><code>all_started</code></td>
+</tr>
+<tr>
+<td><code>SMART_SPACE_SELECTED_USERS</code></td>
+<td>Comma-separated usernames, read when <code>SMART_SPACE_WATCHED_BY</code> is <code>selected</code></td>
+<td>(empty)</td>
+</tr>
+</tbody>
+</table>
 <h2 id="language">Language</h2>
 <table>
 <thead>
