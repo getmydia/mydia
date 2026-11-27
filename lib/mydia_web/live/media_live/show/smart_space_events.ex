@@ -72,10 +72,10 @@ defmodule MydiaWeb.MediaLive.Show.SmartSpaceEvents do
   def handle("close", _params, socket),
     do: {:noreply, assign(socket, :show_smart_space_modal, false)}
 
-  def handle("validate", %{"smart_space" => params}, socket),
+  def handle("validate", %{"smart_space" => params}, socket) when is_map(params),
     do: {:noreply, assign(socket, :smart_space_form, to_form(params, as: :smart_space))}
 
-  def handle("save", %{"smart_space" => params}, socket) do
+  def handle("save", %{"smart_space" => params}, socket) when is_map(params) do
     with :ok <- authorize_edit(socket) do
       case Rules.put_override(socket.assigns.media_item.id, override_attrs(params)) do
         {:ok, _override} ->
@@ -92,21 +92,30 @@ defmodule MydiaWeb.MediaLive.Show.SmartSpaceEvents do
     end
   end
 
-  def handle("keep", params, socket) do
+  def handle("keep", params, %{assigns: %{smart_space?: true}} = socket) do
     with :ok <- Authorization.authorize_delete_media(socket),
          {:ok, target} <- keep_target(params, socket.assigns.media_item.id) do
-      if MapSet.member?(socket.assigns.smart_space_keeps, keep_key(target)) do
-        Rules.unkeep(target)
-      else
-        Rules.keep(target, socket.assigns.current_user)
-      end
+      result =
+        if MapSet.member?(socket.assigns.smart_space_keeps, keep_key(target)) do
+          Rules.unkeep(target)
+        else
+          Rules.keep(target, socket.assigns.current_user)
+        end
 
-      {:noreply, reload(socket, socket.assigns.media_item)}
+      socket = reload(socket, socket.assigns.media_item)
+
+      case result do
+        {:error, _} -> {:noreply, put_flash(socket, :error, gettext("Could not keep that."))}
+        _ -> {:noreply, socket}
+      end
     else
       {:unauthorized, socket} -> {:noreply, socket}
       :error -> {:noreply, socket}
     end
   end
+
+  # Malformed or unknown events, and keeps on a movie page, do nothing.
+  def handle(_action, _params, socket), do: {:noreply, socket}
 
   defp reload(socket, media_item), do: assign_smart_space(socket, media_item)
 

@@ -372,14 +372,14 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
                     <.icon name="hero-magnifying-glass" class="w-4 h-4" />
                   </button>
 
-                  <%!-- Muting moves to the icon. opacity-40 on the button dimmed
-                        the focus ring with it. --%>
                   <SmartSpaceComponents.episode_keep
                     episode_id={episode.id}
                     season_number={episode.season_number}
                     smart_space={@smart_space}
                   />
 
+                  <%!-- Muting moves to the icon. opacity-40 on the button dimmed
+                        the focus ring with it. --%>
                   <button
                     id={"episode-#{episode.id}-monitor"}
                     type="button"

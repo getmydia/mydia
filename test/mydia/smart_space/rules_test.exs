@@ -67,6 +67,22 @@ defmodule Mydia.SmartSpace.RulesTest do
       assert length(Rules.list_keeps()) == 3
     end
 
+    test "keep rejects targets that do not belong to the show" do
+      s = show()
+      other = show()
+      movie = media_item_fixture(%{type: "movie"})
+      own = episode_fixture(%{media_item_id: s.id, season_number: 1})
+      foreign = episode_fixture(%{media_item_id: other.id, season_number: 4})
+
+      assert {:error, :invalid_target} = Rules.keep({:show, movie.id}, nil)
+      assert {:error, :invalid_target} = Rules.keep({:episode, s.id, foreign.id}, nil)
+      assert {:error, :invalid_target} = Rules.keep({:episode, s.id, "nope"}, nil)
+      assert {:error, :invalid_target} = Rules.keep({:season, s.id, 4}, nil)
+      assert {:ok, _} = Rules.keep({:episode, s.id, own.id}, nil)
+      assert Rules.list_keeps(media_item_id: s.id) |> length() == 1
+      assert Rules.list_keeps(media_item_id: other.id) == []
+    end
+
     test "list_keeps narrows and preloads, unkeep removes" do
       s = show()
       other = show()

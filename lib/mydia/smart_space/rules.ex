@@ -4,7 +4,7 @@ defmodule Mydia.SmartSpace.Rules do
   """
   import Ecto.Query
 
-  alias Mydia.Media.MediaItem
+  alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
   alias Mydia.SmartSpace.{Keep, Override}
 
@@ -55,9 +55,43 @@ defmodule Mydia.SmartSpace.Rules do
     end
   end
 
-  @doc "Keeps a show, season or episode. Idempotent: a repeat returns the existing row."
-  @spec keep(target, struct() | nil) :: {:ok, Keep.t()} | {:error, Ecto.Changeset.t()}
+  @doc """
+  Keeps a show, season or episode. Idempotent: a repeat returns the existing row.
+
+  Returns `{:error, :invalid_target}` unless the media item is a TV show and the
+  season or episode belongs to it.
+  """
+  @spec keep(target, struct() | nil) ::
+          {:ok, Keep.t()} | {:error, Ecto.Changeset.t() | :invalid_target}
   def keep(target, user) do
+    if valid_target?(target), do: do_keep(target, user), else: {:error, :invalid_target}
+  end
+
+  defp valid_target?(target) do
+    id = elem(target, 1)
+
+    with {:ok, _} <- Ecto.UUID.cast(id),
+         %MediaItem{type: "tv_show"} <- Repo.get(MediaItem, id) do
+      target_belongs?(target)
+    else
+      _ -> false
+    end
+  end
+
+  defp target_belongs?({:show, _id}), do: true
+
+  defp target_belongs?({:season, id, season}) when is_integer(season) do
+    Repo.exists?(from e in Episode, where: e.media_item_id == ^id and e.season_number == ^season)
+  end
+
+  defp target_belongs?({:episode, id, episode_id}) do
+    match?({:ok, _}, Ecto.UUID.cast(episode_id)) and
+      Repo.exists?(from e in Episode, where: e.media_item_id == ^id and e.id == ^episode_id)
+  end
+
+  defp target_belongs?(_target), do: false
+
+  defp do_keep(target, user) do
     Repo.transaction(fn ->
       case find_keep(target) do
         %Keep{} = existing ->
