@@ -35,7 +35,8 @@ defmodule Mydia.Events.PresentationTest do
 
   describe "feed_hidden_types/0" do
     test "hides the per-request plugin audit trail" do
-      assert Presentation.feed_hidden_types() == ["plugin.http_request"]
+      assert Enum.sort(Presentation.feed_hidden_types()) ==
+               ["plugin.http_request", "smart_space.run"]
     end
   end
 
