@@ -8,7 +8,7 @@ defmodule Mydia.Library.Trash do
   import Mydia.QueryHelpers
   require Logger
   alias Mydia.Repo
-  alias Mydia.Library.{MediaFile, MediaFiles, TrashStore}
+  alias Mydia.Library.{MediaFile, MediaFileEpisode, MediaFiles, TrashStore}
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Media.Episode
   alias Mydia.SmartSpace.Rules
@@ -135,7 +135,10 @@ defmodule Mydia.Library.Trash do
 
   @doc """
   Trashes every live (non-trashed) media file on the given episodes, all
-  versions included, and keeps going when one file fails.
+  versions included, and keeps going when one file fails. The files are those
+  of `episode_files_for_removal/1`: a multi-episode file that also covers an
+  episode outside the set is left alone and reported under `failed` with
+  `:covers_other_episodes`.
 
   `opts[:reason]` is passed to `trash_media_file/2`. Returns the trashed rows,
   the `{file, reason}` pairs that failed, and the summed `size` of the trashed
@@ -149,8 +152,63 @@ defmodule Mydia.Library.Trash do
              bytes: non_neg_integer()
            }}
   def trash_episode_files(episode_ids, opts \\ []) do
-    episode_ids |> live_episode_files() |> trash_files(opts)
+    %{removable: files, blocked: blocked} = episode_files_for_removal(episode_ids)
+    {:ok, result} = trash_files(files, opts)
+    {:ok, %{result | failed: result.failed ++ blocked_failures(blocked)}}
   end
+
+  @doc """
+  The live files on the given episodes, each listed once, found through
+  `media_files.episode_id` or a `media_file_episodes` link. `removable` holds
+  the files that cover only episodes in the set; `blocked` holds multi-episode
+  files that also cover an episode outside it, which removing the set must not
+  take.
+
+  This is the selection `trash_episode_files/2` and `delete_episode_files/2`
+  act on, so a confirmation dialog can count exactly what will go.
+  """
+  @spec episode_files_for_removal([binary()]) :: %{
+          removable: [MediaFile.t()],
+          blocked: [MediaFile.t()]
+        }
+  def episode_files_for_removal([]), do: %{removable: [], blocked: []}
+
+  def episode_files_for_removal(episode_ids) do
+    linked =
+      from(l in MediaFileEpisode, where: l.episode_id in ^episode_ids, select: l.media_file_id)
+
+    files =
+      Repo.all(
+        from(f in MediaFile,
+          where:
+            (f.episode_id in ^episode_ids or f.id in subquery(linked)) and is_nil(f.trashed_at),
+          order_by: [asc: f.inserted_at, asc: f.id]
+        )
+      )
+
+    file_ids = Enum.map(files, & &1.id)
+
+    links =
+      from(l in MediaFileEpisode,
+        where: l.media_file_id in ^file_ids,
+        select: {l.media_file_id, l.episode_id}
+      )
+      |> Repo.all()
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    wanted = MapSet.new(episode_ids)
+
+    {removable, blocked} =
+      Enum.split_with(files, fn file ->
+        [file.episode_id | Map.get(links, file.id, [])]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.all?(&MapSet.member?(wanted, &1))
+      end)
+
+    %{removable: removable, blocked: blocked}
+  end
+
+  defp blocked_failures(blocked), do: Enum.map(blocked, &{&1, :covers_other_episodes})
 
   @doc """
   Trashes exactly the listed media files that are still live (not trashed),
@@ -194,7 +252,9 @@ defmodule Mydia.Library.Trash do
 
   @doc """
   Deletes every live media file row on the given episodes, all versions
-  included, and keeps going when one file fails.
+  included, and keeps going when one file fails. Like `trash_episode_files/2`
+  it acts on `episode_files_for_removal/1`, reporting a multi-episode file
+  that also covers another episode under `failed` with `:covers_other_episodes`.
 
   With `delete_files: true` the bytes go too; a `{:ok, file, :file_delete_failed}`
   result (row gone, bytes left behind) is reported under `failed`.
@@ -208,11 +268,10 @@ defmodule Mydia.Library.Trash do
            }}
   def delete_episode_files(episode_ids, opts \\ []) do
     delete_files = Keyword.get(opts, :delete_files, false)
+    %{removable: files, blocked: blocked} = episode_files_for_removal(episode_ids)
 
     {deleted, failed} =
-      episode_ids
-      |> live_episode_files()
-      |> Enum.reduce({[], []}, fn file, {ok, bad} ->
+      Enum.reduce(files, {[], []}, fn file, {ok, bad} ->
         case delete_media_file(file, delete_files: delete_files) do
           {:ok, deleted} -> {[deleted | ok], bad}
           {:ok, deleted, :file_delete_failed} -> {ok, [{deleted, :file_delete_failed} | bad]}
@@ -221,18 +280,11 @@ defmodule Mydia.Library.Trash do
       end)
 
     {:ok,
-     %{deleted: Enum.reverse(deleted), failed: Enum.reverse(failed), bytes: sum_bytes(deleted)}}
-  end
-
-  defp live_episode_files([]), do: []
-
-  defp live_episode_files(episode_ids) do
-    Repo.all(
-      from(f in MediaFile,
-        where: f.episode_id in ^episode_ids and is_nil(f.trashed_at),
-        order_by: [asc: f.inserted_at, asc: f.id]
-      )
-    )
+     %{
+       deleted: Enum.reverse(deleted),
+       failed: Enum.reverse(failed) ++ blocked_failures(blocked),
+       bytes: sum_bytes(deleted)
+     }}
   end
 
   defp sum_bytes(files), do: Enum.reduce(files, 0, &((&1.size || 0) + &2))

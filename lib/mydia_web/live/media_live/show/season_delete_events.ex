@@ -9,8 +9,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
   alias Mydia.Library
   alias Mydia.Media
   alias MydiaWeb.Live.Authorization
-
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 2]
+  alias MydiaWeb.MediaLive.Show.{Loaders, SeasonDelete}
 
   @events ~w(show_season_delete_confirm hide_season_delete_confirm change_season_delete delete_season_files)
 
@@ -35,24 +34,26 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
     with :ok <- Authorization.authorize_delete_media(socket) do
       season_number = String.to_integer(season_number_str)
 
-      episodes =
-        Enum.filter(socket.assigns.media_item.episodes, &(&1.season_number == season_number))
+      episode_ids =
+        for e <- socket.assigns.media_item.episodes,
+            e.season_number == season_number,
+            do: e.id
 
-      files = Enum.flat_map(episodes, & &1.media_files)
+      # The same selection the delete acts on, so the numbers match what goes.
+      case Library.episode_files_for_removal(episode_ids).removable do
+        [] ->
+          {:noreply, socket}
 
-      if files == [] do
-        {:noreply, socket}
-      else
-        {:noreply,
-         assign(socket, :season_delete, %{
-           season_number: season_number,
-           episode_ids: Enum.map(episodes, & &1.id),
-           file_count: length(files),
-           bytes: Enum.reduce(files, 0, &((&1.size || 0) + &2)),
-           mode: :trash,
-           unmonitor: true
-         })
-         |> assign(:show_season_delete_confirm, true)}
+        files ->
+          {:noreply,
+           socket
+           |> assign(:season_delete, %SeasonDelete{
+             season_number: season_number,
+             episode_ids: episode_ids,
+             file_count: length(files),
+             bytes: Enum.reduce(files, 0, &((&1.size || 0) + &2))
+           })
+           |> assign(:show_season_delete_confirm, true)}
       end
     else
       {:unauthorized, socket} -> {:noreply, socket}
@@ -69,7 +70,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
   # Same fixed-clause mode parsing as toggle_file_delete_mode/2. The checkbox
   # arrives as "true"/"false" (a hidden "false" input precedes it); anything
   # but "true" leaves the season monitored.
-  defp change(params, %{assigns: %{season_delete: %{} = state}} = socket) do
+  defp change(params, %{assigns: %{season_delete: %SeasonDelete{} = state}} = socket) do
     mode =
       case params["file_delete_mode"] do
         "library_only" -> :library_only
@@ -87,7 +88,7 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
 
   defp change(_params, socket), do: {:noreply, socket}
 
-  defp delete_files(_params, %{assigns: %{season_delete: %{} = state}} = socket) do
+  defp delete_files(_params, %{assigns: %{season_delete: %SeasonDelete{} = state}} = socket) do
     with :ok <- Authorization.authorize_delete_media(socket) do
       media_item_id = socket.assigns.media_item.id
       socket = socket |> assign(:show_season_delete_confirm, false) |> assign(:season_delete, nil)
@@ -99,9 +100,15 @@ defmodule MydiaWeb.MediaLive.Show.SeasonDeleteEvents do
       if state.unmonitor,
         do: Media.update_season_monitoring(media_item_id, state.season_number, false)
 
+      media_item = Loaders.load_media_item(socket.assigns.current_scope, media_item_id)
+      # The hero links the next episode's file; recompute it as mount does.
+      {next_episode, next_episode_state} = Loaders.load_next_episode(media_item, socket)
+
       socket =
         socket
-        |> assign(:media_item, load_media_item(socket.assigns.current_scope, media_item_id))
+        |> assign(:media_item, media_item)
+        |> assign(:next_episode, next_episode)
+        |> assign(:next_episode_state, next_episode_state)
         |> put_flash(:info, season_delete_success_message(state.mode, count))
 
       socket =

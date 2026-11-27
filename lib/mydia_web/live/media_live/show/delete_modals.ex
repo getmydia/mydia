@@ -142,7 +142,7 @@ defmodule MydiaWeb.MediaLive.Show.DeleteModals do
     """
   end
 
-  attr :season_delete, :map, required: true
+  attr :season_delete, MydiaWeb.MediaLive.Show.SeasonDelete, required: true
 
   def season_delete_confirm_modal(assigns) do
     ~H"""

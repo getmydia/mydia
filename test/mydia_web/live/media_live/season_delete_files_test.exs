@@ -10,7 +10,7 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
   import MydiaWeb.Formatters, only: [format_file_size: 1]
 
   alias Mydia.Library
-  alias Mydia.Library.MediaFile
+  alias Mydia.Library.{MediaFile, MediaFileEpisode}
   alias Mydia.Repo
 
   @gib 1024 * 1024 * 1024
@@ -60,6 +60,11 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
     view |> element("#season-1-delete-files") |> render_click()
     view
+  end
+
+  defp next_episode_id(view) do
+    %{next_episode: %{id: id}} = :sys.get_state(view.pid).socket.assigns
+    id
   end
 
   defp monitored?(episode), do: Repo.reload!(episode).monitored
@@ -118,6 +123,28 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
       assert text =~ format_file_size(3 * @gib)
     end
 
+    test "counts a multi-episode file once and leaves out one reaching another season", %{
+      conn: conn,
+      show: show,
+      s1: [{_e1, f1}, {e2, _f2}, {_e3, f3}],
+      s2: [{s2e1, _} | _]
+    } do
+      Repo.insert!(%MediaFileEpisode{media_file_id: f1.id, episode_id: e2.id})
+      Repo.insert!(%MediaFileEpisode{media_file_id: f3.id, episode_id: s2e1.id})
+
+      {conn, _user} = register_and_log_in_user(conn)
+      view = open_dialog(conn, show)
+
+      text = view |> element("#season-delete-modal") |> render()
+      assert text =~ "2 files"
+      assert text =~ format_file_size(2 * @gib)
+
+      view |> element("#season-delete-confirm") |> render_click()
+
+      refute is_nil(Repo.reload!(f1).trashed_at)
+      assert is_nil(Repo.reload!(f3).trashed_at)
+    end
+
     test "trash is selected and unmonitor is checked by default", %{conn: conn, show: show} do
       {conn, _user} = register_and_log_in_user(conn)
       view = open_dialog(conn, show)
@@ -156,6 +183,20 @@ defmodule MydiaWeb.MediaLive.SeasonDeleteFilesTest do
       end
 
       refute has_element?(view, "#season-delete-modal")
+    end
+
+    test "the next episode moves past the removed season", %{
+      conn: conn,
+      show: show,
+      s1: [{e1, _} | _],
+      s2: [{s2e1, _} | _]
+    } do
+      {conn, _user} = register_and_log_in_user(conn)
+      view = open_dialog(conn, show)
+      assert next_episode_id(view) == e1.id
+
+      view |> element("#season-delete-confirm") |> render_click()
+      assert next_episode_id(view) == s2e1.id
     end
 
     test "unchecking unmonitor keeps the season monitored", %{conn: conn, show: show, s1: s1} do

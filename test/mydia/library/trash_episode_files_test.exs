@@ -6,7 +6,7 @@ defmodule Mydia.Library.TrashEpisodeFilesTest do
 
   alias Mydia.Library
   alias Mydia.Media.Episode
-  alias Mydia.Library.MediaFile
+  alias Mydia.Library.{MediaFile, MediaFileEpisode}
   alias Mydia.Repo
 
   setup do
@@ -46,7 +46,65 @@ defmodule Mydia.Library.TrashEpisodeFilesTest do
         episode_number: number
       })
 
+  defp link(file, episode),
+    do: Repo.insert!(%MediaFileEpisode{media_file_id: file.id, episode_id: episode.id})
+
+  describe "episode_files_for_removal/1" do
+    @tag :tmp_dir
+    test "lists a linked multi-episode file once and blocks one reaching outside",
+         %{tmp_dir: tmp} do
+      ctx = setup_show(tmp)
+      e9 = episode(ctx, 1, 9)
+      e10 = episode(ctx, 1, 10)
+      s2 = episode(ctx, 2, 1)
+      inside = add_file(ctx, e9, "s1e09e10.mkv", "aaaa")
+      link(inside, e10)
+      spanning = add_file(ctx, e10, "s1e10s2e01.mkv", "bb")
+      link(spanning, s2)
+
+      assert %{removable: [r], blocked: [b]} =
+               Library.episode_files_for_removal([e9.id, e10.id])
+
+      assert r.id == inside.id
+      assert b.id == spanning.id
+    end
+  end
+
   describe "trash_episode_files/2" do
+    @tag :tmp_dir
+    test "takes a file linked only through media_file_episodes", %{tmp_dir: tmp} do
+      ctx = setup_show(tmp)
+      e9 = episode(ctx, 1, 9)
+      e10 = episode(ctx, 1, 10)
+      f = add_file(ctx, e9, "s1e09e10.mkv", "aaaa")
+      link(f, e10)
+      # The primary episode is outside the set, so the file stays.
+      assert {:ok, %{trashed: [], failed: [{held, :covers_other_episodes}]}} =
+               Library.trash_episode_files([e10.id], reason: :manual)
+
+      assert held.id == f.id
+      assert is_nil(Repo.get!(MediaFile, f.id).trashed_at)
+
+      assert {:ok, %{trashed: [t], failed: [], bytes: 4}} =
+               Library.trash_episode_files([e9.id, e10.id], reason: :manual)
+
+      assert t.id == f.id
+    end
+
+    @tag :tmp_dir
+    test "leaves a file that also covers an episode in another season", %{tmp_dir: tmp} do
+      ctx = setup_show(tmp)
+      s1 = episode(ctx, 1, 10)
+      s2 = episode(ctx, 2, 1)
+      f = add_file(ctx, s1, "s1e10s2e01.mkv", "aaaa")
+      link(f, s2)
+
+      assert {:ok, %{trashed: [], failed: [{_, :covers_other_episodes}], bytes: 0}} =
+               Library.trash_episode_files([s1.id], reason: :manual)
+
+      assert is_nil(Repo.get!(MediaFile, f.id).trashed_at)
+    end
+
     @tag :tmp_dir
     test "trashes every live file on the episodes, including extra versions", %{tmp_dir: tmp} do
       ctx = setup_show(tmp)
@@ -142,6 +200,26 @@ defmodule Mydia.Library.TrashEpisodeFilesTest do
   end
 
   describe "delete_episode_files/2" do
+    @tag :tmp_dir
+    test "deletes a linked file once and leaves one reaching outside", %{tmp_dir: tmp} do
+      ctx = setup_show(tmp)
+      e9 = episode(ctx, 1, 9)
+      e10 = episode(ctx, 1, 10)
+      s2 = episode(ctx, 2, 1)
+      inside = add_file(ctx, e9, "s1e09e10.mkv", "aaaa")
+      link(inside, e10)
+      spanning = add_file(ctx, e10, "s1e10s2e01.mkv", "bb")
+      link(spanning, s2)
+
+      assert {:ok, %{deleted: [d], failed: [{held, :covers_other_episodes}], bytes: 4}} =
+               Library.delete_episode_files([e9.id, e10.id], delete_files: true)
+
+      assert d.id == inside.id
+      assert held.id == spanning.id
+      assert Repo.get(MediaFile, spanning.id)
+      assert File.exists?(Path.join(ctx.root, "s1e10s2e01.mkv"))
+    end
+
     @tag :tmp_dir
     test "delete_files: true removes rows and bytes", %{tmp_dir: tmp} do
       ctx = setup_show(tmp)
