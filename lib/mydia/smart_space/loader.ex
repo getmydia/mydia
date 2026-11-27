@@ -55,7 +55,7 @@ defmodule Mydia.SmartSpace.Loader do
           title: item.title,
           override: override_map(overrides[item.id]),
           episodes:
-            for {ep, show_id} <- Map.get(episodes, item.id, []), show_id == item.id do
+            for ep <- Map.get(episodes, item.id, []) do
               %Inputs.Episode{
                 id: ep.id,
                 season_number: ep.season_number,
@@ -134,7 +134,7 @@ defmodule Mydia.SmartSpace.Loader do
       order_by: [asc: e.season_number, asc: e.episode_number, asc: e.id]
     )
     |> Repo.all()
-    |> Enum.group_by(& &1.media_item_id, &{&1, &1.media_item_id})
+    |> Enum.group_by(& &1.media_item_id)
   end
 
   defp load_files([]), do: %{}
@@ -154,15 +154,22 @@ defmodule Mydia.SmartSpace.Loader do
   defp load_in_flight([]), do: {MapSet.new(), MapSet.new()}
 
   defp load_in_flight(ids) do
+    # Nothing ties downloads.episode_id to downloads.media_item_id, so match an
+    # episode download through either column.
     rows =
       from(d in Download.occupying(),
-        where: d.media_item_id in ^ids,
-        select: {d.media_item_id, d.episode_id}
+        left_join: e in Episode,
+        on: e.id == d.episode_id,
+        where: d.media_item_id in ^ids or e.media_item_id in ^ids,
+        select: {d.media_item_id, d.episode_id, e.media_item_id}
       )
       |> Repo.all()
 
-    eps = for {_m, e} when not is_nil(e) <- rows, into: MapSet.new(), do: e
-    shows = for {m, nil} <- rows, into: MapSet.new(), do: m
+    eps = for {_m, e, _em} when not is_nil(e) <- rows, into: MapSet.new(), do: e
+
+    shows =
+      for {m, nil, _} <- rows, m in ids, into: MapSet.new(), do: m
+
     {eps, shows}
   end
 

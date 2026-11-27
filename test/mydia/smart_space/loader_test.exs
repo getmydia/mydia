@@ -89,7 +89,7 @@ defmodule Mydia.SmartSpace.LoaderTest do
 
     x = media_file_fixture(%{episode_id: e.id, size: 40})
     x |> Ecto.Changeset.change(extra_kind: :sample) |> Repo.update!()
-    assert %MediaFile{} = x
+    assert Repo.get!(MediaFile, x.id).extra_kind == :sample
 
     [show] = Loader.load(config: cfg()).shows
     [ep] = show.episodes
@@ -148,6 +148,21 @@ defmodule Mydia.SmartSpace.LoaderTest do
     assert Enum.find(sa.episodes, &(&1.id == a1.id)).in_flight?
     refute Enum.find(sa.episodes, &(&1.id == a2.id)).in_flight?
     assert find(inputs, b).in_flight_show?
+  end
+
+  test "episode download with no media_item_id still marks the episode" do
+    a = show("Harbor Lights")
+    a1 = ep(a, 1, 1)
+    d = download_fixture(%{episode_id: a1.id})
+    assert d.media_item_id == nil or d.media_item_id != a.id
+
+    Repo.update_all(from(x in Mydia.Downloads.Download, where: x.id == ^d.id),
+      set: [media_item_id: nil]
+    )
+
+    [s] = Loader.load(config: cfg()).shows
+    assert hd(s.episodes).in_flight?
+    refute s.in_flight_show?
   end
 
   test "keeps map to levels with the right fields" do
