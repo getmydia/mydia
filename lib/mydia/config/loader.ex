@@ -259,6 +259,7 @@ defmodule Mydia.Config.Loader do
       media: Mydia.Config.Env.MediaEnv.load(),
       metadata: Mydia.Config.Env.MetadataEnv.load(),
       ui: Mydia.Config.Env.UiEnv.load(),
+      smart_space: Mydia.Config.Env.SmartSpaceEnv.load(),
       downloads: load_downloads_env(),
       upgrades: load_upgrades_env(),
       streaming: load_streaming_env(),

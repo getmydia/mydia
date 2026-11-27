@@ -573,6 +573,16 @@ The relay keeps one record per install per week and does not store your IP addre
 
 To turn it off, set `UPDATE_CHECK_ENABLED=false`, or switch off **Check for updates** under **Admin → Settings → Updates**. When the variable is set, it overrides the switch.
 
+## Smart Space
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SMART_SPACE_ENABLED` | Automatically move watched TV to the trash to free space | `false` |
+| `SMART_SPACE_UNIT` | What gets trashed at a time: `season` or `episode` | `season` |
+| `SMART_SPACE_GRACE_DAYS` | Days to wait after the last watch before trashing. `0` or more | `7` |
+| `SMART_SPACE_WATCHED_BY` | Who must have watched it: `all_started` (everyone who started it), `any` (one user is enough) or `selected` | `all_started` |
+| `SMART_SPACE_SELECTED_USERS` | Comma-separated usernames, read when `SMART_SPACE_WATCHED_BY` is `selected` | (empty) |
+
 ## Language
 
 | Variable | Description | Default |

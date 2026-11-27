@@ -59,6 +59,7 @@ defmodule Mydia.Config.Schema do
           media: __MODULE__.Media.t() | nil,
           metadata: __MODULE__.Metadata.t() | nil,
           ui: __MODULE__.Ui.t() | nil,
+          smart_space: __MODULE__.SmartSpace.t() | nil,
           downloads: __MODULE__.Downloads.t() | nil,
           upgrades: __MODULE__.Upgrades.t() | nil,
           streaming: __MODULE__.Streaming.t() | nil,
@@ -325,6 +326,7 @@ defmodule Mydia.Config.Schema do
     embeds_one :built_in_torrent, Mydia.Config.Schema.BuiltInTorrent, on_replace: :update
     embeds_one :cardigann, Mydia.Config.Schema.Cardigann, on_replace: :update
     embeds_one :ui, Mydia.Config.Schema.Ui, on_replace: :update
+    embeds_one :smart_space, Mydia.Config.Schema.SmartSpace, on_replace: :update
 
     embeds_one :remote_access, Mydia.Config.Schema.RemoteAccess, on_replace: :update
 
@@ -480,6 +482,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:media, with: &MediaChangeset.changeset/2)
     |> cast_embed(:metadata)
     |> cast_embed(:ui)
+    |> cast_embed(:smart_space)
     |> cast_embed(:downloads, with: &downloads_changeset/2)
     |> cast_embed(:upgrades, with: &upgrades_changeset/2)
     |> cast_embed(:streaming, with: &streaming_changeset/2)
@@ -952,6 +955,7 @@ defmodule Mydia.Config.Schema do
       media: %__MODULE__.Media{},
       metadata: %__MODULE__.Metadata{},
       ui: %__MODULE__.Ui{},
+      smart_space: %__MODULE__.SmartSpace{},
       downloads: %__MODULE__.Downloads{},
       upgrades: %__MODULE__.Upgrades{},
       streaming: %__MODULE__.Streaming{},

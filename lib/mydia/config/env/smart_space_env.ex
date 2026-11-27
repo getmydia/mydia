@@ -1,0 +1,48 @@
+defmodule Mydia.Config.Env.SmartSpaceEnv do
+  @moduledoc """
+  Reads the `smart_space` section of `Mydia.Config.Schema` from the
+  environment (`SMART_SPACE_ENABLED`, `SMART_SPACE_UNIT`,
+  `SMART_SPACE_GRACE_DAYS`, `SMART_SPACE_WATCHED_BY`,
+  `SMART_SPACE_SELECTED_USERS`).
+
+  Enum values go through a fixed-value parser that maps unknown strings to
+  `:invalid`, so a typo fails validation by name instead of silently falling
+  back to the default. `Loader.parse_atom/1` must not be used here.
+  """
+
+  import Mydia.Config.Loader,
+    only: [put_if_present: 4, parse_boolean: 1, parse_integer: 1]
+
+  alias Mydia.Config.Schema.SmartSpace
+
+  @spec load((String.t() -> String.t() | nil)) :: map()
+  def load(getenv \\ &System.get_env/1) do
+    %{}
+    |> put_if_present(:enabled, getenv.("SMART_SPACE_ENABLED"), &parse_boolean/1)
+    |> put_if_present(:unit, getenv.("SMART_SPACE_UNIT"), &parse_enum(&1, SmartSpace.units()))
+    |> put_if_present(:grace_days, getenv.("SMART_SPACE_GRACE_DAYS"), &parse_integer/1)
+    |> put_if_present(
+      :watched_by,
+      getenv.("SMART_SPACE_WATCHED_BY"),
+      &parse_enum(&1, SmartSpace.watched_by_values())
+    )
+    |> put_if_present(
+      :selected_users,
+      getenv.("SMART_SPACE_SELECTED_USERS"),
+      &parse_users/1
+    )
+  end
+
+  defp parse_enum(value, allowed) do
+    normalized = value |> String.trim() |> String.downcase()
+    if normalized in allowed, do: {:ok, normalized}, else: {:ok, :invalid}
+  end
+
+  defp parse_users(value) do
+    {:ok,
+     value
+     |> String.split(",")
+     |> Enum.map(&String.trim/1)
+     |> Enum.reject(&(&1 == ""))}
+  end
+end
