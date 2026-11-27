@@ -1,0 +1,108 @@
+defmodule Mydia.SmartSpace.RulesTest do
+  use Mydia.DataCase
+
+  import Mydia.MediaFixtures
+  import Mydia.AccountsFixtures
+
+  alias Mydia.SmartSpace.{Keep, Override, Rules}
+
+  defp show, do: media_item_fixture(%{type: "tv_show", title: "Harbor Lights"})
+
+  describe "overrides" do
+    test "custom requires unit and grace_days" do
+      s = show()
+      assert {:error, cs} = Rules.put_override(s.id, %{mode: "custom"})
+      assert %{unit: _, grace_days: _} = errors_on(cs)
+
+      assert {:ok, %Override{mode: "custom", unit: "season", grace_days: 3}} =
+               Rules.put_override(s.id, %{mode: "custom", unit: "season", grace_days: 3})
+    end
+
+    test "rejects non-TV items" do
+      movie = media_item_fixture(%{type: "movie"})
+      assert {:error, cs} = Rules.put_override(movie.id, %{mode: "off"})
+      assert %{media_item_id: _} = errors_on(cs)
+    end
+
+    test "put updates the existing row and off needs no unit" do
+      s = show()
+      {:ok, a} = Rules.put_override(s.id, %{mode: "custom", unit: "episode", grace_days: 1})
+      {:ok, b} = Rules.put_override(s.id, %{mode: "off"})
+      assert a.id == b.id
+      assert Rules.get_override(s.id).mode == "off"
+      assert [_] = Rules.list_overrides()
+    end
+
+    test "inherit deletes the row" do
+      s = show()
+      {:ok, _} = Rules.put_override(s.id, %{mode: "off"})
+      assert {:ok, nil} = Rules.put_override(s.id, %{mode: "inherit"})
+      assert Rules.get_override(s.id) == nil
+    end
+  end
+
+  describe "keeps" do
+    test "keep is idempotent at every level" do
+      s = show()
+      ep = episode_fixture(%{media_item_id: s.id})
+      user = user_fixture()
+
+      for target <- [{:show, s.id}, {:season, s.id, 1}, {:episode, s.id, ep.id}] do
+        assert {:ok, a} = Rules.keep(target, user)
+        assert {:ok, b} = Rules.keep(target, nil)
+        assert a.id == b.id
+      end
+
+      assert length(Rules.list_keeps()) == 3
+    end
+
+    test "list_keeps narrows and preloads, unkeep removes" do
+      s = show()
+      other = show()
+      ep = episode_fixture(%{media_item_id: s.id})
+      {:ok, _} = Rules.keep({:episode, s.id, ep.id}, nil)
+      {:ok, _} = Rules.keep({:show, other.id}, nil)
+
+      assert [%Keep{episode: %{id: id}, media_item: %{id: sid}}] =
+               Rules.list_keeps(media_item_id: s.id)
+
+      assert id == ep.id and sid == s.id
+
+      assert :ok = Rules.unkeep({:episode, s.id, ep.id})
+      assert :ok = Rules.unkeep({:episode, s.id, ep.id})
+      assert Rules.list_keeps(media_item_id: s.id) == []
+    end
+
+    test "season and episode together is rejected" do
+      s = show()
+      ep = episode_fixture(%{media_item_id: s.id})
+
+      cs =
+        %Keep{media_item_id: s.id, season_number: 1, episode_id: ep.id}
+        |> Keep.changeset()
+
+      refute cs.valid?
+    end
+
+    test "unique indexes backstop duplicates" do
+      s = show()
+      insert = fn -> Repo.insert(Keep.changeset(%Keep{media_item_id: s.id})) end
+      assert {:ok, _} = insert.()
+      assert {:error, cs} = insert.()
+      assert %{media_item_id: _} = errors_on(cs)
+    end
+  end
+
+  test "deleting the media item cascades overrides and keeps" do
+    s = show()
+    ep = episode_fixture(%{media_item_id: s.id})
+    {:ok, _} = Rules.put_override(s.id, %{mode: "off"})
+    {:ok, _} = Rules.keep({:show, s.id}, nil)
+    {:ok, _} = Rules.keep({:episode, s.id, ep.id}, nil)
+
+    Repo.delete!(s)
+
+    assert Rules.list_overrides() == []
+    assert Rules.list_keeps() == []
+  end
+end
