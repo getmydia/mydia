@@ -1,7 +1,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const { chromium } = require("@playwright/test");
-const { exportPosters } = require("./export-posters");
 
 /**
  * Screenshot configuration
@@ -12,8 +11,6 @@ const config = {
   // The website's copies. Every file is written to both directories.
   siteOutputDir:
     process.env.SITE_OUTPUT_DIR || "../site/src/assets/screenshots",
-  // The website's poster wall, exported from the seeded library.
-  posterOutputDir: process.env.POSTER_OUTPUT_DIR || "../site/src/assets/posters",
   viewport: {
     width: 1920,
     height: 1080,
@@ -311,10 +308,6 @@ async function captureWebUi(browser) {
     await save(page, `server-theme-${theme.id}`);
     console.log("");
   }
-
-  console.log("🖼  Exporting posters for the website's poster wall");
-  await exportPosters(page, { baseUrl: config.baseUrl, outputDir: config.posterOutputDir });
-  console.log("");
 
   await context.close();
 }

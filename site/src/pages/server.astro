@@ -7,11 +7,6 @@ import ThemeShowcase from '../components/ThemeShowcase.astro';
 import Install from '../components/Install.astro';
 import CrossSell from '../components/CrossSell.astro';
 import { serverThemes, serverThemesHeading } from '../data/themes';
-import { postersFrom } from '../data/posters';
-
-// Two thirds of the way in, so the wall opens on different posters than the
-// homepage and player walls.
-const wallPosters = postersFrom(2 / 3);
 
 const features = [
   { icon: 'film', title: 'Library and metadata', description: 'Scans your movie and TV directories and fetches posters, descriptions and episode details from TMDB and TVDB.' },
@@ -33,7 +28,7 @@ const features = [
     subtitle="Organizes your movies and TV shows, downloads missing releases, and streams directly to Mydia Player."
     primary={{ label: 'Get started', href: '#install' }}
     secondary={{ label: 'Docs', href: 'https://docs.mydia.dev/latest/', external: true }}
-    wall={{ rows: 3, height: '34rem', posters: wallPosters }}
+    wall={{ height: '34rem' }}
   />
 
   <Features
