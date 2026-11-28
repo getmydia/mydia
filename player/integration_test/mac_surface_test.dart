@@ -78,6 +78,11 @@ final _fixtures = _definedFixtures.isNotEmpty
 
 String _clip(String name) => '$_fixtures/$name';
 
+/// When set, every player writes mpv's verbose log to
+/// `<dir>/mpv-<handle>.log`: the only record of what mpv did when the app
+/// dies under it. CI sets it and uploads the directory on failure.
+const _mpvLogDir = String.fromEnvironment('MYDIA_MPV_LOG_DIR');
+
 const _hdr10 = 'levels_hdr10.mp4';
 const _sdr = 'sdr_testsrc.mp4';
 const _subs = 'sdr_subs.mkv';
@@ -249,7 +254,14 @@ class _Rig {
   Player create() {
     final p = _TracedPlayer();
     players.add(p);
-    unawaited(p.handle.then((h) => p.handleValue = h));
+    unawaited(
+      p.handle.then((h) async {
+        p.handleValue = h;
+        if (_mpvLogDir.isNotEmpty) {
+          await p.native.setProperty('log-file', '$_mpvLogDir/mpv-$h.log');
+        }
+      }),
+    );
     return p;
   }
 }

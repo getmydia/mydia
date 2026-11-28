@@ -303,8 +303,10 @@ jobs:
           caffeinate -d &
           caffeinate_pid=$!
           trap 'kill "$caffeinate_pid" 2>/dev/null || true' EXIT
+          mkdir -p "$RUNNER_TEMP/mpv-logs"
           flutter test integration_test/mac_surface_test.dart -d macos \
             --dart-define=MYDIA_HDR_FIXTURES="$HOME/mydia-hdr/fixtures" \
+            --dart-define=MYDIA_MPV_LOG_DIR="$RUNNER_TEMP/mpv-logs" \
             --file-reporter "json:$RUNNER_TEMP/mac-report.json" \
             2>&1 | tee "$RUNNER_TEMP/mac-surface.log"
 
@@ -341,13 +343,19 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/runner-tests.log"
 
       # The app's own NSLog lines (MpvSurface, the window plugin) go to the
-      # unified log, not to flutter test's output.
+      # unified log, not to flutter test's output. An app that dies under a
+      # test only reports it as an error with no message; its crash report
+      # (the faulting thread's stack) is the evidence.
       - name: Collect the app log
         if: failure()
         run: |
           log show --last 45m --style compact \
             --predicate 'process == "Mydia Player"' \
             > "$RUNNER_TEMP/mac-app.log" 2>&1 || true
+          mkdir -p "$RUNNER_TEMP/crash-reports"
+          find "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports \
+            -name 'Mydia Player*' -exec cp {} "$RUNNER_TEMP/crash-reports/" \; 2>/dev/null || true
+          ls -l "$RUNNER_TEMP/crash-reports"
 
       - name: Upload test logs
         if: failure()
@@ -358,6 +366,8 @@ jobs:
             ${{ runner.temp }}/mac-report.json
             ${{ runner.temp }}/mac-surface.log
             ${{ runner.temp }}/mac-app.log
+            ${{ runner.temp }}/mpv-logs
+            ${{ runner.temp }}/crash-reports
             ${{ runner.temp }}/runner-tests.log
             ${{ runner.temp }}/RunnerTests.xcresult
           if-no-files-found: ignore
