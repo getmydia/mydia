@@ -75,6 +75,34 @@ defmodule MydiaWeb.HealthAlertsTest do
     end
   end
 
+  describe "home card" do
+    setup %{conn: conn}, do: %{conn: log_in_user(conn, admin_user_fixture())}
+
+    test "admin home shows every alert with its detail and fix link", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/")
+      broadcast([vpn_alert(), root_alert()])
+
+      assert has_element?(view, "#home-health-alerts")
+      assert view |> element("#home-health-alert-0") |> render() =~ "The VPN tunnel is down."
+      assert has_element?(view, "#home-health-alert-0 a[href='/admin/clients']")
+      assert has_element?(view, "#home-health-alert-1 a[href='/admin/library-paths']")
+    end
+
+    test "home card hidden without alerts", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/")
+      refute has_element?(view, "#home-health-alerts")
+    end
+  end
+
+  test "non-admin home shows no card", %{conn: conn} do
+    conn = log_in_user(conn, user_fixture(%{role: "user"}))
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    broadcast([vpn_alert()])
+
+    refute has_element?(view, "#home-health-alerts")
+  end
+
   test "non-admin never sees the sidebar banner", %{conn: conn} do
     conn = log_in_user(conn, user_fixture(%{role: "user"}))
     {:ok, view, _html} = live(conn, ~p"/")
