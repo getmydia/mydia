@@ -60,6 +60,9 @@ jobs:
       - name: Assert the glass-diff guard holds its contract
         run: ./scripts/check-glass-diff-test.sh
 
+      - name: Assert the E2E test count guard holds its contract
+        run: ./scripts/ci/assert-test-count-test.sh
+
       - name: Assert the Dependabot merge gate against its fixtures
         run: ./scripts/tests/dependabot-gate-test.sh
 

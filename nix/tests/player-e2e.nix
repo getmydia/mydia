@@ -95,6 +95,8 @@ let
     export E2E_ADMIN_EMAIL=${adminEmail}
     export E2E_ADMIN_PASSWORD=${adminPassword}
     export E2E_TEST_TARGET=integration_test/all_tests.dart
+    # run-tests.sh fails the run when fewer playback tests pass than it pins.
+    export ASSERT_TEST_COUNT=${../../scripts/ci/assert-test-count.sh}
     exec bash ${e2eScripts}/run-tests.sh
   '';
 

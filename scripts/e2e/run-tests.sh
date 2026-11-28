@@ -7,6 +7,17 @@ set -euo pipefail
 
 TEST_TARGET="${E2E_TEST_TARGET:-integration_test/all_tests.dart}"
 
+# The fewest tests of the `playback` group (integration_test/playback_test.dart)
+# that must pass. A skipped test, or one that returns before asserting, still
+# leaves `flutter test` at exit 0, so this count is what notices the group
+# quietly testing less. Adding a playback test means raising it; removing one
+# means lowering it in the same change.
+PLAYBACK_MIN_PASSED=7
+
+# Counts the passed tests in the run's JSON report. nix/tests/player-e2e.nix
+# passes its store path; from a checkout it sits in scripts/ci.
+ASSERT_TEST_COUNT="${ASSERT_TEST_COUNT:-$(dirname "${BASH_SOURCE[0]}")/../ci/assert-test-count.sh}"
+
 echo "============================================"
 echo "Flutter E2E Integration Test Runner"
 echo "============================================"
@@ -43,6 +54,12 @@ fi
 # a fullscreen test that times out, so check for it up front.
 if ! command -v openbox >/dev/null 2>&1; then
     echo "ERROR: openbox is not on PATH; the playback tests need it as the Xvfb window manager" >&2
+    exit 1
+fi
+
+# Checked up front for the same reason: it runs only after the whole suite.
+if [ ! -f "$ASSERT_TEST_COUNT" ]; then
+    echo "ERROR: test count guard not found at $ASSERT_TEST_COUNT" >&2
     exit 1
 fi
 
@@ -131,11 +148,15 @@ if [ -z "$CLAIM_CODE" ]; then
 fi
 echo "  Claim code generated: $CLAIM_CODE"
 
+REPORT_DIR=$(mktemp -d)
+REPORT_FILE="${REPORT_DIR}/e2e-report.json"
+
 flutter_cmd=(
     flutter test "$TEST_TARGET"
     -d linux
     --concurrency=1
     --reporter expanded
+    --file-reporter "json:${REPORT_FILE}"
     "${dart_defines[@]}"
     "--dart-define=E2E_CLAIM_CODE=${CLAIM_CODE}"
 )
@@ -178,4 +199,12 @@ echo ""
 echo "Skipped tests across all of integration_test/ (static grep, not scoped to E2E_TEST_TARGET; see each skip reason):"
 grep -rn "skip:" integration_test/ || echo "  none"
 
-exit "$test_exit"
+echo ""
+echo "Passed playback tests (minimum ${PLAYBACK_MIN_PASSED}):"
+count_exit=0
+bash "$ASSERT_TEST_COUNT" "$REPORT_FILE" "$PLAYBACK_MIN_PASSED" "playback " || count_exit=$?
+
+if [ "$test_exit" -ne 0 ]; then
+    exit "$test_exit"
+fi
+exit "$count_exit"
