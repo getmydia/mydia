@@ -21,6 +21,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Settings
   alias Mydia.Media.MediaItem
   alias Mydia.Downloads.Queue.Duplicates
+  alias Mydia.Downloads.Queue.FilePreview
   alias Mydia.Downloads.TorrentFetch
   require Logger
 
@@ -146,7 +147,49 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   @spec add_to_client(SearchResult.t(), keyword()) ::
           {:ok, map(), String.t(), atom() | nil, WantedFiles.t() | nil, boolean()}
           | {:error, term()}
+  #
+  # With `file_preview: %Queue.FilePreview{}` and `only_files: [index]` the
+  # torrent input, client, listing and peers come from the preview, and the
+  # operator's choice replaces the automatic one (see `FilePreview.confirm/2`).
   def add_to_client(search_result, opts) do
+    case Keyword.get(opts, :file_preview) do
+      nil ->
+        with {:ok, prepared} <- prepare(search_result, opts) do
+          files =
+            select_files(
+              prepared.adapter,
+              config_to_map(prepared.client_config),
+              torrent_input(prepared.torrent_input_result),
+              prepared.download_type,
+              search_result,
+              prepared.opts
+            )
+
+          add_with_client(prepared, files, search_result)
+        end
+
+      preview ->
+        with {:ok, prepared, files} <- FilePreview.confirm(preview, opts),
+             do: add_with_client(prepared, files, search_result)
+    end
+  end
+
+  @doc false
+  # The first half of `add_to_client/2`: fetch the torrent or NZB, refuse a
+  # banned hash, settle the download type, title and content type, and choose
+  # the client. Shared with `Queue.FilePreview`, which lists files from here
+  # without adding anything.
+  @spec prepare(SearchResult.t(), keyword()) ::
+          {:ok,
+           %{
+             torrent_input_result: term(),
+             download_type: atom() | nil,
+             opts: keyword(),
+             client_config: map(),
+             adapter: module()
+           }}
+          | {:error, term()}
+  def prepare(search_result, opts) do
     download_type = Keyword.get(opts, :download_type)
 
     # First, prepare the torrent/nzb input (download file if needed)
@@ -183,44 +226,49 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       # Now select the appropriate client based on the final type
       with {:ok, client_config} <- select_download_client(opts_with_type),
            {:ok, adapter} <- get_adapter_for_client(client_config) do
-        add_with_client(
-          adapter,
-          client_config,
-          torrent_input_result,
-          final_download_type,
-          search_result,
-          opts_with_type
-        )
+        {:ok,
+         %{
+           torrent_input_result: torrent_input_result,
+           download_type: final_download_type,
+           opts: opts_with_type,
+           client_config: client_config,
+           adapter: adapter
+         }}
       end
     end
   end
 
-  # The add itself, once the client is chosen: pick the wanted files, guard
-  # the disk, note whether the client already held the torrent, then add.
-  defp add_with_client(
-         adapter,
-         client_config,
-         torrent_input_result,
-         final_download_type,
-         search_result,
-         opts_with_type
-       ) do
-    # Extract the actual torrent input (without the type)
-    torrent_input =
-      case torrent_input_result do
-        {:file, body, _type} -> {:file, body}
-        other -> other
-      end
+  @doc false
+  # The prepared input without its detected type, as adapters take it.
+  def torrent_input({:file, body, _type}), do: {:file, body}
+  def torrent_input(other), do: other
 
-    {selection, peers, listed} =
-      select_files(
-        adapter,
-        config_to_map(client_config),
-        torrent_input,
-        final_download_type,
-        search_result,
-        opts_with_type
-      )
+  @doc false
+  # True when the client `select_client_by_priority(:torrent)` picks can
+  # list and select a torrent's files, so a manual grab can offer the choice.
+  @spec file_choice_available?() :: boolean()
+  def file_choice_available? do
+    with %{} = client_config <- select_client_by_priority(:torrent),
+         {:ok, adapter} <- get_adapter_for_client(client_config) do
+      Client.supports_file_selection?(adapter)
+    else
+      _none -> false
+    end
+  end
+
+  # The add itself, once the client is chosen and the files are picked
+  # (`{selection | nil, peers, listed_files}`): guard the disk, note whether
+  # the client already held the torrent, then add.
+  defp add_with_client(prepared, {selection, peers, listed}, search_result) do
+    %{
+      adapter: adapter,
+      client_config: client_config,
+      torrent_input_result: torrent_input_result,
+      download_type: final_download_type,
+      opts: opts_with_type
+    } = prepared
+
+    torrent_input = torrent_input(torrent_input_result)
 
     add_opts =
       opts_with_type
