@@ -401,24 +401,17 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
             <span class="hidden sm:inline lg:hidden">{gettext("Grabbing…")}</span>
           </button>
         <% Map.get(@result, :grab_failed) -> %>
+          <.choose_files_button result={@result} file_choice?={@file_choice?} />
           <.retry_button result={@result} reason={Map.get(@result, :grab_failed)} />
         <% Map.get(@result, :prior_attempt) -> %>
+          <.choose_files_button result={@result} file_choice?={@file_choice?} />
           <.retry_button
             result={@result}
             reason={prior_attempt_reason(@result)}
             blacklisted={@result.prior_attempt.kind == :blacklisted}
           />
         <% true -> %>
-          <button
-            :if={@file_choice? and @result.download_protocol != :nzb}
-            id={"choose-files-#{SearchResultRef.ref(@result)}"}
-            class="btn btn-ghost max-sm:btn-square sm:btn-sm lg:btn-square mr-1"
-            phx-click="choose_files"
-            phx-value-ref={SearchResultRef.ref(@result)}
-            title={gettext("Choose files…")}
-          >
-            <.icon name="hero-folder-open" class="w-4 h-4" />
-          </button>
+          <.choose_files_button result={@result} file_choice?={@file_choice?} />
           <button
             class="btn btn-primary max-sm:btn-square sm:btn-sm lg:btn-square group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
             phx-click="download_from_search"
@@ -434,6 +427,24 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           </button>
       <% end %>
     </div>
+    """
+  end
+
+  attr :result, SearchResult, required: true
+  attr :file_choice?, :boolean, default: false
+
+  defp choose_files_button(assigns) do
+    ~H"""
+    <button
+      :if={@file_choice? and @result.download_protocol != :nzb}
+      id={"choose-files-#{SearchResultRef.ref(@result)}"}
+      class="btn btn-ghost max-sm:btn-square sm:btn-sm lg:btn-square mr-1"
+      phx-click="choose_files"
+      phx-value-ref={SearchResultRef.ref(@result)}
+      title={gettext("Choose files…")}
+    >
+      <.icon name="hero-folder-open" class="w-4 h-4" />
+    </button>
     """
   end
 

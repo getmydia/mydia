@@ -443,6 +443,23 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       assert html =~ ~s(phx-click="download_from_search")
     end
 
+    test "failed and prior-attempt torrent results still offer choosing files" do
+      for extra <- [
+            %{grab_failed: "No download clients are configured"},
+            %{prior_attempt: %{kind: :failed, reason: "stalled", at: DateTime.utc_now()}}
+          ] do
+        html = modal_html(Map.put(extra, :download_protocol, :torrent), %{file_choice?: true})
+        doc = LazyHTML.from_fragment(html)
+
+        assert [_] = LazyHTML.query(doc, "[id^=choose-files-]") |> Enum.to_list()
+      end
+
+      html =
+        modal_html(%{grab_failed: "x", download_protocol: :nzb}, %{file_choice?: true})
+
+      refute html =~ "choose-files-"
+    end
+
     test "duplicate renders a disabled already-downloading button" do
       html = modal_html(%{duplicate: true})
 
