@@ -796,7 +796,7 @@ HDR10 through `gpu-next` with a PQ target, SDR, fill, text subtitles,
 fullscreen, closing mid-playback, a source switch, ten open-and-close cycles,
 and the escape hatch. It runs on a Mac only and is not part of CI.
 
-CI has no macOS runner this file can use. The `Integration / macOS` job runs
+CI has no macOS runner this file can use. The `Test / macOS native` job runs
 on a hosted virtual machine whose only GPU is Apple's paravirtual device, and
 both video outputs kill the app there: gpu-next segfaults inside MoltenVK on
 its first texture upload, and media_kit's texture path finds no accelerated

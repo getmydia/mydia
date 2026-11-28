@@ -215,8 +215,8 @@ jobs:
   # OpenGL pixel format and force-unwraps it. Every case in that file skips
   # on that GPU, so it stays a run-on-a-Mac test (player/docs/playback.md,
   # "The integration test").
-  integration-macos:
-    name: Integration / macOS
+  test-macos-native:
+    name: Test / macOS native
     # The same image and Xcode as the macOS build leg above.
     runs-on: xcode-27
     timeout-minutes: 45
@@ -289,7 +289,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: integration-macos-logs
+          name: test-macos-native-logs
           path: |
             ${{ runner.temp }}/mac-app.log
             ${{ runner.temp }}/crash-reports
