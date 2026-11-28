@@ -461,22 +461,22 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
     end
 
     test "a new container starts from the list in the config dir", %{tmp_dir: dir} do
-      File.write!(Path.join(dir, "servers.json"), ~s({"version":1}))
+      File.write!(Path.join(dir, "servers.json"), ~s({\n  "version": 1\n}\n))
 
       servers(dir, "restore_servers")
 
-      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({"version":1})
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({\n  "version": 1\n}\n)
     end
 
     test "an existing whole working copy is kept, and nothing persisted is a no-op", %{
       tmp_dir: dir
     } do
       File.mkdir_p!(Path.join(dir, "work"))
-      File.write!(Path.join(dir, "work/servers.json"), ~s({"newer":1}\n))
-      File.write!(Path.join(dir, "servers.json"), ~s({"older":1}\n))
+      File.write!(Path.join(dir, "work/servers.json"), ~s({\n  "newer": 1\n}\n))
+      File.write!(Path.join(dir, "servers.json"), ~s({\n  "older": 1\n}\n))
 
       servers(dir, "restore_servers")
-      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({"newer":1}\n)
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({\n  "newer": 1\n}\n)
 
       File.rm!(Path.join(dir, "work/servers.json"))
       File.rm!(Path.join(dir, "servers.json"))
@@ -486,12 +486,17 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
 
     test "a truncated working copy is replaced by the persisted list", %{tmp_dir: dir} do
       File.mkdir_p!(Path.join(dir, "work"))
-      File.write!(Path.join(dir, "work/servers.json"), ~s({"version":1,"pia":{"serv))
-      File.write!(Path.join(dir, "servers.json"), ~s({"version":1}\n))
+      # Cut right after an inner object's closing brace.
+      File.write!(
+        Path.join(dir, "work/servers.json"),
+        ~s({\n  "version": 1,\n  "private internet access": {\n    "version": 1,\n    "timestamp": 0\n  }\n)
+      )
+
+      File.write!(Path.join(dir, "servers.json"), ~s({\n  "version": 1\n}\n))
 
       servers(dir, "restore_servers")
 
-      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({"version":1}\n)
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({\n  "version": 1\n}\n)
     end
 
     test "a truncated list is never restored or persisted", %{tmp_dir: dir} do
@@ -509,11 +514,11 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
 
     test "persist copies the working list back to the config dir", %{tmp_dir: dir} do
       File.mkdir_p!(Path.join(dir, "work"))
-      File.write!(Path.join(dir, "work/servers.json"), ~s({"fresh":1}\n))
+      File.write!(Path.join(dir, "work/servers.json"), ~s({\n  "fresh": 1\n}\n))
 
       servers(dir, "persist_servers")
 
-      assert File.read!(Path.join(dir, "servers.json")) == ~s({"fresh":1}\n)
+      assert File.read!(Path.join(dir, "servers.json")) == ~s({\n  "fresh": 1\n}\n)
     end
   end
 

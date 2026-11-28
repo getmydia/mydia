@@ -365,10 +365,13 @@ persist_servers() {
     write_as_mydia "$dir/servers.json" 644 < "$servers_json"
 }
 
-# True when $1 looks like a whole list: gluetun writes one JSON object, so a
-# write cut short does not end in its closing brace.
+# True when $1 is a whole list. Gluetun writes it with a two-space indent
+# (json.Encoder.SetIndent), so the only line that is exactly `}` is the
+# document's own closing brace: inner objects close indented, and JSON
+# strings hold no raw newlines. A write or a capped copy cut short, even right
+# after an inner `}`, has no such last line.
 servers_complete() {
-    [ -s "$1" ] && [ "$(tail -c 64 "$1" | tr -d '[:space:]' | tail -c 1)" = "}" ]
+    [ -s "$1" ] && [ "$(tail -n 1 "$1")" = "}" ]
 }
 
 # True while process $1 runs. An exited child not yet reaped (a zombie)
