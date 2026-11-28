@@ -264,8 +264,11 @@ test needs) and `gdb` (the watchdog's native stacks) (`clientEnv`), and recreate
 the helper `mkPlayerCheck` uses. It replaced the Docker-compose player E2E
 workflow outright. Run it locally with
 `nix build .#checks.x86_64-linux.player-e2e -L` (or `./dev player e2e`); it
-needs KVM, and the VM run itself takes about three minutes (149 s on
-2026-11-21) once its inputs are built. On failure
+needs KVM. Once its inputs are built, the player integration tests subtest
+takes about four minutes locally (250 s on 2026-11-28: about 85 s of app
+build, then about 165 s of `flutter test`) and nearly six on a hosted runner
+(335 s on 2026-11-28: 116 s of app build, then 212 s of `flutter test`, in a
+run that included one 30 s test timeout). On failure
 the build log carries the relay, server and seed journals; on success they
 and the client's log are in `$out` (`./dev player e2e` links it as
 `result-player-e2e`).

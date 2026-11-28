@@ -111,4 +111,4 @@ release no longer queues software redraws with a bare pointer.
 Remove the directory and the override once a `media_kit_video` release finds
 an EGL display without a current context. Check by playing a video in the
 Linux build and looking for `H/W rendering with isolated EGL context.` on
-stderr.
+stdout (it is printed with `g_print`; the fallback messages go to stderr).

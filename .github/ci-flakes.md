@@ -913,9 +913,20 @@ so nothing in the test resolves a host name. If a lookup failure comes back,
 something new is resolving a name: find it in the client log before
 rerunning.
 
-**`no frame within 0:00:10 for ...`** failing a `playback` test. Thrown by
-`pumpBounded` in `player/integration_test/helpers/playback_rig.dart`, which
-every pump in the playback tests goes through: the pump it wraps did not
+**`Timed out after 0:00:30.000000 waiting for the player screen`** in
+`p2p_streaming ... Player can navigate to video and start playback`. Seen
+once on a hosted runner on 2026-11-28, and reproduced locally with the client
+VM on one core: after the movie page's `MovieDetail` query the log has
+nothing from the player at all (no `StreamingCandidates`, no `LocalProxy`).
+The test tapped Play while it was still disabled: `SmartPlayButton` picks its
+file asynchronously and gives the button its `onPressed` a frame later. The
+test now waits for the enabled button. If it comes back, check first whether
+the tap reached a disabled control again.
+
+**`no frame within 0:00:10.000000 for ...`** failing a `playback` or
+`p2p_streaming` test. Thrown by `pumpBounded` in
+`player/integration_test/helpers/playback_rig.dart`, which every pump in the
+playback tests, and in `p2p_streaming_test.dart`'s waits, goes through: the pump it wraps did not
 complete within 10 s. It guards a flutter_test race. When test code lands a
 pump between the engine's `beginFrame` and `drawFrame`, the live test binding
 skips the frame but leaves the scheduler believing one is still scheduled,
