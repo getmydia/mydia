@@ -8,6 +8,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.Queue.PreparedAdd
   alias Mydia.Downloads.WantedFiles
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
@@ -176,15 +177,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   # the client. Shared with `Queue.FilePreview`, which lists files from here
   # without adding anything.
   @spec prepare(SearchResult.t(), keyword()) ::
-          {:ok,
-           %{
-             torrent_input_result: term(),
-             download_type: atom() | nil,
-             opts: keyword(),
-             client_config: map(),
-             adapter: module()
-           }}
-          | {:error, term()}
+          {:ok, PreparedAdd.t()} | {:error, term()}
   def prepare(search_result, opts) do
     download_type = Keyword.get(opts, :download_type)
 
@@ -223,7 +216,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       with {:ok, client_config} <- select_download_client(opts_with_type),
            {:ok, adapter} <- get_adapter_for_client(client_config) do
         {:ok,
-         %{
+         %PreparedAdd{
            torrent_input_result: torrent_input_result,
            download_type: final_download_type,
            opts: opts_with_type,
@@ -255,7 +248,7 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   # The add itself, once the client is chosen and the files are picked
   # (`{selection | nil, peers, listed_files}`): guard the disk, note whether
   # the client already held the torrent, then add.
-  defp add_with_client(prepared, {selection, peers, listed}, search_result) do
+  defp add_with_client(%PreparedAdd{} = prepared, {selection, peers, listed}, search_result) do
     %{
       adapter: adapter,
       client_config: client_config,

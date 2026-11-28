@@ -15,7 +15,7 @@ defmodule Mydia.Downloads.Queue.FilePreview do
   """
 
   alias Mydia.Downloads.Client
-  alias Mydia.Downloads.Queue.{ClientSelection, Duplicates}
+  alias Mydia.Downloads.Queue.{ClientSelection, Duplicates, PreparedAdd}
   alias Mydia.Downloads.Structs.TorrentFile
   alias Mydia.Downloads.WantedFiles
   alias Mydia.Indexers.SearchResult
@@ -115,7 +115,7 @@ defmodule Mydia.Downloads.Queue.FilePreview do
   # download type, title and content type the preview resolved. A choice
   # without an importable video is refused before any client call.
   @spec confirm(t(), keyword()) ::
-          {:ok, map(), {WantedFiles.t(), [String.t()] | nil, [WantedFiles.file_map()]}}
+          {:ok, PreparedAdd.t(), {WantedFiles.t(), [String.t()] | nil, [WantedFiles.file_map()]}}
           | {:error, :no_importable_file}
   def confirm(%__MODULE__{} = preview, opts) do
     indexes = Keyword.get(opts, :only_files) || Enum.sort(auto_selected(preview))
@@ -126,7 +126,7 @@ defmodule Mydia.Downloads.Queue.FilePreview do
         |> Keyword.drop([:file_preview, :only_files])
         |> Keyword.merge(Keyword.take(preview.opts, @prepared_keys))
 
-      prepared = %{
+      prepared = %PreparedAdd{
         torrent_input_result: preview.torrent_input_result,
         download_type: Keyword.get(add_opts, :download_type),
         opts: add_opts,

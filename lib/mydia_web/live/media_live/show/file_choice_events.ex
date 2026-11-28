@@ -5,8 +5,8 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
   in a folder tree, and grabs only the chosen files.
 
   `file_choice` is nil while no modal is open, otherwise
-  `%{ref, title, status, preview, files, selected}`, where `status` is
-  `:loading`, `:ready` or `{:error, reason}`. The preview (which can hold a
+  a `FileChoice` (`ref, title, status, preview, files, selected`), where
+  `status` is `:loading`, `:ready` or `{:error, reason}`. The preview (which can hold a
   `.torrent` body) lives only there, and is dropped when the modal closes.
   Nothing is added to the client before the confirm, so closing undoes
   nothing.
@@ -25,6 +25,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
   alias Mydia.Downloads.Queue.FilePreview
   alias Mydia.Indexers.SearchResult
   alias MydiaWeb.Live.Authorization
+  alias MydiaWeb.MediaLive.Show.FileChoice
   alias MydiaWeb.MediaLive.Show.SearchEvents
 
   require Logger
@@ -55,14 +56,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
 
       {:noreply,
        socket
-       |> assign(:file_choice, %{
-         ref: ref,
-         title: result.title,
-         status: :loading,
-         preview: nil,
-         files: [],
-         selected: MapSet.new()
-       })
+       |> assign(:file_choice, %FileChoice{ref: ref, title: result.title})
        |> start_async(:file_preview, fn ->
          {ref, Downloads.preview_files(result_with_metadata, opts)}
        end)}

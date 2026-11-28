@@ -12,10 +12,11 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
 
   alias Mydia.Downloads.{FileSelection, FileTree}
   alias Mydia.Downloads.Queue.FilePreview
+  alias MydiaWeb.MediaLive.Show.FileChoice
   alias MydiaWeb.MediaLive.Show.FileChoiceEvents
   alias Phoenix.LiveView.JS
 
-  attr :file_choice, :map, required: true
+  attr :file_choice, FileChoice, required: true
 
   def file_choice_modal(assigns) do
     ~H"""
@@ -52,7 +53,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
     """
   end
 
-  attr :file_choice, :map, required: true
+  attr :file_choice, FileChoice, required: true
 
   defp ready(assigns) do
     %{files: files, selected: selected, preview: preview} = assigns.file_choice
