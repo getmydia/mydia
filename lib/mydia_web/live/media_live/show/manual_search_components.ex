@@ -19,6 +19,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   import MydiaWeb.MediaLive.Show.TrackerTermsBadges, only: [terms_badges: 1]
 
   alias Mydia.Indexers.SearchResult
+  alias Phoenix.LiveView.JS
   alias MydiaWeb.Live.SearchResultRef
   alias MydiaWeb.MediaLive.Show.TrackerLimitNote
 
@@ -439,8 +440,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
       :if={@file_choice? and @result.download_protocol != :nzb}
       id={"choose-files-#{SearchResultRef.ref(@result)}"}
       class="btn btn-ghost max-sm:btn-square sm:btn-sm lg:btn-square mr-1"
-      phx-click="choose_files"
-      phx-value-ref={SearchResultRef.ref(@result)}
+      phx-click={
+        JS.push_focus() |> JS.push("choose_files", value: %{ref: SearchResultRef.ref(@result)})
+      }
       title={gettext("Choose files…")}
     >
       <.icon name="hero-folder-open" class="w-4 h-4" />

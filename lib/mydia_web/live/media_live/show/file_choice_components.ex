@@ -21,7 +21,9 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
   def file_choice_modal(assigns) do
     ~H"""
     <div id="file-choice-modal" class="modal modal-open">
-      <div
+      <%!-- focus_wrap keeps Tab inside the dialog; the opener pushed its focus,
+      and every way out pops it back. --%>
+      <.focus_wrap
         id="file-choice-box"
         class="modal-box max-w-2xl"
         role="dialog"
@@ -34,8 +36,8 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
         <.loading :if={@file_choice.status == :loading} />
         <.ready :if={@file_choice.status == :ready} file_choice={@file_choice} />
         <.failed :if={match?({:error, _}, @file_choice.status)} status={@file_choice.status} />
-      </div>
-      <div class="modal-backdrop" phx-click="cancel_file_choice"></div>
+      </.focus_wrap>
+      <div class="modal-backdrop" phx-click={close("cancel_file_choice")}></div>
     </div>
     """
   end
@@ -89,7 +91,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
         id="file-choice-confirm"
         type="button"
         class="btn btn-primary"
-        phx-click="confirm_file_choice"
+        phx-click={close("confirm_file_choice")}
         disabled={not @keeps_video?}
       >
         <.icon name="hero-arrow-down-tray" class="size-4" />
@@ -122,7 +124,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
         id="file-choice-auto"
         type="button"
         class="btn btn-primary"
-        phx-click="download_auto_from_choice"
+        phx-click={close("download_auto_from_choice")}
       >
         <.icon name="hero-arrow-down-tray" class="size-4" />
         {gettext("Download with automatic selection")}
@@ -133,9 +135,18 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
 
   defp cancel_button(assigns) do
     ~H"""
-    <button id="file-choice-cancel" type="button" class="btn btn-ghost" phx-click="cancel_file_choice">
+    <button
+      id="file-choice-cancel"
+      type="button"
+      class="btn btn-ghost"
+      phx-click={close("cancel_file_choice")}
+    >
       {gettext("Cancel")}
     </button>
     """
   end
+
+  # Sends the event, then returns focus to the "Choose files…" button that
+  # opened the dialog.
+  defp close(event), do: event |> JS.push() |> JS.pop_focus()
 end

@@ -77,6 +77,29 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
       assert has_element?(view, "#file-choice-modal", "picked 2 of 3 files")
     end
 
+    test "the dialog keeps focus inside and hands it back on close", ctx do
+      expect_rqbit(ctx.bypass, :ok)
+      {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")
+      open_with_release(view)
+
+      opener = view |> element("#choose-files-#{SearchResultRef.ref(@release)}") |> render()
+      assert opener =~ "push_focus"
+
+      choose_files(view)
+      render_async(view, 2_000)
+
+      # focus_wrap renders its Tab sentinels around the dialog.
+      assert has_element?(view, "#file-choice-box-start")
+
+      assert has_element?(
+               view,
+               "#file-choice-box[role=dialog][aria-labelledby=file-choice-title]"
+             )
+
+      assert view |> element("#file-choice-cancel") |> render() =~ "pop_focus"
+      assert view |> element("#file-choice-confirm") |> render() =~ "pop_focus"
+    end
+
     test "confirming grabs the chosen files", ctx do
       expect_rqbit(ctx.bypass, :ok)
       {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")

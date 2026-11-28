@@ -241,7 +241,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:45
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:217
 #: lib/mydia_web/live/media_live/show/download_audio_components.ex:98
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:137
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:144
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:147
 #: lib/mydia_web/live/media_live/show/modals.ex:113
 #: lib/mydia_web/live/media_live/show/modals.ex:265
@@ -918,7 +918,7 @@ msgstr ""
 msgid "Display Name"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:426
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:427
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:415
 #: lib/mydia_web/live/profile_live/two_factor_component.ex:346
 #: lib/mydia_web/live/search_live/index.html.heex:631
@@ -2001,7 +2001,7 @@ msgid_plural "%{count} paused"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:311
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:312
 #, elixir-autogen, elixir-format
 msgid "%{count} peer"
 msgid_plural "%{count} peers"
@@ -2068,7 +2068,7 @@ msgstr[1] ""
 msgid "%{count} seasons of %{counts}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:459
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:461
 #, elixir-autogen, elixir-format
 msgid "%{count} seeder"
 msgid_plural "%{count} seeders"
@@ -2522,7 +2522,7 @@ msgid "Accounts"
 msgstr ""
 
 #: lib/mydia_web/live/collection_live/preset_components.ex:132
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:111
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:112
 #, elixir-autogen, elixir-format
 msgid "Action"
 msgstr ""
@@ -2731,7 +2731,7 @@ msgid "After"
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:488
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:109
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:110
 #, elixir-autogen, elixir-format
 msgid "Age"
 msgstr ""
@@ -2846,8 +2846,8 @@ msgid "Allow once"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/file_choice_events.ex:148
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:388
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:392
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:389
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:393
 #, elixir-autogen, elixir-format
 msgid "Already downloading"
 msgstr ""
@@ -3125,7 +3125,7 @@ msgstr ""
 msgid "Automatically search for and download new releases"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:305
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:306
 #, elixir-autogen, elixir-format
 msgid "Availability"
 msgstr ""
@@ -4655,8 +4655,8 @@ msgstr ""
 msgid "Download started: %{title}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:419
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:649
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:420
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:651
 #, elixir-autogen, elixir-format
 msgid "Download this release"
 msgstr ""
@@ -5197,12 +5197,12 @@ msgstr ""
 msgid "Failed to update the match."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:641
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:643
 #, elixir-autogen, elixir-format
 msgid "Failed — retry"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:647
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:649
 #, elixir-autogen, elixir-format
 msgid "Failed: %{reason} — click to retry"
 msgstr ""
@@ -5243,7 +5243,7 @@ msgstr ""
 msgid "File Path"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:295
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:296
 #, elixir-autogen, elixir-format
 msgid "File Size"
 msgstr ""
@@ -5480,8 +5480,8 @@ msgid "Good pick, noted"
 msgstr ""
 
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:363
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:379
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:383
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:380
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:384
 #, elixir-autogen, elixir-format
 msgid "Grabbed"
 msgstr ""
@@ -5491,8 +5491,8 @@ msgstr ""
 msgid "Grabbing \"%{title}\" — progress will appear on this page"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:397
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:401
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:398
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:402
 #, elixir-autogen, elixir-format
 msgid "Grabbing…"
 msgstr ""
@@ -5604,7 +5604,7 @@ msgid "Identifying files"
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:500
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:338
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:339
 #, elixir-autogen, elixir-format
 msgid "Identity mismatch"
 msgstr ""
@@ -7166,7 +7166,7 @@ msgstr ""
 msgid "Original language (%{language})"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:328
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:329
 #, elixir-autogen, elixir-format
 msgid "Outside profile limits: %{violation}"
 msgstr ""
@@ -7236,7 +7236,7 @@ msgstr ""
 msgid "Penalized"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:325
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:326
 #, elixir-autogen, elixir-format
 msgid "Penalties"
 msgstr ""
@@ -8197,7 +8197,7 @@ msgstr ""
 msgid "Reset to default"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:283
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:284
 #: lib/mydia_web/live/media_live/show/modals.ex:338
 #, elixir-autogen, elixir-format
 msgid "Resolution"
@@ -8470,7 +8470,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.html.heex:313
 #: lib/mydia_web/live/activity_live/index.html.heex:420
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:104
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:105
 #, elixir-autogen, elixir-format
 msgid "Score"
 msgstr ""
@@ -8792,7 +8792,7 @@ msgid "See what is in cinemas and on your streaming services where you live."
 msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:499
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:334
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:335
 #, elixir-autogen, elixir-format
 msgid "Seeder penalty"
 msgstr ""
@@ -8800,7 +8800,7 @@ msgstr ""
 #: lib/mydia_web/live/activity_live/index.ex:486
 #: lib/mydia_web/live/downloads_live/detail_drawer.ex:152
 #: lib/mydia_web/live/downloads_live/index.html.heex:520
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:307
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:308
 #: lib/mydia_web/live/search_live/index.html.heex:557
 #, elixir-autogen, elixir-format
 msgid "Seeders"
@@ -8813,8 +8813,8 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.html.heex:314
 #: lib/mydia_web/live/activity_live/index.html.heex:421
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:104
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:108
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:105
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:109
 #, elixir-autogen, elixir-format
 msgid "Seeds"
 msgstr ""
@@ -9039,7 +9039,7 @@ msgstr ""
 msgid "Show on posters"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:187
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:188
 #: lib/mydia_web/live/media_live/show/subtitle_modal.ex:378
 #, elixir-autogen, elixir-format
 msgid "Show score breakdown"
@@ -9075,7 +9075,7 @@ msgstr ""
 #: lib/mydia_web/live/downloads_live/index.html.heex:508
 #: lib/mydia_web/live/downloads_live/index.html.heex:546
 #: lib/mydia_web/live/media_live/index.html.heex:458
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:107
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:108
 #: lib/mydia_web/live/media_live/show/modals.ex:349
 #: lib/mydia_web/live/search_live/index.html.heex:257
 #: lib/mydia_web/live/search_live/index.html.heex:500
@@ -9964,7 +9964,7 @@ msgstr ""
 
 #: lib/mydia_web/live/activity_live/index.ex:494
 #: lib/mydia_web/live/activity_live/index.ex:495
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:289
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:290
 #, elixir-autogen, elixir-format
 msgid "Title match"
 msgstr ""
@@ -10387,7 +10387,7 @@ msgstr ""
 msgid "View the status of your media requests"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:531
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:533
 #: lib/mydia_web/live/search_live/index.html.heex:373
 #: lib/mydia_web/live/search_live/index.html.heex:537
 #, elixir-autogen, elixir-format
@@ -11696,7 +11696,7 @@ msgid "Status"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/formatters.ex:44
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:671
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:673
 #, elixir-autogen, elixir-format
 msgctxt "relative time"
 msgid "now"
@@ -15639,7 +15639,7 @@ msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/search_stats_events.ex:120
 #: lib/mydia_web/live/admin_release_blacklist_live/components.ex:76
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:110
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:111
 #: lib/mydia_web/live/media_live/show/manual_search_filters.ex:299
 #, elixir-autogen, elixir-format
 msgid "Indexer"
@@ -20768,65 +20768,65 @@ msgstr ""
 msgid "Open Custom Formats"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:269
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:270
 #, elixir-autogen, elixir-format
 msgid "Blacklisted"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:594
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:596
 #, elixir-autogen, elixir-format
 msgid "New grabs for this episode are blocked until it finishes or is removed."
 msgid_plural "New grabs for this episode are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:610
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:612
 #, elixir-autogen, elixir-format
 msgid "New grabs for this movie are blocked until it finishes or is removed."
 msgid_plural "New grabs for this movie are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:602
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:604
 #, elixir-autogen, elixir-format
 msgid "New grabs for this season are blocked until it finishes or is removed."
 msgid_plural "New grabs for this season are blocked until they finish or are removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:579
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:581
 #, elixir-autogen, elixir-format
 msgid "and %{count} more are already downloading."
 msgid_plural "and %{count} more are already downloading."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:577
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:579
 #, elixir-autogen, elixir-format
 msgid "is already downloading."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:574
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:576
 #, elixir-autogen, elixir-format
 msgid "“%{title}”"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:673
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:675
 #, elixir-autogen, elixir-format
 msgid "Failed %{ago} ago"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:672
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:674
 #, elixir-autogen, elixir-format
 msgid "Failed just now"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:644
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:646
 #, elixir-autogen, elixir-format
 msgid "Blacklisted: %{reason}. Click to grab it anyway."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:640
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:642
 #, elixir-autogen, elixir-format
 msgid "Grab anyway"
 msgstr ""
@@ -21167,12 +21167,12 @@ msgid_plural "Show %{count} results"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:47
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:48
 #, elixir-autogen, elixir-format
 msgid "%{indexer} +%{count}"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:106
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:107
 #, elixir-autogen, elixir-format
 msgid "Release"
 msgstr ""
@@ -21199,8 +21199,8 @@ msgid_plural "≥ %{count} seeds"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:310
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:458
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:311
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:460
 #, elixir-autogen, elixir-format
 msgid "No seeder count (Usenet)"
 msgstr ""
@@ -21467,7 +21467,7 @@ msgstr ""
 msgid "Freeleech"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:318
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:319
 #, elixir-autogen, elixir-format
 msgid "Freeleech bonus"
 msgstr ""
@@ -21611,7 +21611,7 @@ msgid_plural "%{indexers} +%{count} more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:501
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:503
 #, elixir-autogen, elixir-format
 msgid "%{label}, trackers: %{indexers}"
 msgstr ""
@@ -23310,18 +23310,18 @@ msgstr ""
 msgid "Unsaved changes"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:48
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:50
 #, elixir-autogen, elixir-format
 msgid "A magnet link can take a while."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:84
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:86
 #, elixir-autogen, elixir-format
 msgid "Choose at least one video file."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:32
-#: lib/mydia_web/live/media_live/show/manual_search_components.ex:444
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:34
+#: lib/mydia_web/live/media_live/show/manual_search_components.ex:446
 #, elixir-autogen, elixir-format
 msgid "Choose files…"
 msgstr ""
@@ -23331,22 +23331,22 @@ msgstr ""
 msgid "Couldn't fetch the file list."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:96
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:98
 #, elixir-autogen, elixir-format
 msgid "Download selected (%{size})"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:128
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:130
 #, elixir-autogen, elixir-format
 msgid "Download with automatic selection"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:47
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:49
 #, elixir-autogen, elixir-format
 msgid "Fetching the file list…"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:73
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:75
 #, elixir-autogen, elixir-format
 msgid "Mydia picked %{count} of %{total} file"
 msgid_plural "Mydia picked %{count} of %{total} files"
