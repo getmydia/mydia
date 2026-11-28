@@ -930,7 +930,11 @@ seen in CI yet; written down so there is something to look up.
 gdb backtraces and exit 137. The watchdog in `scripts/e2e/run-tests.sh`: the
 app froze in a way no Dart timeout can catch (a blocked GTK thread stops Dart
 timers too), so it printed every thread of `bundle/mydia-player` and killed
-it. Look first at the main thread's stack. A `g_mutex_lock` inside
+it. When no stacks are printed and the next line is `flutter test did not
+exit without its app; killing the run`, there was no app to look at: the
+flutter tool itself hung, in the build or launch before the first test, and
+its own output above is the place to read. Otherwise, look first at the main
+thread's stack. A `g_mutex_lock` inside
 `video_output.cc`'s software redraw is the use-after-free that
 `MYDIA_PATCHES.md` (in `player/packages/media_kit_video/`) says is fixed,
 come back. For a native crash or freeze during a playback teardown, the first

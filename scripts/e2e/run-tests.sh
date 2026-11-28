@@ -176,7 +176,16 @@ test_exit=0
 # killed, which fails the run with something to read instead of a silent
 # timeout of the whole VM test. The suite takes a few minutes; this leaves the
 # VM test's own limit room for the app build before it.
+#
+# `flutter test` exits once its app dies. If it does not (it hung before
+# launching the app, or after losing it), the watchdog ends the whole run:
+# setsid puts xvfb-run, Xvfb, openbox, the flutter tool and the app in one
+# process group whose id is the background job's pid, since a background job
+# of a script is never a group leader and setsid then runs it in place.
 suite_limit=600
+setsid xvfb-run -a -s "-screen 0 1920x1080x24" \
+    sh -c 'openbox & exec "$@"' sh "${flutter_cmd[@]}" &
+test_pid=$!
 (
     waited=0
     while [ "$waited" -lt "$suite_limit" ]; do
@@ -189,10 +198,18 @@ suite_limit=600
             | grep -v '^\[New LWP' >&2 || true
     done
     pkill -KILL -f 'bundle/mydia-player' || true
+    waited=0
+    while [ "$waited" -lt 30 ] && kill -0 "$test_pid" 2>/dev/null; do
+        sleep 1 </dev/null >/dev/null 2>&1
+        waited=$((waited + 1))
+    done
+    if kill -0 "$test_pid" 2>/dev/null; then
+        echo "ERROR: flutter test did not exit without its app; killing the run" >&2
+        kill -KILL -- "-$test_pid" 2>/dev/null || true
+    fi
 ) &
 watchdog=$!
-xvfb-run -a -s "-screen 0 1920x1080x24" \
-    sh -c 'openbox & exec "$@"' sh "${flutter_cmd[@]}" || test_exit=$?
+wait "$test_pid" || test_exit=$?
 kill "$watchdog" 2>/dev/null || true
 
 echo ""

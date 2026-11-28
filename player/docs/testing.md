@@ -179,7 +179,9 @@ Three things about the VM setup are not obvious:
 - A frozen GTK thread stops Dart timers too, so no in-test timeout fires.
   `run-tests.sh` runs a watchdog: after 600 s it prints the app's native stacks
   with gdb and kills `bundle/mydia-player`, which fails the run with something
-  to read.
+  to read. If `flutter test` is still running 30 s later (it hung before
+  launching the app, or does not notice losing it), the watchdog kills the
+  whole run, `xvfb-run` and everything under it.
 
 **The count guard.** A skipped test, or one that returns before asserting,
 still leaves `flutter test` at exit 0. After the suite, `run-tests.sh` calls
