@@ -7876,7 +7876,7 @@ msgid "Recoverable from Configuration > Trash until it is purged"
 msgstr ""
 
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:154
-#: lib/mydia_web/live/downloads_live/files_panel.ex:134
+#: lib/mydia_web/live/downloads_live/files_panel.ex:145
 #: lib/mydia_web/live/downloads_live/index.html.heex:22
 #: lib/mydia_web/live/jobs_live/components.ex:8
 #, elixir-autogen, elixir-format
@@ -22167,7 +22167,7 @@ msgstr ""
 msgid "Couldn't update the file selection."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:121
+#: lib/mydia_web/live/downloads_live/files_panel.ex:132
 #, elixir-autogen, elixir-format
 msgid "Files"
 msgstr ""
@@ -22200,7 +22200,7 @@ msgstr ""
 msgid "Remove from client"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:163
+#: lib/mydia_web/live/downloads_live/files_panel.ex:174
 #, elixir-autogen, elixir-format
 msgid "Save selection"
 msgstr ""
@@ -22256,7 +22256,7 @@ msgstr ""
 msgid "target %{progress}"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:124
+#: lib/mydia_web/live/downloads_live/files_panel.ex:135
 #, elixir-autogen, elixir-format
 msgid "The file list is not available yet."
 msgstr ""
@@ -23297,12 +23297,12 @@ msgstr[1] ""
 msgid "Fix"
 msgstr ""
 
-#: lib/mydia_web/components/file_tree_components.ex:51
+#: lib/mydia_web/components/file_tree_components.ex:52
 #, elixir-autogen, elixir-format
 msgid "%{selected} of %{total} selected"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:154
+#: lib/mydia_web/live/downloads_live/files_panel.ex:165
 #, elixir-autogen, elixir-format
 msgid "Unsaved changes"
 msgstr ""
