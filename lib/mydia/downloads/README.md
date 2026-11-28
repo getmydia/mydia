@@ -292,9 +292,12 @@ gluetun in a loop, every 2 seconds:
 2. The loop idles while neither `VPN_ENABLED=true` in the file nor
    `MYDIA_VPN_SERVICE_PROVIDER` enables the VPN.
 3. Before each start it refreshes the provider's server list with
-   `gluetun update -enduser`, into the container-local
-   `/gluetun/servers.json` that gluetun prefers over its built-in list when
-   newer. Gluetun's built-in list is frozen at its release, and providers
+   `gluetun update -enduser`. The list persists in
+   `/config/gluetun/servers.json`. Gluetun only reads `/gluetun/servers.json`
+   (the updater hardcodes it) and root never opens a path under `/config`, so
+   that file is a root-owned working copy: restored from the config dir as
+   mydia when missing and copied back as mydia before each start. Gluetun
+   prefers it over its built-in list when newer. Gluetun's built-in list is frozen at its release, and providers
    retire servers: PIA renumbered Montreal and gluetun retried the dead
    addresses forever with `TLS key negotiation failed`. The updater runs
    before gluetun joins the split group, so it reaches the provider while the

@@ -26,6 +26,7 @@ as_mydia=${VPN_AS_MYDIA:-su-exec mydia}
 
 auth_toml=/run/mydia-vpn/auth.toml
 gluetun_bin=/usr/local/bin/gluetun
+servers_json=/gluetun/servers.json
 
 # The settings-file keys passed to gluetun, by name. VPN_ENABLED is read by
 # the loop and never passed on.
@@ -285,8 +286,8 @@ servers_update_due() {
     fi
 }
 
-# Refreshes provider $1's server list in /gluetun/servers.json, which the next
-# gluetun reads in place of its built-in list when newer. The built-in list is
+# Refreshes provider $1's server list in $servers_json, which the next gluetun
+# reads in place of its built-in list when newer. The built-in list is
 # from gluetun's release and providers retire servers: PIA renumbered Montreal
 # and gluetun retried the dead addresses forever, never completing a
 # handshake. `gluetun update` returns before gluetun joins the split group, so
@@ -308,6 +309,30 @@ update_servers() {
     printf '%s %s %s\n' "$now" "$result" "$1" > "$servers_stamp"
 }
 
+# The server list lives in /config/gluetun/servers.json, so a refresh survives
+# container recreation. Gluetun can only use a file at $servers_json
+# (/gluetun/servers.json: `gluetun update -enduser` hardcodes it), and root
+# never opens a path under /config, so that file is a root-owned working
+# copy: filled from the persisted list when missing (a new container), read
+# as mydia with a timeout and a 32 MiB cap, and copied back as mydia before
+# each start, which also keeps what gluetun's in-run updater fetched.
+restore_servers() {
+    [ -s "$servers_json" ] && return 0
+    mkdir -p "${servers_json%/*}"
+    # shellcheck disable=SC2086 # $as_mydia is a command prefix
+    if $as_mydia timeout 10 head -c 33554432 "$dir/servers.json" > "$servers_json.tmp" 2>/dev/null &&
+        [ -s "$servers_json.tmp" ]; then
+        mv -f "$servers_json.tmp" "$servers_json"
+    else
+        rm -f "$servers_json.tmp"
+    fi
+}
+
+persist_servers() {
+    [ -s "$servers_json" ] || return 0
+    write_as_mydia "$dir/servers.json" 644 < "$servers_json"
+}
+
 # True while process $1 runs. An exited child not yet reaped (a zombie)
 # counts as gone.
 alive() {
@@ -321,7 +346,9 @@ alive() {
 start_gluetun() {
     # shellcheck disable=SC2016,SC2086 # the script runs in mydia's shell
     VPN_PREFLIGHT_FUNCTIONS_ONLY=1 $as_mydia sh -c '. "$1" && rotate_log "$2"' sh "$self" "$log"
+    restore_servers
     update_servers "$(vpn_provider "$snapshot")"
+    persist_servers
     rm -f "$fifo"
     mkfifo -m 600 "$fifo"
     # shellcheck disable=SC2016,SC2086 # the script runs in mydia's shell

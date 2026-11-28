@@ -409,6 +409,48 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
     end
   end
 
+  describe "restore_servers and persist_servers" do
+    @describetag :tmp_dir
+
+    defp servers(dir, fun) do
+      {_, 0} =
+        sh(~s(dir="$2"; servers_json="$2/work/servers.json"; #{fun}), [dir])
+
+      :ok
+    end
+
+    test "a new container starts from the list in the config dir", %{tmp_dir: dir} do
+      File.write!(Path.join(dir, "servers.json"), ~s({"version":1}))
+
+      servers(dir, "restore_servers")
+
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({"version":1})
+    end
+
+    test "an existing working copy is kept, and nothing persisted is no-op", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "work"))
+      File.write!(Path.join(dir, "work/servers.json"), "newer")
+      File.write!(Path.join(dir, "servers.json"), "older")
+
+      servers(dir, "restore_servers")
+      assert File.read!(Path.join(dir, "work/servers.json")) == "newer"
+
+      File.rm!(Path.join(dir, "work/servers.json"))
+      File.rm!(Path.join(dir, "servers.json"))
+      servers(dir, "restore_servers")
+      refute File.exists?(Path.join(dir, "work/servers.json"))
+    end
+
+    test "persist copies the working list back to the config dir", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "work"))
+      File.write!(Path.join(dir, "work/servers.json"), "fresh")
+
+      servers(dir, "persist_servers")
+
+      assert File.read!(Path.join(dir, "servers.json")) == "fresh"
+    end
+  end
+
   describe "rotate_log" do
     @describetag :tmp_dir
 
