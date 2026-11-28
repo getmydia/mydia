@@ -369,12 +369,12 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
 
   @log_tail_bytes 65_536
 
-  # The last ERROR line in the tail of gluetun.log, which the entrypoint
+  # The last failure line in the tail of gluetun.log, which the entrypoint
   # rotates only between gluetun restarts, so it can still be large.
   defp last_error(dir, fallback) do
     with {:ok, tail} <- read_tail(Path.join(dir, "gluetun.log"), @log_tail_bytes),
          line when is_binary(line) <-
-           tail |> String.split("\n", trim: true) |> Enum.reverse() |> Enum.find(&(&1 =~ "ERROR")) do
+           tail |> String.split("\n", trim: true) |> Enum.reverse() |> Enum.find(&failure_line?/1) do
       {:vpn_down, strip_timestamp(line)}
     else
       _ -> fallback
@@ -384,6 +384,11 @@ defmodule Mydia.Downloads.BuiltIn.Vpn do
   # gluetun stamps every line (`2026-11-04T19:52:12Z ERROR ...`). Left in the
   # reason, a restart loop repeating one error would look like a new
   # transition on every poll.
+  # Gluetun logs an OpenVPN handshake that never completes (a retired server,
+  # blocked UDP) as a WARN, not an ERROR, and retries forever. Without it the
+  # status only ever said the tunnel was down or connecting.
+  defp failure_line?(line), do: line =~ "ERROR" or line =~ "WARN [openvpn] TLS Error"
+
   defp strip_timestamp(line) do
     line
     |> String.trim()

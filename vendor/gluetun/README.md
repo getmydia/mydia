@@ -144,9 +144,11 @@ clears them.
   fails; mount a `resolv.conf` naming public resolvers, which the tunnel
   reaches.
 - **The bundled server list ages.** Gluetun's hardcoded list is from its
-  release; a provider's retired servers stay in it and never answer. Narrow
-  with `MYDIA_VPN_SERVER_NAMES` (or `MYDIA_VPN_SERVER_HOSTNAMES`) to live
-  ones.
+  release; a provider's retired servers stay in it and never answer. The root
+  loop runs `gluetun update -enduser` for the provider before each start (at
+  most daily) and sets `UPDATER_PERIOD=24h`; see
+  `lib/mydia/downloads/README.md`. ProtonVPN is not refreshed, since its
+  updater needs account credentials.
 - **The image is referenced by tag, not digest.** Upstream gluetun and the
   Mydia image are not pinned by digest.
 - **The engine is reported running before its API listens.** Mydia marks

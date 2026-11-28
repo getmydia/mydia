@@ -99,9 +99,13 @@ run_with_gluetun_env() {
     # gluetun has no code default for the two pprof rates (upstream's image
     # sets them as Dockerfile ENV) and panics on a nil pointer without them.
     # They come first so the operator's MYDIA_VPN_* can still override them.
+    # UPDATER_PERIOD keeps the in-memory server list fresh while gluetun runs
+    # (see update_servers for the refresh before each start). It runs inside
+    # the split group, so it only gets through while the tunnel is up.
     exec env -i PATH="$PATH" \
         PPROF_BLOCK_PROFILE_RATE=0 \
         PPROF_MUTEX_PROFILE_RATE=0 \
+        UPDATER_PERIOD=24h \
         "$@" \
         SPLIT_TUNNEL_GID="$split_gid" \
         HTTP_CONTROL_SERVER_ADDRESS=127.0.0.1:8000 \
@@ -243,6 +247,67 @@ rotate_log() {
     fi
 }
 
+# The provider gluetun will use: a non-blank MYDIA_VPN_SERVICE_PROVIDER, as in
+# run_with_gluetun_env, else the last VPN_SERVICE_PROVIDER line of the snapshot
+# $1. Prints nothing when neither names one.
+vpn_provider() {
+    if ! blank "${MYDIA_VPN_SERVICE_PROVIDER:-}"; then
+        printf '%s' "$MYDIA_VPN_SERVICE_PROVIDER"
+    elif [ -f "$1" ]; then
+        printf '%s' "$(sed -n 's/^VPN_SERVICE_PROVIDER=//p' "$1" | tail -n 1)"
+    fi
+}
+
+# Prints 1 when provider $2's server list is due for a refresh, else 0. $1 is
+# the stamp file update_servers writes ("<epoch> <ok|failed> <provider>") and
+# $3 the current epoch. A list refreshed within a day, or a failed attempt
+# within the hour, is not retried, so a gluetun that keeps exiting does not
+# hammer the provider. `custom` has no list, and gluetun's ProtonVPN updater
+# needs account credentials the settings do not carry.
+servers_update_due() {
+    case $2 in
+        '' | custom | protonvpn)
+            printf 0
+            return 0
+            ;;
+    esac
+    at=0
+    result=
+    provider=
+    [ -r "$1" ] && read -r at result provider < "$1"
+    case $at in '' | *[!0-9]*) at=0 ;; esac
+    limit=86400
+    [ "$result" = ok ] || limit=3600
+    if [ "$provider" != "$2" ] || [ $(($3 - at)) -ge "$limit" ]; then
+        printf 1
+    else
+        printf 0
+    fi
+}
+
+# Refreshes provider $1's server list in /gluetun/servers.json, which the next
+# gluetun reads in place of its built-in list when newer. The built-in list is
+# from gluetun's release and providers retire servers: PIA renumbered Montreal
+# and gluetun retried the dead addresses forever, never completing a
+# handshake. `gluetun update` returns before gluetun joins the split group, so
+# it reaches the provider directly even while the tunnel is down. A failure
+# only costs freshness: gluetun falls back to the list it has. The loop status
+# is written first, because the refresh can take a minute and Mydia gives up
+# on a settings change it sees unacknowledged for 30 seconds.
+update_servers() {
+    now=$(date +%s)
+    [ "$(servers_update_due "$servers_stamp" "$1" "$now")" = 1 ] || return 0
+    write_loop_status "$dir/loop-status" "$hash" "$dropped" "$invalid"
+    log_line "Refreshing the $1 server list"
+    result=ok
+    env -i PATH="$PATH" timeout 180 "$gluetun_bin" update -enduser -providers "$1" \
+        > "$run/update.log" 2>&1 || result=failed
+    # shellcheck disable=SC2016,SC2086 # the script runs in mydia's shell
+    $as_mydia sh -c 'cat >> "$1"' sh "$log" < "$run/update.log"
+    [ "$result" = ok ] || log_line "Server list refresh failed; using the list gluetun has"
+    printf '%s %s %s\n' "$now" "$result" "$1" > "$servers_stamp"
+}
+
 # True while process $1 runs. An exited child not yet reaped (a zombie)
 # counts as gone.
 alive() {
@@ -256,6 +321,7 @@ alive() {
 start_gluetun() {
     # shellcheck disable=SC2016,SC2086 # the script runs in mydia's shell
     VPN_PREFLIGHT_FUNCTIONS_ONLY=1 $as_mydia sh -c '. "$1" && rotate_log "$2"' sh "$self" "$log"
+    update_servers "$(vpn_provider "$snapshot")"
     rm -f "$fifo"
     mkfifo -m 600 "$fifo"
     # shellcheck disable=SC2016,SC2086 # the script runs in mydia's shell
@@ -350,6 +416,7 @@ log=$dir/gluetun.log
 run=${auth_toml%/*}
 snapshot=$run/settings.env
 fifo=$run/gluetun.fifo
+servers_stamp=$run/servers-updated
 
 # /run belongs to root, so mydia cannot plant anything here.
 mkdir -p "$run"
