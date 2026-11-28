@@ -72,6 +72,36 @@ safe to run twice (only the first run releases anything), and the mutex is
 cleared in `finalize` instead. The hardware path marks frames straight from
 mpv's callback and queues nothing, so it is unchanged.
 
+### When dispose runs late
+
+If a redraw is still queued when `VideoOutputManager.Dispose` removes the
+output from its table, that removal no longer drops the last reference. The
+queued redraw runs once more (with `destroyed` still false, against a live
+render context), and the whole of dispose, not just the freeing of memory,
+then runs from the idle source's destroy notify on the GTK thread. So
+`mpv_render_context_free` can happen after `VideoOutputManager.Dispose` has
+returned, one GTK main-loop iteration later.
+
+That is safe only while the mpv core outlives that delay. media_kit 1.2.6's
+`NativePlayer.dispose` (`lib/src/player/native/player/real.dart`) calls
+`mpv_terminate_destroy` from a `Future.delayed` of 5 seconds after it stops
+playback; the stop is not what makes this safe, the delay is. A render
+context freed, or a redraw rendered, after the core is destroyed would use
+freed mpv state. Recheck that delay on every media_kit upgrade. The window
+is not new, either: a `VideoController` disposed more than 5 seconds after
+its `Player` already freed its render context after the core was gone,
+without this patch.
+
+### Known hazard this patch leaves alone
+
+`TextureSW` (`linux/texture_sw.cc`) keeps a bare `VideoOutput*` and, in
+`texture_sw_copy_pixels`, reads the output's size and pixel buffer on
+Flutter's raster thread, without the mutex the GTK-thread redraw holds while
+it writes that buffer. Dispose unregisters the texture (the engine does that
+on the raster thread, asynchronously) and then frees the pixel buffer, so a
+copy already in flight can read freed memory. The patch neither causes nor
+fixes this.
+
 Retire this with the rest of the directory, after checking that the upstream
 release no longer queues software redraws with a bare pointer.
 
