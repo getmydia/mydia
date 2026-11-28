@@ -219,7 +219,8 @@ void main() {
       window.maximized = true;
       window.bounds = const Rect.fromLTWH(0, 25, 1920, 1055);
       controller.onWindowMaximize();
-      await settle();
+      // Replaces the save above, so poll for it as the unmaximize test does.
+      await settleUntil(store, (stored) => stored.maximized);
 
       expect(store.get()!.maximized, isTrue);
       expect(

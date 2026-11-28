@@ -104,7 +104,11 @@ copy already in flight can read freed memory. The patch neither causes nor
 fixes this.
 
 Retire this with the rest of the directory, after checking that the upstream
-release no longer queues software redraws with a bare pointer.
+release no longer queues software redraws with a bare pointer, and that
+`VideoOutputManager.Dispose` still frees each output's render context before
+it returns. A release that keeps queued redraws alive by reference without that
+second guarantee would pass the first check and let the render context outlive
+the mpv core.
 
 ## Retiring it
 
