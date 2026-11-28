@@ -214,12 +214,19 @@ defmodule MydiaWeb.Live.UserAuth do
   end
 
   # Fatal health alerts are for admins only: everyone else gets an empty list
-  # and is never subscribed.
+  # and is never subscribed. `health_alerts_now` is the clock alert durations
+  # are measured to; a minute tick moves it, since LiveView would otherwise
+  # never re-render an unchanged alert and its "for 10m" would stick.
+  @health_alerts_tick_ms 60_000
+
   defp assign_health_alerts(socket) do
+    socket = assign(socket, :health_alerts_now, DateTime.utc_now())
+
     if Authorization.has_role?(socket.assigns[:current_user], :admin) do
       socket =
         if connected?(socket) do
           Mydia.Health.Alerts.subscribe()
+          schedule_health_alerts_tick()
           attach_hook(socket, :health_alerts_hook, :handle_info, &handle_health_alerts/2)
         else
           socket
@@ -231,8 +238,20 @@ defmodule MydiaWeb.Live.UserAuth do
     end
   end
 
-  defp handle_health_alerts({:health_alerts, alerts}, socket),
-    do: {:halt, assign(socket, :health_alerts, alerts)}
+  defp schedule_health_alerts_tick,
+    do: Process.send_after(self(), :health_alerts_tick, @health_alerts_tick_ms)
+
+  defp handle_health_alerts({:health_alerts, alerts}, socket) do
+    {:halt,
+     socket
+     |> assign(:health_alerts, alerts)
+     |> assign(:health_alerts_now, DateTime.utc_now())}
+  end
+
+  defp handle_health_alerts(:health_alerts_tick, socket) do
+    schedule_health_alerts_tick()
+    {:halt, assign(socket, :health_alerts_now, DateTime.utc_now())}
+  end
 
   defp handle_health_alerts(_msg, socket), do: {:cont, socket}
 

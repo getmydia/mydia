@@ -57,6 +57,12 @@ Rules:
   raised and the built-in client is the only enabled client. The specific
   alert already says why; two banners for one cause is noise.
 - One alert per missing library root, so the detail can name the path.
+- A root check that does not answer within 5 seconds (a hung network mount)
+  is reported as "not responding" under the same key. Each check runs in its
+  own process, and a still-blocked check is reused rather than started again,
+  so a hung mount never stalls the watcher or piles up blocked processes.
+- The "every download client is down" alert is suppressed only when the one
+  enabled client is the built-in client itself, matched by its runtime id.
 
 Each alert carries a human-readable title and detail. The built-in detail
 reuses `Status.describe/1`, so the wording matches the Download Clients page
@@ -95,11 +101,13 @@ processes or the database.
 - It also subscribes to `BuiltIn.Status.topic/0` and re-evaluates on
   `{:built_in_status, _}`, so a built-in alert can appear exactly at the
   10-minute mark rather than up to a minute later. Re-evaluation is cheap.
-- When the alert list changes (keys added or removed, not `since` ticking), it
-  broadcasts `{:health_alerts, alerts}` on topic `"health:alerts"`.
-- Public API: `current/0` (reads from the process, or from
-  `:persistent_term`/ETS if that keeps reads off the GenServer; either is
-  fine), `subscribe/0`.
+- When the alert list changes (an alert appears, clears, or its text
+  changes), it broadcasts `{:health_alerts, alerts}` on topic
+  `"health:alerts"`. Gathers run one at a time in an unlinked task.
+- Public API: `current/0` (reads `:persistent_term`, never the process, so a
+  slow gather cannot delay a page mount), `subscribe/0`.
+- Each admin LiveView ticks a `health_alerts_now` clock every minute so the
+  "for 3h" durations stay current.
 - Started in `Mydia.Application`, gated in test like `ClientHealth`. Tests
   drive `Evaluator` directly and start the GenServer under `start_supervised`
   with injected observation functions where needed.

@@ -19,11 +19,12 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
   empty for everyone else.
   """
   attr :alerts, :list, required: true, doc: "`Mydia.Health.Alert` structs"
+  attr :now, :any, default: nil, doc: "the time durations are measured to (default: now)"
 
   def fatal_alerts_card(%{alerts: []} = assigns), do: ~H""
 
   def fatal_alerts_card(assigns) do
-    assigns = assign(assigns, :now, DateTime.utc_now())
+    assigns = assign(assigns, :now, assigns.now || DateTime.utc_now())
 
     ~H"""
     <section

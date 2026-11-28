@@ -6,8 +6,8 @@ defmodule Mydia.Health.Alerts do
   Every minute, and whenever the built-in torrent client's status changes, it
   gathers observations (`Mydia.Health.Alerts.Observations`) and runs them
   through `Mydia.Health.Alerts.Evaluator`, which applies the 10-minute grace
-  period and the 5-minute clear period. When the set of alert keys changes it
-  broadcasts `{:health_alerts, alerts}` on `topic/0`.
+  period and the 5-minute clear period. It
+  broadcasts `{:health_alerts, alerts}` on `topic/0` whenever the list changes.
 
   Started only when `:start_health_monitors` is on, like `ClientHealth`;
   `current/0` returns `[]` when it is not running.
@@ -72,6 +72,7 @@ defmodule Mydia.Health.Alerts do
     }
 
     :persistent_term.put({__MODULE__, name}, [])
+    create_probe_table(name)
     Phoenix.PubSub.subscribe(Mydia.PubSub, Keyword.get(opts, :built_in_topic, Status.topic()))
     # The first gather waits one interval: nothing can alert before 10 minutes
     # anyway, and boot is when the health caches are still filling.
@@ -116,16 +117,18 @@ defmodule Mydia.Health.Alerts do
   defp apply_observations(state, observations) do
     {alerts, tracker} = Evaluator.evaluate(observations, state.tracker, state.now.())
 
+    # `since` is stable while an alert lasts, so this changes only when an
+    # alert appears, clears, or its text changes.
     if alerts != state.alerts do
       :persistent_term.put({__MODULE__, state.name}, alerts)
-    end
-
-    if keys(alerts) != keys(state.alerts) do
       Phoenix.PubSub.broadcast(Mydia.PubSub, state.topic, {:health_alerts, alerts})
     end
 
     %{state | alerts: alerts, tracker: tracker}
   end
 
-  defp keys(alerts), do: alerts |> Enum.map(& &1.key) |> Enum.sort()
+  # The shared table belongs to the production watcher only; test instances
+  # under other names inject their own gather and never probe.
+  defp create_probe_table(__MODULE__), do: Mydia.Health.Alerts.DirProbe.create_table()
+  defp create_probe_table(_name), do: :ok
 end

@@ -65,6 +65,19 @@ defmodule MydiaWeb.HealthAlertsTest do
       assert view |> element("#sidebar-health-alert") |> render() =~ "2"
     end
 
+    test "a clock tick moves the duration forward", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/")
+      broadcast([vpn_alert()])
+      before = :sys.get_state(view.pid).socket.assigns.health_alerts_now
+
+      Process.sleep(5)
+      send(view.pid, :health_alerts_tick)
+      _ = render(view)
+
+      later = :sys.get_state(view.pid).socket.assigns.health_alerts_now
+      assert DateTime.compare(later, before) == :gt
+    end
+
     test "an empty broadcast removes the banner", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/")
       broadcast([vpn_alert()])

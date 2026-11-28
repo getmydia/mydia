@@ -8,6 +8,7 @@ defmodule Mydia.Health.Alerts.ObservationsTest do
   alias Mydia.Settings.LibraryPath
 
   @running %Status{engine: :running, vpn: :off, disk: :ok}
+  @built_in_id Mydia.Settings.RuntimeConfig.build_runtime_id(:download_client, "Built-in")
 
   defp sources(overrides) do
     Keyword.merge(
@@ -109,7 +110,7 @@ defmodule Mydia.Health.Alerts.ObservationsTest do
       gather(
         built_in_status: blocked,
         client_status: fn ->
-          %{"builtin" => %{status: :unhealthy}, "off" => %{status: :disabled}}
+          %{@built_in_id => %{status: :unhealthy}, "off" => %{status: :disabled}}
         end
       )
 
@@ -120,6 +121,17 @@ defmodule Mydia.Health.Alerts.ObservationsTest do
       gather(
         built_in_status: blocked,
         client_status: fn -> %{"a" => %{status: :unhealthy}, "b" => %{status: :unhealthy}} end
+      )
+
+    assert obs.built_in_blocked
+    assert obs.all_download_clients_down
+  end
+
+  test "a blocked built-in does not hide a single unhealthy external client" do
+    obs =
+      gather(
+        built_in_status: fn -> %{@running | vpn: {:down, :vpn_down}} end,
+        client_status: fn -> %{"external" => %{status: :unhealthy}} end
       )
 
     assert obs.built_in_blocked
@@ -154,6 +166,15 @@ defmodule Mydia.Health.Alerts.ObservationsTest do
              obs[{:library_root_missing, "lp1"}]
 
     assert detail =~ "/nonexistent-root"
+  end
+
+  test "an unresponsive local root is reported as not responding" do
+    path = %LibraryPath{id: "lp1", path: "/mnt/hung", disabled: false}
+    obs = gather(library_paths: fn -> [path] end, dir?: fn _ -> :timeout end)
+
+    assert %{detail: detail} = obs[{:library_root_missing, "lp1"}]
+    assert detail =~ "/mnt/hung"
+    assert detail =~ "not responding"
   end
 
   test "present local root is not reported" do

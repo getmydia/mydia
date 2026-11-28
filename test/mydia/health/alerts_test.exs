@@ -113,6 +113,7 @@ defmodule Mydia.Health.AlertsTest do
 
   test "a raising gather does not take the watcher down" do
     name = :"alerts_raise_#{System.unique_integer([:positive])}"
+    test_pid = self()
 
     pid =
       start_supervised!(
@@ -121,14 +122,33 @@ defmodule Mydia.Health.AlertsTest do
          topic: "health:alerts:#{name}",
          built_in_topic: "built_in:#{name}",
          interval_ms: 20,
-         gather: fn -> raise "boom" end,
+         gather: fn ->
+           send(test_pid, :raising)
+           raise "boom"
+         end,
          now: fn -> @t0 end},
         id: name
       )
 
-    Process.sleep(100)
+    # Two gathers: the second can only start once the first one's failure was
+    # handled and the watcher survived it.
+    assert_receive :raising
+    assert_receive :raising
     assert Process.alive?(pid)
     assert Alerts.current(name) == []
+  end
+
+  test "broadcasts when an alert's detail changes", ctx do
+    ctx.start.(:timer.hours(1))
+    :ok = Alerts.refresh(ctx.name)
+    ctx.set.(:now, minutes(10))
+    :ok = Alerts.refresh(ctx.name)
+    assert_receive {:health_alerts, [%Alert{detail: nil}]}
+
+    ctx.set.(:obs, %{vpn: %{@obs | detail: "new"}})
+    ctx.set.(:now, minutes(11))
+    :ok = Alerts.refresh(ctx.name)
+    assert_receive {:health_alerts, [%Alert{detail: "new"}]}
   end
 
   test "re-evaluates on built-in status broadcast", ctx do

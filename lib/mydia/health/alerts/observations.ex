@@ -9,7 +9,9 @@ defmodule Mydia.Health.Alerts.Observations do
     * `ClientHealth.status_map/0` for every download client,
     * `Indexers.Health.status_map/0` merged with
       `CardigannSummary.status_map/0`, as the home dashboard does,
-    * `File.dir?/1` on each enabled, local library root.
+    * `DirProbe.dir?/1` (`File.dir?/1` with a 5-second limit) on each
+      enabled, local library root; a root that does not answer is reported
+      as not responding.
 
   Returns `%{key => nil | observation}`. The four fixed keys are always
   present; `{:library_root_missing, id}` appears only for a failing root.
@@ -21,12 +23,14 @@ defmodule Mydia.Health.Alerts.Observations do
 
   require Logger
 
+  alias Mydia.Downloads.BuiltIn
   alias Mydia.Downloads.BuiltIn.Status
   alias Mydia.Downloads.ClientHealth
-  alias Mydia.Health.Alerts.Evaluator
+  alias Mydia.Health.Alerts.{DirProbe, Evaluator}
   alias Mydia.Indexers.CardigannSummary
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Settings.RuntimeConfig
 
   @log_every_seconds 3600
 
@@ -58,7 +62,7 @@ defmodule Mydia.Health.Alerts.Observations do
         Map.merge(Mydia.Indexers.Health.status_map(), CardigannSummary.status_map())
       end,
       library_paths: fn -> Settings.list_library_paths() end,
-      dir?: &File.dir?/1
+      dir?: &DirProbe.dir?/1
     ]
   end
 
@@ -97,11 +101,20 @@ defmodule Mydia.Health.Alerts.Observations do
       not all_unhealthy?(statuses) ->
         nil
 
-      built_in_blocked? and length(statuses) == 1 ->
+      built_in_blocked? and only_built_in?(clients) ->
         nil
 
       true ->
         %{title: "Every download client is unreachable", detail: nil, fix_path: "/admin/clients"}
+    end
+  end
+
+  defp only_built_in?(clients) do
+    built_in_id = RuntimeConfig.build_runtime_id(:download_client, BuiltIn.name())
+
+    case Enum.reject(clients, fn {_id, status} -> status_of(status) == :disabled end) do
+      [{^built_in_id, _}] -> true
+      _ -> false
     end
   end
 
@@ -114,26 +127,32 @@ defmodule Mydia.Health.Alerts.Observations do
     for %LibraryPath{disabled: false, path: path} = lp <- paths,
         is_binary(path),
         not Mydia.Storage.s3?(path),
-        not dir?.(path),
+        result <- [dir?.(path)],
+        result != true,
         into: %{} do
       {{:library_root_missing, lp.id || path},
        %{
          title: "A library folder is missing",
-         detail: "#{path} does not exist or is not a folder.",
+         detail: root_detail(path, result),
          fix_path: "/admin/library-paths"
        }}
     end
   end
 
+  defp root_detail(path, :timeout),
+    do: "#{path} is not responding. Its drive or network share may be hung."
+
+  defp root_detail(path, _), do: "#{path} does not exist or is not a folder."
+
   defp active_statuses(status_map) do
     status_map
     |> Map.values()
-    |> Enum.map(fn
-      %{status: status} -> status
-      status when is_atom(status) -> status
-    end)
+    |> Enum.map(&status_of/1)
     |> Enum.reject(&(&1 == :disabled))
   end
+
+  defp status_of(%{status: status}), do: status
+  defp status_of(status) when is_atom(status), do: status
 
   defp all_unhealthy?([]), do: false
   defp all_unhealthy?(statuses), do: Enum.all?(statuses, &(&1 == :unhealthy))

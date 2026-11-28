@@ -75,6 +75,10 @@ defmodule MydiaWeb.Layouts do
     default: [],
     doc: "fatal `Mydia.Health.Alert`s, set for admins by :load_navigation_data"
 
+  attr :health_alerts_now, :any,
+    default: nil,
+    doc: "the clock alert durations are measured to, ticked every minute"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -174,7 +178,7 @@ defmodule MydiaWeb.Layouts do
             </div>
           </div>
 
-          <.health_alert_banner alerts={@health_alerts} />
+          <.health_alert_banner alerts={@health_alerts} now={@health_alerts_now} />
 
           <%!-- Navigation menu --%>
           <nav class="flex-1 min-h-0 overflow-y-auto">
