@@ -124,7 +124,10 @@ defmodule Mydia.Downloads.WantedFiles do
     end
   end
 
+  # The operator may tick a file from another season of a pack, so the
+  # season restriction `select/2` applies is lifted here.
   defp manual_episodes(%{media_item: %MediaItem{type: "tv_show"}} = context, kept, unchosen) do
+    context = %{context | season_number: nil}
     kept_entries = video_entries(kept)
     unchosen_entries = video_entries(unchosen)
     episode_map = lookup_episodes(context, kept_entries ++ unchosen_entries)

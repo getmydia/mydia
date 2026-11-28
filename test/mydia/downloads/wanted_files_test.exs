@@ -244,6 +244,18 @@ defmodule Mydia.Downloads.WantedFilesTest do
       assert sel.skipped_owned_episode_ids |> Enum.sort() == Enum.take(ids, 2) |> Enum.sort()
     end
 
+    test "manual maps a chosen file from another season of the pack", %{show: show, ids: ids} do
+      s3 = episode_fixture(%{media_item_id: show.id, season_number: 3, episode_number: 1})
+
+      files = [
+        ep_file(0, 5),
+        file("The.Lantern.Keepers.S02-S03/The.Lantern.Keepers.S03E01.1080p.mkv", 1)
+      ]
+
+      assert {:ok, sel} = WantedFiles.manual(ctx(show, ids), files, [0, 1])
+      assert sel.file_episodes == %{0 => Enum.at(ids, 4), 1 => s3.id}
+    end
+
     test "manual refuses a choice without a video", %{show: show, ids: ids} do
       files = [ep_file(0, 5), file("#{@pack}/#{@pack}E05.en.srt", 1)]
       assert {:error, :no_importable_file} = WantedFiles.manual(ctx(show, ids), files, [1])
