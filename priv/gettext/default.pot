@@ -21,18 +21,18 @@ msgstr ""
 msgid "Actions"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:390
-#: lib/mydia_web/components/layouts.ex:403
+#: lib/mydia_web/components/layouts.ex:394
+#: lib/mydia_web/components/layouts.ex:407
 #, elixir-autogen, elixir-format
 msgid "Attempting to reconnect"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:398
+#: lib/mydia_web/components/layouts.ex:402
 #, elixir-autogen, elixir-format
 msgid "Something went wrong!"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:385
+#: lib/mydia_web/components/layouts.ex:389
 #, elixir-autogen, elixir-format
 msgid "We can't find the internet"
 msgstr ""
@@ -113,12 +113,12 @@ msgstr ""
 msgid "Account menu"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:269
+#: lib/mydia_web/components/layouts.ex:273
 #, elixir-autogen, elixir-format
 msgid "Acquisition"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:306
+#: lib/mydia_web/components/layouts.ex:310
 #: lib/mydia_web/live/activity_live/index.ex:109
 #: lib/mydia_web/live/admin_plugins_live/logs_modal_components.ex:33
 #: lib/mydia_web/live/plugin_page_live/activity.ex:17
@@ -128,13 +128,13 @@ msgstr ""
 msgid "Activity"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:213
-#: lib/mydia_web/components/layouts.ex:214
+#: lib/mydia_web/components/layouts.ex:217
+#: lib/mydia_web/components/layouts.ex:218
 #, elixir-autogen, elixir-format
 msgid "Add section"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:312
+#: lib/mydia_web/components/layouts.ex:316
 #: lib/mydia_web/live/admin_plugins_live/modal_components.ex:371
 #: lib/mydia_web/live/admin_users_live/components.ex:220
 #: lib/mydia_web/live/admin_users_live/modal_components.ex:13
@@ -164,7 +164,7 @@ msgstr ""
 msgid "Avatar"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:255
+#: lib/mydia_web/components/layouts.ex:259
 #: lib/mydia_web/live/calendar_live/index.ex:27
 #, elixir-autogen, elixir-format
 msgid "Calendar"
@@ -274,12 +274,12 @@ msgstr ""
 msgid "Cartoon"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:151
+#: lib/mydia_web/components/layouts.ex:155
 #, elixir-autogen, elixir-format
 msgid "Close sidebar"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:249
+#: lib/mydia_web/components/layouts.ex:253
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:100
 #: lib/mydia_web/live/collection_live/index.ex:60
 #: lib/mydia_web/live/collection_live/index.ex:72
@@ -295,12 +295,12 @@ msgstr ""
 msgid "Continue"
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:288
+#: lib/mydia_web/live/user_auth.ex:307
 #, elixir-autogen, elixir-format
 msgid "Could not send feedback. Please try again later."
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:502
+#: lib/mydia_web/components/layouts.ex:506
 #: lib/mydia_web/live/profile_live/index.html.heex:233
 #, elixir-autogen, elixir-format
 msgid "Dark theme"
@@ -314,15 +314,15 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:194
-#: lib/mydia_web/components/layouts.ex:553
+#: lib/mydia_web/components/layouts.ex:198
+#: lib/mydia_web/components/layouts.ex:557
 #: lib/mydia_web/live/discover_live/index.ex:50
 #: lib/mydia_web/live/discover_live/index.html.heex:5
 #, elixir-autogen, elixir-format
 msgid "Discover"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:138
+#: lib/mydia_web/components/layouts.ex:142
 #: lib/mydia_web/live/admin_duplicates_live/components.ex:403
 #: lib/mydia_web/live/dashboard_live/index.html.heex:49
 #: lib/mydia_web/live/downloads_live/index.html.heex:179
@@ -334,8 +334,8 @@ msgstr ""
 msgid "Dismiss"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:279
-#: lib/mydia_web/components/layouts.ex:575
+#: lib/mydia_web/components/layouts.ex:283
+#: lib/mydia_web/components/layouts.ex:579
 #: lib/mydia_web/controllers/page_html/home.html.heex:34
 #: lib/mydia_web/live/activity_live/index.ex:186
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:99
@@ -352,30 +352,30 @@ msgstr ""
 msgid "Error loading video"
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:494
+#: lib/mydia_web/live/user_auth.ex:513
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again later."
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:281
+#: lib/mydia_web/live/user_auth.ex:300
 #, elixir-autogen, elixir-format
 msgid "Feedback service is temporarily unavailable. Please try again later."
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:186
-#: lib/mydia_web/components/layouts.ex:546
+#: lib/mydia_web/components/layouts.ex:190
+#: lib/mydia_web/components/layouts.ex:550
 #: lib/mydia_web/live/dashboard_live/index.ex:315
 #, elixir-autogen, elixir-format
 msgid "Home"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:287
+#: lib/mydia_web/components/layouts.ex:291
 #: lib/mydia_web/live/import_media_live/index.html.heex:5
 #, elixir-autogen, elixir-format
 msgid "Import"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:300
+#: lib/mydia_web/components/layouts.ex:304
 #: lib/mydia_web/live/admin_import_lists_live/index.ex:26
 #: lib/mydia_web/live/admin_import_lists_live/index.html.heex:4
 #, elixir-autogen, elixir-format
@@ -398,7 +398,7 @@ msgstr ""
 
 #: lib/mydia_web/admin_nav.ex:73
 #: lib/mydia_web/components/add_media_components.ex:58
-#: lib/mydia_web/components/layouts.ex:207
+#: lib/mydia_web/components/layouts.ex:211
 #: lib/mydia_web/live/admin_settings_live/labels.ex:23
 #: lib/mydia_web/live/library_move_component.ex:313
 #: lib/mydia_web/live/media_live/index.html.heex:204
@@ -406,7 +406,7 @@ msgstr ""
 msgid "Library"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:492
+#: lib/mydia_web/components/layouts.ex:496
 #: lib/mydia_web/live/profile_live/index.html.heex:225
 #, elixir-autogen, elixir-format
 msgid "Light theme"
@@ -443,8 +443,8 @@ msgstr ""
 msgid "Movie"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:223
-#: lib/mydia_web/components/layouts.ex:568
+#: lib/mydia_web/components/layouts.ex:227
+#: lib/mydia_web/components/layouts.ex:572
 #: lib/mydia_web/components/person_components.ex:179
 #: lib/mydia_web/controllers/page_html/home.html.heex:12
 #: lib/mydia_web/live/admin_dashboard_live/plays_chart_components.ex:124
@@ -471,7 +471,7 @@ msgstr ""
 msgid "Mute/Unmute"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:202
+#: lib/mydia_web/components/layouts.ex:206
 #: lib/mydia_web/live/dashboard_live/index.html.heex:139
 #: lib/mydia_web/live/my_requests_live/index.ex:14
 #: lib/mydia_web/live/my_requests_live/index.html.heex:6
@@ -491,7 +491,7 @@ msgstr ""
 msgid "New"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:123
+#: lib/mydia_web/components/layouts.ex:127
 #, elixir-autogen, elixir-format
 msgid "New in Mydia v%{version}"
 msgstr ""
@@ -508,7 +508,7 @@ msgstr ""
 msgid "Normal"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:169
+#: lib/mydia_web/components/layouts.ex:173
 #, elixir-autogen, elixir-format
 msgid "Open Player"
 msgstr ""
@@ -523,7 +523,7 @@ msgstr ""
 msgid "Play/Pause"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:172
+#: lib/mydia_web/components/layouts.ex:176
 #: lib/mydia_web/live/profile_live/index.html.heex:318
 #, elixir-autogen, elixir-format
 msgid "Player"
@@ -555,7 +555,7 @@ msgid "Quality"
 msgstr ""
 
 #: lib/mydia_web/admin_nav.ex:78
-#: lib/mydia_web/components/layouts.ex:561
+#: lib/mydia_web/components/layouts.ex:565
 #: lib/mydia_web/live/activity_live/index.ex:187
 #: lib/mydia_web/live/admin_indexers_live/search_stats_components.ex:100
 #: lib/mydia_web/live/admin_plugins_live/capability_summary.ex:98
@@ -563,13 +563,13 @@ msgstr ""
 msgid "Requests"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:273
+#: lib/mydia_web/components/layouts.ex:277
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:70
 #, elixir-autogen, elixir-format
 msgid "Search"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:131
+#: lib/mydia_web/components/layouts.ex:135
 #, elixir-autogen, elixir-format
 msgid "See what's new"
 msgstr ""
@@ -614,13 +614,13 @@ msgstr ""
 msgid "Speed"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:482
+#: lib/mydia_web/components/layouts.ex:486
 #, elixir-autogen, elixir-format
 msgid "System theme"
 msgstr ""
 
 #: lib/mydia_web/components/core_components.ex:753
-#: lib/mydia_web/components/layouts.ex:570
+#: lib/mydia_web/components/layouts.ex:574
 #: lib/mydia_web/live/components/library_search_form.ex:73
 #: lib/mydia_web/live/downloads_live/components.ex:205
 #: lib/mydia_web/live/downloads_live/components.ex:257
@@ -628,7 +628,7 @@ msgstr ""
 msgid "TV"
 msgstr ""
 
-#: lib/mydia_web/components/layouts.ex:231
+#: lib/mydia_web/components/layouts.ex:235
 #: lib/mydia_web/controllers/page_html/home.html.heex:23
 #: lib/mydia_web/live/admin_download_clients_live/category_routing_components.ex:19
 #: lib/mydia_web/live/admin_import_lists_live/components.ex:189
@@ -644,7 +644,7 @@ msgstr ""
 msgid "TV Shows"
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:266
+#: lib/mydia_web/live/user_auth.ex:285
 #, elixir-autogen, elixir-format
 msgid "Thanks, feedback sent."
 msgstr ""
@@ -1106,7 +1106,7 @@ msgstr ""
 msgid "No"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:225
+#: lib/mydia_web/live/dashboard_live/health_components.ex:226
 #: lib/mydia_web/live/media_live/show/modals.ex:389
 #: lib/mydia_web/live/profile_live/index.html.heex:381
 #: lib/mydia_web/live/search_live/index.html.heex:83
@@ -1728,21 +1728,21 @@ msgid_plural "%{count} recovery codes left"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/components/layouts.ex:613
+#: lib/mydia_web/components/layouts.ex:617
 #, elixir-autogen, elixir-format
 msgid "and %{count} earlier release"
 msgid_plural "and %{count} earlier releases"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/user_auth.ex:497
+#: lib/mydia_web/live/user_auth.ex:516
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again in %{count} second."
 msgid_plural "Feedback is rate limited. Try again in %{count} seconds."
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/user_auth.ex:505
+#: lib/mydia_web/live/user_auth.ex:524
 #, elixir-autogen, elixir-format
 msgid "Feedback is rate limited. Try again in about %{count} minute."
 msgid_plural "Feedback is rate limited. Try again in about %{count} minutes."
@@ -1854,7 +1854,7 @@ msgid_plural "%{count} files couldn't import"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:261
+#: lib/mydia_web/live/dashboard_live/health_components.ex:262
 #, elixir-autogen, elixir-format
 msgid "%{count} file · %{size}"
 msgid_plural "%{count} files · %{size}"
@@ -2089,7 +2089,7 @@ msgid_plural "%{count} stalled"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:228
+#: lib/mydia_web/live/dashboard_live/health_components.ex:229
 #, elixir-autogen, elixir-format
 msgid "%{count} to review"
 msgid_plural "%{count} to review"
@@ -3386,7 +3386,7 @@ msgid "Checking that your indexers are enabled"
 msgstr ""
 
 #: lib/mydia_web/live/admin_indexers_live/flaresolverr_components.ex:211
-#: lib/mydia_web/live/dashboard_live/health_components.ex:220
+#: lib/mydia_web/live/dashboard_live/health_components.ex:221
 #: lib/mydia_web/status_labels.ex:166
 #, elixir-autogen, elixir-format
 msgid "Checking…"
@@ -4743,7 +4743,7 @@ msgstr[1] ""
 msgid "Email, GitHub handle, Discord, or anything you prefer"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:259
+#: lib/mydia_web/live/dashboard_live/health_components.ex:260
 #, elixir-autogen, elixir-format
 msgid "Empty"
 msgstr ""
@@ -5334,27 +5334,27 @@ msgstr ""
 msgid "Fix match: this is the wrong title"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:280
+#: lib/mydia_web/live/dashboard_live/health_components.ex:281
 #, elixir-autogen, elixir-format
 msgid "FlareSolverr: checking…"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:283
+#: lib/mydia_web/live/dashboard_live/health_components.ex:284
 #, elixir-autogen, elixir-format
 msgid "FlareSolverr: disabled"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:282
+#: lib/mydia_web/live/dashboard_live/health_components.ex:283
 #, elixir-autogen, elixir-format
 msgid "FlareSolverr: down"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:281
+#: lib/mydia_web/live/dashboard_live/health_components.ex:282
 #, elixir-autogen, elixir-format
 msgid "FlareSolverr: ok"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:284
+#: lib/mydia_web/live/dashboard_live/health_components.ex:285
 #, elixir-autogen, elixir-format
 msgid "FlareSolverr: unknown"
 msgstr ""
@@ -6898,7 +6898,7 @@ msgstr ""
 msgid "Not set"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:110
+#: lib/mydia_web/live/dashboard_live/health_components.ex:111
 #, elixir-autogen, elixir-format
 msgid "Not set up"
 msgstr ""
@@ -9441,7 +9441,7 @@ msgstr ""
 msgid "Synopsis"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:92
+#: lib/mydia_web/live/dashboard_live/health_components.ex:93
 #, elixir-autogen, elixir-format
 msgid "System Health"
 msgstr ""
@@ -10175,7 +10175,7 @@ msgstr ""
 msgid "Unable to load results"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:223
+#: lib/mydia_web/live/dashboard_live/health_components.ex:224
 #, elixir-autogen, elixir-format
 msgid "Unavailable"
 msgstr ""
@@ -14139,7 +14139,7 @@ msgstr ""
 msgid "Could not save permissions."
 msgstr ""
 
-#: lib/mydia_web/live/user_auth.ex:449
+#: lib/mydia_web/live/user_auth.ex:468
 #, elixir-autogen, elixir-format
 msgid "Could not save your theme"
 msgstr ""
@@ -23285,14 +23285,14 @@ msgstr ""
 msgid "for %{count}m"
 msgstr ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:40
+#: lib/mydia_web/live/dashboard_live/health_components.ex:41
 #, elixir-autogen, elixir-format
 msgid "%{count} problem is stopping Mydia from working"
 msgid_plural "%{count} problems are stopping Mydia from working"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/dashboard_live/health_components.ex:67
+#: lib/mydia_web/live/dashboard_live/health_components.ex:68
 #, elixir-autogen, elixir-format
 msgid "Fix"
 msgstr ""
