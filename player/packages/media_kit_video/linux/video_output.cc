@@ -37,6 +37,67 @@ struct _VideoOutput {
 
 G_DEFINE_TYPE(VideoOutput, video_output, G_TYPE_OBJECT)
 
+// MYDIA PATCH (see player/packages/media_kit_video/MYDIA_PATCHES.md).
+//
+// Flutter 3.50's Linux embedder owns its EGL contexts (FlOpenGLManager) and
+// no longer leaves one current on the GTK thread, so eglGetCurrentDisplay()
+// returns EGL_NO_DISPLAY when a VideoOutput is created there and upstream
+// fell back to S/W rendering. Resolve the display the way FlOpenGLManager
+// does instead: eglGetPlatformDisplayEXT returns the same EGLDisplay handle
+// for the same platform and native display, so the EGLImage that TextureGL
+// shares with Flutter's raster context stays valid.
+static EGLDisplay video_output_platform_egl_display() {
+  GdkDisplay* display = gdk_display_get_default();
+  EGLDisplay egl_display = EGL_NO_DISPLAY;
+  if (GDK_IS_WAYLAND_DISPLAY(display)) {
+    egl_display = eglGetPlatformDisplayEXT(
+        EGL_PLATFORM_WAYLAND_EXT, gdk_wayland_display_get_wl_display(display),
+        NULL);
+  } else if (GDK_IS_X11_DISPLAY(display)) {
+    egl_display = eglGetPlatformDisplayEXT(
+        EGL_PLATFORM_X11_EXT, gdk_x11_display_get_xdisplay(display), NULL);
+  }
+  if (egl_display != EGL_NO_DISPLAY &&
+      !eglInitialize(egl_display, NULL, NULL)) {
+    g_printerr("media_kit: VideoOutput: eglInitialize failed. Error: 0x%x\n",
+               eglGetError());
+    return EGL_NO_DISPLAY;
+  }
+  return egl_display;
+}
+
+// The attributes FlOpenGLManager chooses its config with.
+static EGLConfig video_output_choose_egl_config(EGLDisplay egl_display) {
+  const EGLint attributes[] = {EGL_RED_SIZE,   8, EGL_GREEN_SIZE,   8,
+                               EGL_BLUE_SIZE,  8, EGL_ALPHA_SIZE,   8,
+                               EGL_DEPTH_SIZE, 8, EGL_STENCIL_SIZE, 8,
+                               EGL_NONE};
+  EGLConfig config = NULL;
+  EGLint num_configs = 0;
+  if (!eglChooseConfig(egl_display, attributes, &config, 1, &num_configs) ||
+      num_configs < 1) {
+    return NULL;
+  }
+  return config;
+}
+
+// Puts back whatever was current before media_kit borrowed the thread for
+// its own context. When nothing was, the isolated context is released: an
+// EGL context can be current on one thread only, and TextureGL makes it
+// current on Flutter's raster thread for every frame.
+static void video_output_restore_egl_context(VideoOutput* self,
+                                             EGLDisplay display,
+                                             EGLSurface draw,
+                                             EGLSurface read,
+                                             EGLContext context) {
+  if (context != EGL_NO_CONTEXT) {
+    eglMakeCurrent(display, draw, read, context);
+  } else {
+    eglMakeCurrent(self->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                   EGL_NO_CONTEXT);
+  }
+}
+
 static void video_output_dispose(GObject* object) {
   VideoOutput* self = VIDEO_OUTPUT(object);
   self->destroyed = TRUE;
@@ -65,10 +126,10 @@ static void video_output_dispose(GObject* object) {
       mpv_render_context_free(self->render_context);
       self->render_context = NULL;
       
-      // Restore Flutter's context
-      if (flutter_context != EGL_NO_CONTEXT) {
-        eglMakeCurrent(current_display, flutter_draw_surface, flutter_read_surface, flutter_context);
-      }
+      // Restore Flutter's context (MYDIA PATCH: or release ours)
+      video_output_restore_egl_context(self, current_display,
+                                       flutter_draw_surface,
+                                       flutter_read_surface, flutter_context);
     }
     
     // Clean up EGL resources
@@ -146,17 +207,29 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
     EGLSurface flutter_draw_surface = eglGetCurrentSurface(EGL_DRAW);
     EGLSurface flutter_read_surface = eglGetCurrentSurface(EGL_READ);
     
-    if (flutter_display != EGL_NO_DISPLAY && flutter_context != EGL_NO_CONTEXT) {
-      self->egl_display = flutter_display;
-      
+    // MYDIA PATCH: no current context is the normal case on Flutter 3.50.
+    gboolean flutter_context_current =
+        flutter_display != EGL_NO_DISPLAY && flutter_context != EGL_NO_CONTEXT;
+    EGLDisplay egl_display = flutter_context_current
+                                 ? flutter_display
+                                 : video_output_platform_egl_display();
+
+    if (egl_display != EGL_NO_DISPLAY) {
+      self->egl_display = egl_display;
+
       // Bind OpenGL ES API (Flutter uses OpenGL ES on Linux)
       eglBindAPI(EGL_OPENGL_ES_API);
-      
+
       // Query Flutter's EGL config and reuse it for compatibility
       EGLConfig config = NULL;
       EGLint config_id = 0;
-      
-      if (eglQueryContext(self->egl_display, flutter_context, EGL_CONFIG_ID, &config_id)) {
+
+      if (!flutter_context_current) {
+        config = video_output_choose_egl_config(self->egl_display);
+        if (config != NULL) {
+          g_print("media_kit: VideoOutput: Using the platform EGL display.\n");
+        }
+      } else if (eglQueryContext(self->egl_display, flutter_context, EGL_CONFIG_ID, &config_id)) {
         g_print("media_kit: VideoOutput: Flutter's EGL config ID: %d\n", config_id);
         
         // Get Flutter's exact config
@@ -238,8 +311,11 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
               g_printerr("media_kit: VideoOutput: Failed to register texture.\n");
             }
             
-            // Restore Flutter's context
-            eglMakeCurrent(flutter_display, flutter_draw_surface, flutter_read_surface, flutter_context);
+            // Restore Flutter's context (MYDIA PATCH: or release ours)
+            video_output_restore_egl_context(self, flutter_display,
+                                             flutter_draw_surface,
+                                             flutter_read_surface,
+                                             flutter_context);
           } else {
             g_printerr("media_kit: VideoOutput: Failed to make isolated EGL context current. Error: 0x%x\n", eglGetError());
           }
@@ -305,6 +381,11 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
     }
   }
 #endif
+  // MYDIA PATCH: tells the app which path won, so a silent fallback to S/W
+  // rendering shows up in its stats panel instead of only as stutter.
+  // `user-data/` properties are free for clients to set (mpv 0.36+).
+  mpv_set_property_string(self->handle, "user-data/media-kit/render",
+                          hardware_acceleration_supported ? "hw" : "sw");
   return self;
 }
 

@@ -1,8 +1,5 @@
-include: package:flutter_lints/flutter.yaml
+# MYDIA PATCH: vendored upstream source, not held to the player's lints and
+# not resolvable on its own (no pub get runs in this directory).
 analyzer:
-  errors:
-    dangling_library_doc_comments: ignore
-    unintended_html_in_doc_comment: ignore
-
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+  exclude:
+    - "**"
