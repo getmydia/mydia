@@ -52,8 +52,9 @@ global Search page behave exactly as they do today.
   tested in ExUnit. The only JavaScript is a hook that sets a checkbox's
   `indeterminate` property, which HTML has no attribute for.
 - **Confirm reuses the preview.** The fetched torrent, the client and the
-  listing are carried from the preview into the add, so a magnet resolves
-  once.
+  listing are carried from the preview into the add, so nothing is fetched or
+  listed twice. A magnet's metadata is exchanged again on the add (rqbit 9's
+  `list_only` keeps nothing), seeded with the peers the listing found.
 - **Save stays explicit.** The Files panel writes to the client only on Save,
   as today.
 - **Two PRs.** The tree on the Downloads page first, the pre-grab dialog

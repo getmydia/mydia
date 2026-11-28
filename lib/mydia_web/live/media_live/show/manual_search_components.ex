@@ -19,6 +19,7 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   import MydiaWeb.MediaLive.Show.TrackerTermsBadges, only: [terms_badges: 1]
 
   alias Mydia.Indexers.SearchResult
+  alias Phoenix.LiveView.JS
   alias MydiaWeb.Live.SearchResultRef
   alias MydiaWeb.MediaLive.Show.TrackerLimitNote
 
@@ -26,9 +27,16 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   # the columns line up. Below `lg` rows use daisyUI's default list-row flow
   # and the column cells are hidden.
   @row_grid "lg:grid-cols-[3rem_minmax(0,1fr)_5rem_4.5rem_3.5rem_9rem_2.5rem]"
+  # The same with room for the "Choose files…" button beside Download.
+  @row_grid_file_choice "lg:grid-cols-[3rem_minmax(0,1fr)_5rem_4.5rem_3.5rem_9rem_5.25rem]"
 
-  @doc "The `lg` grid template shared by the header and the result rows."
-  def row_grid, do: @row_grid
+  @doc """
+  The `lg` grid template shared by the header and the result rows; a wider
+  action column when the rows offer "Choose files…".
+  """
+  def row_grid(file_choice? \\ false)
+  def row_grid(true), do: @row_grid_file_choice
+  def row_grid(false), do: @row_grid
 
   @doc """
   The indexer a row names: the tracker whose copy won the dedup merge, plus
@@ -41,13 +49,47 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
     end
   end
 
+  attr :results, :any, required: true, doc: "the `search_results` stream"
+  attr :sort_by, :atom, required: true
+  attr :manual_ranking_opts, :list, required: true
+  attr :file_choice?, :boolean, default: false
+
+  @doc "The column header and the streamed result rows."
+  def results_list(assigns) do
+    ~H"""
+    <.results_header
+      file_choice?={@file_choice?}
+      sort_by={@sort_by}
+      profile?={Keyword.get(@manual_ranking_opts, :quality_profile) != nil}
+    />
+    <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
+      <li
+        :for={{id, result} <- @results}
+        id={id}
+        class={[
+          "list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0 lg:gap-3",
+          row_grid(@file_choice?)
+        ]}
+      >
+        <.release_row
+          id={id}
+          result={result}
+          manual_ranking_opts={@manual_ranking_opts}
+          file_choice?={@file_choice?}
+        />
+      </li>
+    </ul>
+    """
+  end
+
   attr :sort_by, :atom, required: true
 
   attr :profile?, :boolean, default: true
+  attr :file_choice?, :boolean, default: false
 
   @doc "Column labels above the results from `lg`; the sortable ones sort."
   def results_header(assigns) do
-    assigns = assign(assigns, :grid, @row_grid)
+    assigns = assign(assigns, :grid, row_grid(assigns.file_choice?))
 
     ~H"""
     <div
@@ -101,6 +143,9 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
   attr :id, :string, required: true
   attr :result, SearchResult, required: true
   attr :manual_ranking_opts, :list, required: true
+  # Whether the grab's client can choose files; torrents then get the
+  # "Choose files…" button (MediaLive.Show.FileChoiceEvents).
+  attr :file_choice?, :boolean, default: false
 
   def release_row(assigns) do
     result = assigns.result
@@ -357,14 +402,17 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
             <span class="hidden sm:inline lg:hidden">{gettext("Grabbing…")}</span>
           </button>
         <% Map.get(@result, :grab_failed) -> %>
+          <.choose_files_button result={@result} file_choice?={@file_choice?} />
           <.retry_button result={@result} reason={Map.get(@result, :grab_failed)} />
         <% Map.get(@result, :prior_attempt) -> %>
+          <.choose_files_button result={@result} file_choice?={@file_choice?} />
           <.retry_button
             result={@result}
             reason={prior_attempt_reason(@result)}
             blacklisted={@result.prior_attempt.kind == :blacklisted}
           />
         <% true -> %>
+          <.choose_files_button result={@result} file_choice?={@file_choice?} />
           <button
             class="btn btn-primary max-sm:btn-square sm:btn-sm lg:btn-square group/dl [&.phx-click-loading]:btn-disabled [&.phx-click-loading]:pointer-events-none"
             phx-click="download_from_search"
@@ -380,6 +428,25 @@ defmodule MydiaWeb.MediaLive.Show.ManualSearchComponents do
           </button>
       <% end %>
     </div>
+    """
+  end
+
+  attr :result, SearchResult, required: true
+  attr :file_choice?, :boolean, default: false
+
+  defp choose_files_button(assigns) do
+    ~H"""
+    <button
+      :if={@file_choice? and @result.download_protocol != :nzb}
+      id={"choose-files-#{SearchResultRef.ref(@result)}"}
+      class="btn btn-ghost max-sm:btn-square sm:btn-sm lg:btn-square mr-1"
+      phx-click={
+        JS.push_focus() |> JS.push("choose_files", value: %{ref: SearchResultRef.ref(@result)})
+      }
+      title={gettext("Choose files…")}
+    >
+      <.icon name="hero-folder-open" class="w-4 h-4" />
+    </button>
     """
   end
 

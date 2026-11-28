@@ -7,8 +7,8 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.Blacklists
   alias Mydia.Downloads.BuiltIn
-  alias Mydia.Downloads.BuiltIn.DiskSpace
   alias Mydia.Downloads.Client
+  alias Mydia.Downloads.Queue.PreparedAdd
   alias Mydia.Downloads.WantedFiles
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.History
@@ -20,12 +20,10 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   alias Mydia.Indexers.TrackerRules
   alias Mydia.Settings
   alias Mydia.Media.MediaItem
-  alias Mydia.Downloads.Queue.Duplicates
+  alias Mydia.Downloads.Queue.{DiskGuard, Duplicates}
+  alias Mydia.Downloads.Queue.FilePreview
   alias Mydia.Downloads.TorrentFetch
   require Logger
-
-  # The disk reserve is set in decimal gigabytes (`min_free_space_gb`).
-  @gb 1_000_000_000
 
   # Returns an Oban changeset, or nil when there is nothing sensible to search
   # for. `Media` exposes only the raising `get_media_item!/1`, so this reads the
@@ -146,7 +144,41 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
   @spec add_to_client(SearchResult.t(), keyword()) ::
           {:ok, map(), String.t(), atom() | nil, WantedFiles.t() | nil, boolean()}
           | {:error, term()}
+  #
+  # With `file_preview: %Queue.FilePreview{}` and `only_files: [index]` the
+  # torrent input, client, listing and peers come from the preview, and the
+  # operator's choice replaces the automatic one (see `FilePreview.confirm/2`).
   def add_to_client(search_result, opts) do
+    case Keyword.get(opts, :file_preview) do
+      nil ->
+        with {:ok, prepared} <- prepare(search_result, opts) do
+          files =
+            select_files(
+              prepared.adapter,
+              config_to_map(prepared.client_config),
+              torrent_input(prepared.torrent_input_result),
+              prepared.download_type,
+              search_result,
+              prepared.opts
+            )
+
+          add_with_client(prepared, files, search_result)
+        end
+
+      preview ->
+        with {:ok, prepared, files} <- FilePreview.confirm(preview, opts),
+             do: add_with_client(prepared, files, search_result)
+    end
+  end
+
+  @doc false
+  # The first half of `add_to_client/2`: fetch the torrent or NZB, refuse a
+  # banned hash, settle the download type, title and content type, and choose
+  # the client. Shared with `Queue.FilePreview`, which lists files from here
+  # without adding anything.
+  @spec prepare(SearchResult.t(), keyword()) ::
+          {:ok, PreparedAdd.t()} | {:error, term()}
+  def prepare(search_result, opts) do
     download_type = Keyword.get(opts, :download_type)
 
     # First, prepare the torrent/nzb input (download file if needed)
@@ -183,51 +215,57 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       # Now select the appropriate client based on the final type
       with {:ok, client_config} <- select_download_client(opts_with_type),
            {:ok, adapter} <- get_adapter_for_client(client_config) do
-        add_with_client(
-          adapter,
-          client_config,
-          torrent_input_result,
-          final_download_type,
-          search_result,
-          opts_with_type
-        )
+        {:ok,
+         %PreparedAdd{
+           torrent_input_result: torrent_input_result,
+           download_type: final_download_type,
+           opts: opts_with_type,
+           client_config: client_config,
+           adapter: adapter
+         }}
       end
     end
   end
 
-  # The add itself, once the client is chosen: pick the wanted files, guard
-  # the disk, note whether the client already held the torrent, then add.
-  defp add_with_client(
-         adapter,
-         client_config,
-         torrent_input_result,
-         final_download_type,
-         search_result,
-         opts_with_type
-       ) do
-    # Extract the actual torrent input (without the type)
-    torrent_input =
-      case torrent_input_result do
-        {:file, body, _type} -> {:file, body}
-        other -> other
-      end
+  @doc false
+  # The prepared input without its detected type, as adapters take it.
+  def torrent_input({:file, body, _type}), do: {:file, body}
+  def torrent_input(other), do: other
 
-    {selection, peers, listed} =
-      select_files(
-        adapter,
-        config_to_map(client_config),
-        torrent_input,
-        final_download_type,
-        search_result,
-        opts_with_type
-      )
+  @doc false
+  # True when the client `select_client_by_priority(:torrent)` picks can
+  # list and select a torrent's files, so a manual grab can offer the choice.
+  @spec file_choice_available?() :: boolean()
+  def file_choice_available? do
+    with %{} = client_config <- select_client_by_priority(:torrent),
+         {:ok, adapter} <- get_adapter_for_client(client_config) do
+      Client.supports_file_selection?(adapter)
+    else
+      _none -> false
+    end
+  end
+
+  # The add itself, once the client is chosen and the files are picked
+  # (`{selection | nil, peers, listed_files}`): guard the disk, note whether
+  # the client already held the torrent, then add.
+  defp add_with_client(%PreparedAdd{} = prepared, {selection, peers, listed}, search_result) do
+    %{
+      adapter: adapter,
+      client_config: client_config,
+      torrent_input_result: torrent_input_result,
+      download_type: final_download_type,
+      opts: opts_with_type
+    } = prepared
+
+    torrent_input = torrent_input(torrent_input_result)
 
     add_opts =
       opts_with_type
       |> Keyword.put(:only_files, add_only_files(selection, listed))
       |> Keyword.put(:initial_peers, peers)
 
-    with :ok <- check_space(client_config, selection, search_result, opts_with_type),
+    with :ok <-
+           DiskGuard.check(config_to_map(client_config), selection, search_result, opts_with_type),
          before_add = presence(adapter, client_config, torrent_input_result),
          {:ok, client_id} <-
            add_torrent_to_client_with_input(adapter, client_config, torrent_input, add_opts) do
@@ -335,48 +373,6 @@ defmodule Mydia.Downloads.Queue.ClientSelection do
       )
 
       nil
-  end
-
-  # Disk guard: refuses a grab the built-in client's download volume cannot
-  # hold, keeping `min_free_space_bytes` free. Anything unmeasurable passes.
-  defp check_space(client_config, selection, search_result, opts) do
-    with true <- BuiltIn.managed?(config_to_map(client_config)),
-         %{config: %{download_path: path, min_free_space_bytes: reserve}} when reserve > 0 <-
-           BuiltIn.runtime(),
-         needed when is_integer(needed) <- space_needed(selection, search_result) do
-      free_fun = Keyword.get(opts, :free_bytes, &DiskSpace.free_bytes/1)
-
-      case free_fun.(path) do
-        {:ok, free} when needed + reserve > free ->
-          {:error, {:client_error, insufficient_space_error(needed, free, reserve)}}
-
-        {:ok, _free} ->
-          :ok
-
-        {:error, reason} ->
-          Logger.warning("Could not measure free space; skipping the disk guard",
-            path: path,
-            reason: inspect(reason)
-          )
-
-          :ok
-      end
-    else
-      _ -> :ok
-    end
-  end
-
-  defp space_needed(%WantedFiles{selected_bytes: bytes}, _search_result), do: bytes
-
-  defp space_needed(nil, %SearchResult{size: size}) when is_integer(size) and size > 0, do: size
-  defp space_needed(_selection, _search_result), do: nil
-
-  defp insufficient_space_error(needed, free, reserve) do
-    message =
-      "Not enough space on the download volume: needs #{DiskSpace.format_gb(needed)}, " <>
-        "#{DiskSpace.format_gb(free)} free, #{div(reserve, @gb)} GB kept free"
-
-    Client.Error.insufficient_space(message, %{needed: needed, free: free, reserve: reserve})
   end
 
   # Version of add_torrent_to_client that accepts pre-downloaded input

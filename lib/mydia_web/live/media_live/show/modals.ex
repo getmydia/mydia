@@ -664,6 +664,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :result_count, :integer, default: 0
   attr :min_seeders, :integer, default: 0
   attr :sort_by, :atom, required: true
+  # Whether results offer "Choose files…"; see SearchEvents.assign_file_choice/1.
+  attr :file_choice?, :boolean, default: false
 
   def manual_search_modal(assigns) do
     # Calculate media_type for profile scoring
@@ -891,25 +893,13 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 </div>
               <% end %>
             <% end %>
-            <%!-- Results List --%>
-            <%= if !@results_empty? do %>
-              <.results_header
-                sort_by={@sort_by}
-                profile?={Keyword.get(@manual_ranking_opts, :quality_profile) != nil}
-              />
-              <ul id="manual-search-results" class="list bg-base-100" phx-update="stream">
-                <li
-                  :for={{id, result} <- @streams.search_results}
-                  id={id}
-                  class={[
-                    "list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0 lg:gap-3",
-                    row_grid()
-                  ]}
-                >
-                  <.release_row id={id} result={result} manual_ranking_opts={@manual_ranking_opts} />
-                </li>
-              </ul>
-            <% end %>
+            <.results_list
+              :if={!@results_empty?}
+              results={@streams.search_results}
+              sort_by={@sort_by}
+              manual_ranking_opts={@manual_ranking_opts}
+              file_choice?={@file_choice?}
+            />
           </div>
         </ManualSearchFilters.filter_drawer>
       </div>

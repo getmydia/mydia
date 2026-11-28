@@ -17,6 +17,28 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
 
   require Logger
 
+  @events ~w(show_rename_modal hide_rename_modal toggle_rename_file toggle_rename_season
+             select_all_rename clear_rename_selection confirm_rename_files)
+
+  @doc "True for the rename modal's events, which `handle_event/3` takes."
+  defguard is_rename_event(event) when event in @events
+
+  @doc "Runs one of the rename modal's events (see `is_rename_event/1`)."
+  def handle_event("show_rename_modal", params, socket), do: show_rename_modal(params, socket)
+  def handle_event("hide_rename_modal", params, socket), do: hide_rename_modal(params, socket)
+  def handle_event("toggle_rename_file", params, socket), do: toggle_rename_file(params, socket)
+
+  def handle_event("toggle_rename_season", params, socket),
+    do: toggle_rename_season(params, socket)
+
+  def handle_event("select_all_rename", params, socket), do: select_all_rename(params, socket)
+
+  def handle_event("clear_rename_selection", params, socket),
+    do: clear_rename_selection(params, socket)
+
+  def handle_event("confirm_rename_files", params, socket),
+    do: confirm_rename_files(params, socket)
+
   def show_rename_modal(_params, socket) do
     media_item = load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
     previews = FileRenamer.generate_rename_previews_for_media_item(media_item)

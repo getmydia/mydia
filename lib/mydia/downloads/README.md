@@ -388,6 +388,30 @@ selection is recorded in the download's metadata:
 - `"early_imported_paths"` and `"early_imported_episode_ids"`: what partial
   imports already placed. The full import excludes those paths.
 
+**Choosing files before a manual grab.** "Choose files…" on a torrent result
+in a media page's manual search (`MediaLive.Show.FileChoiceEvents`) calls
+`Downloads.preview_files/2`, which builds a `Queue.FilePreview`: the duplicate
+check, the torrent fetch and the client choice the add would make, the file
+listing, and `WantedFiles.select/2`'s picks, with nothing added to the client.
+It is offered only when `Downloads.file_choice_available?/0` says the client a
+torrent grab would use can select files, and never for an NZB. The operator
+adjusts the picks in the folder tree and the confirm passes the preview back
+to the grab as `file_preview:` with the chosen `only_files:`. The grab runs
+the duplicate check again (time has passed), then reuses the preview's
+prepared input, client, listing and peers, so it fetches and lists nothing a
+second time. A magnet's metadata is still exchanged again on the add: rqbit
+9's `list_only` keeps no managed torrent, and the adapter has no way to hand
+the resolved metainfo back, so the add sends the magnet with the peers the
+listing saw as `initial_peers`, which usually makes the second exchange
+quick. `WantedFiles.manual/3` writes the same keys as above with
+`"file_selection" => %{"source" => "manual"}`, so `FileSelectionPolicy` never
+touches the torrent, and `"file_episodes"` covers every chosen video, so a
+file the operator added can still be imported early. A choice without an
+importable video fails with `:no_importable_file`; the modal disables its
+confirm for such a choice and refuses one sent anyway, so that failure does
+not reach the dialog. The preview, which can hold a `.torrent` body, lives in
+the LiveView's assigns only until the modal closes.
+
 Early import is driven by `Downloads.EarlyImport` from `DownloadMonitor`. The
 rqbit torrent list carries no per-file data, so EarlyImport fetches per-download
 status (`file_progress`) to learn which files are whole. Only files with a

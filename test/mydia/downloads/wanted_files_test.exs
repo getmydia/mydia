@@ -219,4 +219,64 @@ defmodule Mydia.Downloads.WantedFilesTest do
       assert ctx.media_item == nil
     end
   end
+
+  describe "manual/3" do
+    test "manual keeps exactly the chosen files", %{show: show, ids: ids} do
+      files = [ep_file(0, 5), ep_file(1, 6), ep_file(2, 7), file("#{@pack}/info.nfo", 3)]
+      assert {:ok, sel} = WantedFiles.manual(ctx(show, ids), files, [2, 0])
+      assert sel.only_files == [0, 2]
+      assert sel.selected_bytes == 200
+      assert sel.source == :manual
+      assert sel.skipped_files == 2
+      assert sel.file_episodes == %{0 => Enum.at(ids, 4), 2 => Enum.at(ids, 6)}
+    end
+
+    test "manual maps an operator-added owned episode", %{show: show, ids: ids} do
+      files = [ep_file(0, 1), ep_file(1, 5)]
+      assert {:ok, sel} = WantedFiles.manual(ctx(show, Enum.drop(ids, 4)), files, [0, 1])
+      assert sel.file_episodes == %{0 => Enum.at(ids, 0), 1 => Enum.at(ids, 4)}
+      assert sel.skipped_owned_episode_ids == []
+    end
+
+    test "manual records owned episodes the operator left out", %{show: show, ids: ids} do
+      files = [ep_file(0, 1), ep_file(1, 2), ep_file(2, 5)]
+      assert {:ok, sel} = WantedFiles.manual(ctx(show, ids), files, [2])
+      assert sel.skipped_owned_episode_ids |> Enum.sort() == Enum.take(ids, 2) |> Enum.sort()
+    end
+
+    test "manual maps a chosen file from another season of the pack", %{show: show, ids: ids} do
+      s3 = episode_fixture(%{media_item_id: show.id, season_number: 3, episode_number: 1})
+
+      files = [
+        ep_file(0, 5),
+        file("The.Lantern.Keepers.S02-S03/The.Lantern.Keepers.S03E01.1080p.mkv", 1)
+      ]
+
+      assert {:ok, sel} = WantedFiles.manual(ctx(show, ids), files, [0, 1])
+      assert sel.file_episodes == %{0 => Enum.at(ids, 4), 1 => s3.id}
+    end
+
+    test "manual refuses a choice without a video", %{show: show, ids: ids} do
+      files = [ep_file(0, 5), file("#{@pack}/#{@pack}E05.en.srt", 1)]
+      assert {:error, :no_importable_file} = WantedFiles.manual(ctx(show, ids), files, [1])
+    end
+
+    test "a non-TV context records no episodes" do
+      files = [file("Movie.2020/movie.mkv", 0), file("Movie.2020/movie.srt", 1)]
+      ctx = %{media_item: nil, season_number: nil, targeted_episode_ids: []}
+      assert {:ok, sel} = WantedFiles.manual(ctx, files, [0])
+      assert sel.file_episodes == %{}
+      assert sel.skipped_owned_episode_ids == []
+      assert sel.skipped_files == 1
+    end
+
+    test "a manual selection writes the manual stamp", %{show: show, ids: ids} do
+      {:ok, sel} = WantedFiles.manual(ctx(show, ids), [ep_file(0, 5), ep_file(1, 6)], [0])
+      meta = WantedFiles.to_metadata(sel)
+      assert meta["file_selection"] == %{"source" => "manual"}
+      assert meta["selected_files"] == [0]
+      assert meta["file_episodes"] == %{"0" => Enum.at(ids, 4)}
+      assert meta["skipped_owned_episode_ids"] == []
+    end
+  end
 end

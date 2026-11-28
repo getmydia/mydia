@@ -81,9 +81,7 @@ defmodule Mydia.Downloads.TorrentFiles do
   end
 
   defp check_importable(files, indexes) do
-    selected = MapSet.new(indexes)
-
-    if Enum.any?(files, &(&1.index in selected and FileSelection.importable?(&1.path))),
+    if FileSelection.keeps_video?(files, indexes),
       do: :ok,
       else: {:error, :no_importable_file}
   end

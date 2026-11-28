@@ -17,6 +17,22 @@ defmodule MydiaWeb.FileTreeComponents do
   alias Mydia.Downloads.FileTree
   alias Mydia.Downloads.FileTree.{Folder, Leaf}
 
+  @doc """
+  The `Mydia.Downloads.FileTree.toggle/3` target a `"toggle_files"` payload
+  names, or nil for a payload the tree never sends.
+  """
+  @spec toggle_target(map()) :: FileTree.target() | nil
+  def toggle_target(%{"folder" => path}) when is_binary(path), do: {:folder, path}
+
+  def toggle_target(%{"index" => index}) do
+    case Integer.parse(to_string(index)) do
+      {index, ""} when index >= 0 -> {:file, index}
+      _ -> nil
+    end
+  end
+
+  def toggle_target(_params), do: nil
+
   attr :id, :string, required: true
   attr :files, :list, required: true
   attr :selected, :any, required: true, doc: "a MapSet of selected file indexes"

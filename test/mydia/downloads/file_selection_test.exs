@@ -72,4 +72,22 @@ defmodule Mydia.Downloads.FileSelectionTest do
   test "empty torrent keeps nothing" do
     assert FileSelection.keep([]) == []
   end
+
+  describe "keeps_video?/2" do
+    test "true when a chosen file is an importable video" do
+      files = [%{index: 0, path: "Pack/a.mkv"}, %{index: 1, path: "Pack/a.srt"}]
+      assert FileSelection.keeps_video?(files, [0, 1])
+      refute FileSelection.keeps_video?(files, [1])
+    end
+
+    test "false when the only chosen video is a sample" do
+      files = [%{index: 0, path: "Pack/Sample/sample.mkv"}, %{index: 1, path: "Pack/a.mkv"}]
+      refute FileSelection.keeps_video?(files, [0])
+    end
+
+    test "works on TorrentFile structs" do
+      files = to_files(["Pack/a.mkv"])
+      assert FileSelection.keeps_video?(files, [0])
+    end
+  end
 end

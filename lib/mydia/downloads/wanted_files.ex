@@ -28,7 +28,8 @@ defmodule Mydia.Downloads.WantedFiles do
             selected_bytes: 0,
             file_episodes: %{},
             skipped_owned_episode_ids: [],
-            skipped_files: 0
+            skipped_files: 0,
+            source: :auto
 
   @type file_map :: %{index: non_neg_integer(), path: String.t(), length: non_neg_integer()}
   @type context :: %{
@@ -42,7 +43,8 @@ defmodule Mydia.Downloads.WantedFiles do
           selected_bytes: non_neg_integer(),
           file_episodes: %{non_neg_integer() => binary()},
           skipped_owned_episode_ids: [binary()],
-          skipped_files: non_neg_integer()
+          skipped_files: non_neg_integer(),
+          source: :auto | :manual
         }
 
   @doc """
@@ -91,6 +93,71 @@ defmodule Mydia.Downloads.WantedFiles do
   end
 
   @doc """
+  Records an operator's own choice of `indexes` from `files`.
+
+  Unlike `select/2` nothing is dropped by the episode rules: every chosen
+  video is kept and mapped to the one episode it names, owned or not.
+  `skipped_owned_episode_ids` lists the owned episodes of the videos left
+  out, targeted ones included, since the operator chose to leave them.
+  Refuses a choice with no importable video.
+  """
+  @spec manual(context(), [file_map()], [non_neg_integer()]) ::
+          {:ok, t()} | {:error, :no_importable_file}
+  def manual(context, files, indexes) do
+    if FileSelection.keeps_video?(files, indexes) do
+      chosen = MapSet.new(indexes)
+      {kept, unchosen} = Enum.split_with(files, &(&1.index in chosen))
+
+      {file_episodes, skipped_owned} = manual_episodes(context, kept, unchosen)
+
+      {:ok,
+       %__MODULE__{
+         only_files: kept |> Enum.map(& &1.index) |> Enum.sort(),
+         selected_bytes: kept |> Enum.map(& &1.length) |> Enum.sum(),
+         file_episodes: file_episodes,
+         skipped_owned_episode_ids: skipped_owned,
+         skipped_files: length(unchosen),
+         source: :manual
+       }}
+    else
+      {:error, :no_importable_file}
+    end
+  end
+
+  # The operator may tick a file from another season of a pack, so the
+  # season restriction `select/2` applies is lifted here.
+  defp manual_episodes(%{media_item: %MediaItem{type: "tv_show"}} = context, kept, unchosen) do
+    context = %{context | season_number: nil}
+    kept_entries = video_entries(kept)
+    unchosen_entries = video_entries(unchosen)
+    episode_map = lookup_episodes(context, kept_entries ++ unchosen_entries)
+
+    file_episodes =
+      for entry <- kept_entries,
+          ep = episode_for(entry, context, episode_map),
+          into: %{},
+          do: {entry.file.index, ep.id}
+
+    left_out =
+      for entry <- unchosen_entries,
+          ep = episode_for(entry, context, episode_map),
+          uniq: true,
+          do: ep.id
+
+    owned = owned_episode_ids(left_out)
+    {file_episodes, Enum.filter(left_out, &MapSet.member?(owned, &1))}
+  end
+
+  defp manual_episodes(_context, _kept, _unchosen), do: {%{}, []}
+
+  defp video_entries(files) do
+    files
+    |> Enum.map(&classify/1)
+    |> Enum.filter(&(&1.kind == :video))
+    |> Enum.map(&parse/1)
+  end
+
+  @doc """
   Serialises a selection for download metadata (string keys).
 
   A selection that left files out (`only_files` set) also records
@@ -103,13 +170,24 @@ defmodule Mydia.Downloads.WantedFiles do
   @spec to_metadata(t() | nil) :: map()
   def to_metadata(nil), do: %{}
 
+  def to_metadata(%__MODULE__{source: :manual} = sel) do
+    sel
+    |> base_metadata()
+    |> Map.put(FileSelectionPolicy.metadata_key(), %{"source" => "manual"})
+  end
+
   def to_metadata(%__MODULE__{} = sel) do
+    sel
+    |> base_metadata()
+    |> put_policy_entry(sel)
+  end
+
+  defp base_metadata(sel) do
     %{
       "selected_files" => sel.only_files,
       "file_episodes" => Map.new(sel.file_episodes, fn {i, id} -> {to_string(i), id} end),
       "skipped_owned_episode_ids" => sel.skipped_owned_episode_ids
     }
-    |> put_policy_entry(sel)
   end
 
   # Only a selection that left files out is final for the policy. One that

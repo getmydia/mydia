@@ -4,7 +4,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   use Gettext, backend: MydiaWeb.Gettext
 
   import Phoenix.Component, only: [assign: 2, assign: 3]
-  import Phoenix.LiveView, only: [put_flash: 3, start_async: 3, stream: 4, stream_insert: 3]
+
+  import Phoenix.LiveView,
+    only: [cancel_async: 2, put_flash: 3, start_async: 3, stream: 4, stream_insert: 3]
 
   alias Mydia.Media
   alias Mydia.Downloads
@@ -71,6 +73,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     # Trackers at their daily grab cap, refreshed with :manual_search_blocking;
     # see TrackerLimitNote.
     |> assign(:grab_caps, %{})
+    # "Choose files…": see assign_file_choice/1 and FileChoiceEvents.
+    |> assign(:file_choice?, false)
+    |> assign(:file_choice, nil)
   end
 
   def manual_search(_params, socket) do
@@ -100,6 +105,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
        |> assign(:manual_search_context, %{type: :media_item})
        |> assign_existing_files()
        |> assign_manual_search_blocking()
+       |> assign_file_choice()
        |> assign(:searching, true)
        # TRUE, not false: the display set is genuinely empty until the first
        # indexer reports. The modal's loading gate is
@@ -209,6 +215,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      )
      |> assign_existing_files()
      |> assign_manual_search_blocking()
+     |> assign_file_choice()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -246,6 +253,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
      |> assign(:manual_search_context, %{type: :season, season_number: season_num})
      |> assign_existing_files()
      |> assign_manual_search_blocking()
+     |> assign_file_choice()
      |> assign(:searching, true)
      # true so the spinner shows until the first indexer reports; see
      # manual_search/2 above.
@@ -464,6 +472,11 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     end
   end
 
+  # Whether the client a torrent grab would use can choose files, asked once per dialog.
+  defp assign_file_choice(socket) do
+    assign(socket, :file_choice?, Downloads.file_choice_available?())
+  end
+
   defp load_blocking_downloads(%{media_item: media_item, manual_search_context: context}) do
     Downloads.blocking_downloads(media_item, context || %{type: :media_item})
   rescue
@@ -474,6 +487,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
   defp reset_search_modal(socket) do
     socket
+    |> cancel_async(:file_preview)
+    |> assign(:file_choice, nil)
     |> assign(:show_manual_search_modal, false)
     |> assign(:manual_search_query, "")
     |> assign(:manual_search_context, nil)
@@ -532,18 +547,21 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     end
   end
 
-  defp find_search_result(socket, ref) do
+  @doc false
+  def find_search_result(socket, ref) do
     SearchResultRef.find(Map.get(socket.assigns, :raw_search_results, []), ref) ||
       SearchResultRef.find(Map.get(socket.assigns, :indexer_raw_results, %{}), ref)
   end
 
-  # Grabs the result as the indexer returned it, so the Download keeps its
-  # protocol, guid and tracker terms. Only `metadata` is replaced, as before:
-  # a season search tags the grab as that season's pack.
-  defp grab_search_result(
-         %SearchResult{download_url: download_url, title: title} = result,
-         socket
-       ) do
+  @doc """
+  The result as the grab sends it, with the dialog's season metadata, and the
+  grab's options. A file preview is built from the same pair, so it checks
+  duplicates and picks files for exactly what the grab would add.
+
+  The result keeps its protocol, guid and tracker terms. Only `metadata` is
+  replaced: a season search tags the grab as that season's pack.
+  """
+  def grab_opts(%SearchResult{} = result, socket) do
     media_item = socket.assigns.media_item
 
     {episode_id, metadata} =
@@ -567,7 +585,22 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
       |> maybe_add_opt(:media_item_id, media_item.id)
       |> maybe_add_opt(:episode_id, episode_id)
 
-    case Downloads.grab_async(%{result | metadata: metadata}, opts) do
+    {%{result | metadata: metadata}, opts}
+  end
+
+  @doc """
+  Grabs `result` and marks its row, closing the dialog when the operator
+  asked for that. `extra_opts` reach `Downloads.grab_async/2` after the
+  dialog's own (a file choice's `file_preview:` and `only_files:`).
+  """
+  def grab_search_result(
+        %SearchResult{download_url: download_url, title: title} = result,
+        socket,
+        extra_opts \\ []
+      ) do
+    {result, opts} = grab_opts(result, socket)
+
+    case Downloads.grab_async(result, opts ++ extra_opts) do
       {:ok, download} ->
         socket =
           socket
@@ -614,7 +647,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # stream. `:result_states` is what SearchHelpers.stream_prepared_results/2
   # folds back in on each rebuild, so a badge survives the next indexer
   # reporting mid-search.
-  defp mark_result(socket, download_url, extra) do
+  @doc false
+  def mark_result(socket, download_url, extra) do
     states =
       Map.update(
         Map.get(socket.assigns, :result_states, %{}),

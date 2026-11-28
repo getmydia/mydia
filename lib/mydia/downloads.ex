@@ -315,6 +315,27 @@ defmodule Mydia.Downloads do
   defdelegate grab_async(search_result, opts \\ []), to: Mydia.Downloads.Grabber
 
   @doc """
+  Lists a torrent's files and Mydia's automatic picks without adding it, so
+  an operator can choose files before a manual grab.
+
+  Pass the returned preview back to `grab_async/2` or `initiate_download/2`
+  as `file_preview:` together with the chosen `only_files:` indexes. See
+  `Mydia.Downloads.Queue.FilePreview`.
+  """
+  @spec preview_files(SearchResult.t(), keyword()) ::
+          {:ok, Mydia.Downloads.Queue.FilePreview.t()} | {:error, term()}
+  defdelegate preview_files(search_result, opts \\ []),
+    to: Mydia.Downloads.Queue.FilePreview,
+    as: :build
+
+  @doc """
+  True when the download client a torrent grab would use can list and select
+  a torrent's files, so the manual grab can offer a file choice.
+  """
+  @spec file_choice_available?() :: boolean()
+  defdelegate file_choice_available?(), to: Mydia.Downloads.Queue.ClientSelection
+
+  @doc """
   Cancels a download by removing it from the download client.
 
   This removes the torrent from the client and deletes the database record.

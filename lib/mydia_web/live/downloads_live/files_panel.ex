@@ -12,7 +12,7 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
   """
   use MydiaWeb, :live_component
 
-  import MydiaWeb.FileTreeComponents, only: [file_tree: 1]
+  import MydiaWeb.FileTreeComponents, only: [file_tree: 1, toggle_target: 1]
 
   alias Mydia.Downloads.FileTree
   alias Mydia.Downloads.TorrentFiles
@@ -69,17 +69,6 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
         {:noreply, reload_after_error(socket, gettext("Couldn't update the file selection."))}
     end
   end
-
-  defp toggle_target(%{"folder" => path}) when is_binary(path), do: {:folder, path}
-
-  defp toggle_target(%{"index" => index}) do
-    case Integer.parse(to_string(index)) do
-      {index, ""} when index >= 0 -> {:file, index}
-      _ -> nil
-    end
-  end
-
-  defp toggle_target(_params), do: nil
 
   defp change_selection(%{assigns: %{editable: false}} = socket, _fun), do: socket
 
