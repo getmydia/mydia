@@ -421,6 +421,36 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
     end
   end
 
+  describe "update_servers without a backup" do
+    @describetag :tmp_dir
+
+    test "skips the refresh and leaves the list alone", %{tmp_dir: dir} do
+      work = Path.join(dir, "work")
+      File.mkdir_p!(work)
+      File.write!(Path.join(work, "servers.json"), "good list")
+      bin = Path.join(dir, "gluetun")
+      File.write!(bin, "#!/bin/sh\necho ran >> \"$1.ran\"\nexit 1\n")
+      File.chmod!(bin, 0o755)
+      # A read-only directory makes the backup copy fail.
+      File.chmod!(work, 0o555)
+      on_exit(fn -> File.chmod(work, 0o755) end)
+
+      runner =
+        ~s(gluetun_bin="$2"; dir="$3"; run="$3"; log="$3/gluetun.log"; ) <>
+          ~s(servers_stamp="$3/servers-updated"; servers_json="$4/servers.json"; ) <>
+          ~s(hash=h; dropped=; invalid=0; update_servers mullvad)
+
+      {_, 0} = sh(runner, [bin, dir, work])
+
+      assert File.read!(Path.join(work, "servers.json")) == "good list"
+      assert File.read!(Path.join(dir, "gluetun.log")) =~ "Could not back up the server list"
+      refute File.exists?(Path.join(dir, "update.log"))
+
+      assert [_now, "failed", "mullvad"] =
+               dir |> Path.join("servers-updated") |> File.read!() |> String.split()
+    end
+  end
+
   describe "restore_servers and persist_servers" do
     @describetag :tmp_dir
 

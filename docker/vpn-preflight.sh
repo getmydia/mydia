@@ -310,8 +310,15 @@ update_servers() {
     # Gluetun truncates servers.json before writing the new list, so a refresh
     # that dies partway (a full disk, the timeout) would leave a file the next
     # gluetun cannot decode. Keep the previous one and put it back on failure.
+    # A backup that fails (a full disk can leave it partial) would be restored
+    # over a good list, so no refresh runs without a complete one.
     rm -f "$servers_json.bak"
-    [ -s "$servers_json" ] && cp -p "$servers_json" "$servers_json.bak"
+    if [ -s "$servers_json" ] && ! cp -p "$servers_json" "$servers_json.bak"; then
+        rm -f "$servers_json.bak"
+        log_line "Could not back up the server list; skipping the refresh"
+        printf '%s failed %s\n' "$now" "$1" > "$servers_stamp"
+        return 0
+    fi
     result=ok
     env -i PATH="$PATH" timeout 180 "$gluetun_bin" update -enduser -providers "$1" \
         > "$run/update.log" 2>&1 || result=failed
