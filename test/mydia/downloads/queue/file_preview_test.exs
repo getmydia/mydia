@@ -190,6 +190,33 @@ defmodule Mydia.Downloads.Queue.FilePreviewTest do
       assert reloaded.error_message =~ "no_importable_file"
     end
 
+    test "a manual selection that raises fails the grab instead of crashing it", ctx do
+      expect_rqbit(ctx.bypass, listing: :ok)
+      result = pack_result(ctx.eps)
+      opts = [media_item_id: ctx.show.id, manual: true]
+
+      {:ok, preview} = FilePreview.build(result, opts)
+      # An id the episode query cannot cast makes WantedFiles.manual/3 raise.
+      broken_item = %{preview.context.media_item | id: :not_a_uuid}
+      preview = %{preview | context: %{preview.context | media_item: broken_item}}
+      download = grabbing_row(result, ctx.show.id)
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      capture_log(fn ->
+        assert :error =
+                 Grabber.run_grab(
+                   download,
+                   result,
+                   opts ++ [file_preview: preview, only_files: [1]]
+                 )
+      end)
+
+      refute_received {:add, _}
+      download_id = download.id
+      assert_received {:grab_failed, %{download_id: ^download_id, reason: reason}}
+      assert reason =~ "file_selection_failed"
+    end
+
     test "file_choice_available? follows the priority client" do
       assert Downloads.file_choice_available?()
     end

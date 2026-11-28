@@ -399,7 +399,11 @@ adjusts the picks in the folder tree and the confirm passes the preview back
 to the grab as `file_preview:` with the chosen `only_files:`. The grab runs
 the duplicate check again (time has passed), then reuses the preview's
 prepared input, client, listing and peers, so it fetches and lists nothing a
-second time. `WantedFiles.manual/3` writes the same keys as above with
+second time. A magnet's metadata is still exchanged again on the add: rqbit
+9's `list_only` keeps no managed torrent, and the adapter has no way to hand
+the resolved metainfo back, so the add sends the magnet with the peers the
+listing saw as `initial_peers`, which usually makes the second exchange
+quick. `WantedFiles.manual/3` writes the same keys as above with
 `"file_selection" => %{"source" => "manual"}`, so `FileSelectionPolicy` never
 touches the torrent, and `"file_episodes"` covers every chosen video, so a
 file the operator added can still be imported early. A choice without an

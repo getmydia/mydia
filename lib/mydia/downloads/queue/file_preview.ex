@@ -116,11 +116,11 @@ defmodule Mydia.Downloads.Queue.FilePreview do
   # without an importable video is refused before any client call.
   @spec confirm(t(), keyword()) ::
           {:ok, PreparedAdd.t(), {WantedFiles.t(), [String.t()] | nil, [WantedFiles.file_map()]}}
-          | {:error, :no_importable_file}
+          | {:error, :no_importable_file | :file_selection_failed}
   def confirm(%__MODULE__{} = preview, opts) do
     indexes = Keyword.get(opts, :only_files) || Enum.sort(auto_selected(preview))
 
-    with {:ok, selection} <- WantedFiles.manual(preview.context, preview.listed, indexes) do
+    with {:ok, selection} <- manual_selection(preview, indexes) do
       add_opts =
         opts
         |> Keyword.drop([:file_preview, :only_files])
@@ -136,6 +136,21 @@ defmodule Mydia.Downloads.Queue.FilePreview do
 
       {:ok, prepared, {selection, preview.peers, preview.listed}}
     end
+  end
+
+  # An explicit choice never falls back to downloading everything: a raise
+  # (an episode query failing) becomes an error the grab records as failed,
+  # instead of crashing the grab task and leaving its row "grabbing".
+  defp manual_selection(preview, indexes) do
+    WantedFiles.manual(preview.context, preview.listed, indexes)
+  rescue
+    error ->
+      Logger.warning("Manual file selection failed",
+        title: preview.search_result.title,
+        error: Exception.message(error)
+      )
+
+      {:error, :file_selection_failed}
   end
 
   defp ensure_supported(%{torrent_input_result: {:file, _body, :nzb}}), do: {:error, :unsupported}
