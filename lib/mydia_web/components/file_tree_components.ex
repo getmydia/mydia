@@ -91,12 +91,11 @@ defmodule MydiaWeb.FileTreeComponents do
     <details
       open={@node.path == @root_path}
       phx-mounted={JS.ignore_attributes(["open"])}
-      class="group"
     >
       <summary class="flex items-center gap-3 text-sm cursor-pointer list-none py-1">
         <.icon
           name="hero-chevron-right"
-          class="size-4 text-base-content/50 transition-transform group-open:rotate-90"
+          class="size-4 text-base-content/50 transition-transform [details[open]>summary>&]:rotate-90"
         />
         <input
           type="checkbox"
@@ -109,9 +108,20 @@ defmodule MydiaWeb.FileTreeComponents do
           phx-click="toggle_files"
           phx-value-folder={@node.path}
           phx-target={@target}
+          aria-labelledby={"#{@tree_id}-folder-#{:erlang.phash2(@node.path)}-name"}
         />
-        <span class="min-w-0 flex-1 break-all font-medium">{@node.name}</span>
-        <span class="text-xs text-base-content/60">{format_file_size(@node.size)}</span>
+        <span
+          id={"#{@tree_id}-folder-#{:erlang.phash2(@node.path)}-name"}
+          class="min-w-0 flex-1 break-all font-medium"
+        >
+          {@node.name}
+        </span>
+        <span class="text-xs text-base-content/60">
+          {gettext("%{selected} of %{total}",
+            selected: format_file_size(@node.selected_size),
+            total: format_file_size(@node.size)
+          )}
+        </span>
       </summary>
       <div class="ml-6 flex flex-col gap-1">
         <.tree_node

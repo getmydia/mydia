@@ -109,7 +109,7 @@ Fixture: files `"The.Lantern.Keepers.S01/E01.mkv"` (index 0, 100), `"The.Lantern
 - [ ] **Step 1: Write the failing LiveView tests** (extend the existing `StubAdapter` setup in `files_panel_test.exs`; files as in Task 1, all `included?: true` except index 3).
   - `"renders the files as a tree"`: `has_element?(view, "#download-files-tree-folder-#{:erlang.phash2("The.Lantern.Keepers.S02")}[data-state=partial]")`.
   - `"toggling a folder then saving sends that selection"`: click the S02 folder checkbox, submit `#download-files-form`; `StubAdapter.selections()` head is `{client_id, [0, 1, 2, 3, 4]}`.
-  - `"select all clears a fully selected torrent"`: click `#download-files-tree-all` twice from full; Save then shows the existing "Keep at least one video file." error.
+  - `"select all clears a fully selected torrent"`: the fixture starts partly selected (index 3 unticked), so click `#download-files-tree-all` twice (select all, then clear all); Save then shows the existing "Keep at least one video file." error.
   - `"shows unsaved changes until saved"`: `#download-files-unsaved` appears after a toggle and is gone after Save.
   - `"a failed save keeps the operator's choice"`: `StubAdapter.selection_fails!()`, toggle, Save; the toggled folder keeps its new `data-state`.
   - `"an imported download renders disabled"`: checkboxes have `disabled`, no `#download-files-save`.
@@ -117,7 +117,7 @@ Fixture: files `"The.Lantern.Keepers.S01/E01.mkv"` (index 0, 100), `"The.Lantern
 
 - [ ] **Step 2: Run** `./dev mix test test/mydia_web/live/downloads_live/files_panel_test.exs`. Expected: new tests FAIL.
 
-- [ ] **Step 3: Implement the component.** Header: select-all checkbox plus `gettext("%{selected} of %{total} selected", ...)` using `format_file_size/1`. Folders as `<details open={folder.path == tree.path}>` with the checkbox inside `<summary>` (stop the click from toggling `<details>` by putting `phx-click` on the input only). File rows reuse the Files panel's progress bar when `show_progress`. Checkboxes use `phx-hook="IndeterminateCheckbox"` and `checked={state == :all}`.
+- [ ] **Step 3: Implement the component.** Header: select-all checkbox plus `gettext("%{selected} of %{total} selected", ...)` using `format_file_size/1`. Folders as `<details open={folder.path == tree.path} phx-mounted={JS.ignore_attributes(["open"])}>` (so a patch never closes a folder the operator opened), each row showing `selected_size` of `size`, with the checkbox inside `<summary>` (stop the click from toggling `<details>` by putting `phx-click` on the input only). File rows reuse the Files panel's progress bar when `show_progress`. Checkboxes use `phx-hook="IndeterminateCheckbox"` and `checked={state == :all}`.
 
 - [ ] **Step 4: Implement the hook**: `mounted()` and `updated()` both set `this.el.indeterminate = this.el.dataset.state === "partial"`.
 

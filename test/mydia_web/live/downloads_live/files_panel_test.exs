@@ -153,6 +153,23 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     assert has_element?(view, "#download-files-save")
   end
 
+  test "a folder row shows its selected size and labels its checkbox", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    sizes =
+      "#{MydiaWeb.Formatters.format_file_size(4_000_000)} of " <>
+        MydiaWeb.Formatters.format_file_size(5_000_000)
+
+    assert has_element?(view, "#download-files-tree summary", sizes)
+
+    assert has_element?(
+             view,
+             "#{folder_id()}[aria-labelledby='#{String.trim_leading(folder_id(), "#")}-name']"
+           )
+
+    assert has_element?(view, "#{folder_id()}-name", @folder)
+  end
+
   test "folder details keep client-set open state across patches", %{conn: conn} do
     view = open(conn, built_in_download())
 

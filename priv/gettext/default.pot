@@ -23306,3 +23306,8 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "Unsaved changes"
 msgstr ""
+
+#: lib/mydia_web/components/file_tree_components.ex:120
+#, elixir-autogen, elixir-format
+msgid "%{selected} of %{total}"
+msgstr ""
