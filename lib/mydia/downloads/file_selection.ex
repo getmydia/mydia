@@ -37,6 +37,18 @@ defmodule Mydia.Downloads.FileSelection do
   end
 
   @doc """
+  True when at least one of the files at `indexes` is a video the importer
+  would take. Only `index` and `path` are read, so listings and `TorrentFile`
+  structs both work.
+  """
+  @spec keeps_video?([%{index: non_neg_integer(), path: String.t()}], [non_neg_integer()]) ::
+          boolean()
+  def keeps_video?(files, indexes) when is_list(files) and is_list(indexes) do
+    chosen = MapSet.new(indexes)
+    Enum.any?(files, &(&1.index in chosen and importable?(&1.path)))
+  end
+
+  @doc """
   Returns the sorted indices of the files to download.
 
   Falls back to every index when no file is importable or a subtitle.
