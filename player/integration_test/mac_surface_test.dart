@@ -18,7 +18,9 @@
 // The whole file skips anywhere but macOS, and on the default fixtures
 // path when a clip is missing. With `MYDIA_HDR_FIXTURES` given, a missing
 // clip fails the run instead, naming it: a wrong path must not pass as a
-// skip. It is not in `all_tests.dart`: CI's player E2E runs on Linux.
+// skip. The HDR10 case alone skips when the window's screen reports no EDR
+// headroom, as a CI runner's does. It is not in `all_tests.dart`: CI's
+// player E2E runs on Linux; ci-player.yml runs this file on its own.
 //
 // Keep the Mac's displays awake for the whole run (`caffeinate -u` in a
 // loop when driving it over ssh). If every display is asleep when the video
@@ -379,29 +381,57 @@ Future<Duration> _close(WidgetTester tester, _Rig rig) async {
 /// The app's window, as `desktop_window_native.dart` drives it.
 final _window = nativeWindowController();
 
-/// Moves the window onto the built-in panel, the Mac's only EDR screen
-/// here. Returns that display's name, or null when there is none.
-Future<String?> _moveToBuiltInDisplay() async {
+/// Moves the window onto the built-in panel, the Mac's usual EDR screen, or
+/// onto the primary display when there is no built-in panel (a Mac mini, a
+/// CI runner). Returns that display's name, or null when there is no display
+/// at all.
+Future<String?> _moveToTestDisplay() async {
   final displays = DisplayManager.instance.getAll();
   for (final d in displays) {
     debugPrint(
       '[mac_surface_test] display ${d.name} work area '
-      '${d.workArea.toRect()} size ${d.size.toSize()}',
+      '${d.workArea.toRect()} size ${d.size.toSize()} primary ${d.isPrimary}',
     );
   }
-  final builtIn = displays
-      .where(
-        (d) =>
-            (d.name ?? '').contains('Built-in') ||
-            (d.name ?? '').contains('Color LCD'),
-      )
-      .firstOrNull;
-  if (builtIn == null) return null;
-  final origin = builtIn.workArea.toRect().topLeft;
+  final target =
+      displays
+          .where(
+            (d) =>
+                (d.name ?? '').contains('Built-in') ||
+                (d.name ?? '').contains('Color LCD'),
+          )
+          .firstOrNull ??
+      displays.where((d) => d.isPrimary).firstOrNull ??
+      DisplayManager.instance.getPrimary();
+  if (target == null) return null;
+  final origin = target.workArea.toRect().topLeft;
   await _window.setBounds(
     Rect.fromLTWH(origin.dx + 40, origin.dy + 40, 1280, 720),
   );
-  return builtIn.name;
+  return target.name;
+}
+
+/// Whether the window's screen can show HDR: it reports EDR headroom above
+/// 1 (`maximumPotentialExtendedDynamicRangeColorComponentValue`, as the
+/// plugin's display channel sends it on listen). Call it after the window
+/// has moved, and before a screen mounts: the channel serves one listener
+/// at a time, and this one is gone once its first event lands.
+///
+/// No report at all fails the test: without a reading, a Mac with no HDR
+/// screen and a plugin that stopped reporting look the same.
+Future<bool> _hdrDisplay() async {
+  const timeout = Duration(seconds: 5);
+  final DisplayInfo info;
+  try {
+    info = await const MpvSurfaceChannel().display.first.timeout(timeout);
+  } on TimeoutException {
+    fail('the surface plugin reported no screen within $timeout');
+  }
+  debugPrint(
+    '[mac_surface_test] screen ${info.screenName}: potential headroom '
+    '${info.potentialHeadroom}, current ${info.edrHeadroom}',
+  );
+  return info.potentialHeadroom > 1;
 }
 
 void main() {
@@ -445,8 +475,15 @@ void main() {
   setUp(_log.clear);
 
   testWidgets('HDR10 plays through gpu-next with PQ output', (tester) async {
-    final display = await _moveToBuiltInDisplay();
+    final display = await _moveToTestDisplay();
     debugPrint('[mac_surface_test] window moved to: $display');
+    // A CI runner's screen reports no EDR headroom, so there is no HDR
+    // output to check. Skipped, not passed: the count guard in
+    // ci-player.yml does not count it.
+    if (!await _hdrDisplay()) {
+      markTestSkipped('no HDR display');
+      return;
+    }
     final rig = await _rig();
 
     await _mount(tester, rig, _hdr10);
