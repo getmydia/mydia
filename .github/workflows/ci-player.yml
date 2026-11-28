@@ -204,8 +204,10 @@ jobs:
           retention-days: 7
 
   # Real playback on macOS: integration_test/mac_surface_test.dart plays
-  # generated clips through the shipped libmpv and the MpvSurfacePlugin, then
-  # RunnerTests runs the native plugin tests. Not a required context, like
+  # generated clips through the shipped libmpv, then RunnerTests runs the
+  # native plugin tests. The runner's paravirtual GPU cannot run gpu-next
+  # (see the count below), so here the surface cases skip and only the
+  # texture path plays; on a Mac they all run. Not a required context, like
   # everything in this workflow.
   integration-macos:
     name: Integration / macOS
@@ -311,13 +313,16 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/mac-surface.log"
 
       # flutter test exits 0 when a case skips. mac_surface_test.dart has 8
-      # cases; the HDR10 one skips on a screen with no EDR headroom, which
-      # is every hosted runner, so 7 must run and pass. On a runner with an
-      # HDR screen all 8 run, which still clears 7. Adding a case means
-      # raising this number in the same change.
+      # cases. The hosted runner is a VM whose only GPU is the Apple
+      # Paravirtual device, where MoltenVK crashes the app on gpu-next's
+      # first texture upload, so the 7 gpu-next cases skip (HDR10 included)
+      # and the escape hatch, which plays on the texture path, is the 1 that
+      # must run and pass. On a Mac with a real GPU 7 or 8 run (HDR10 needs
+      # an EDR screen). Adding a case that runs on the VM means raising
+      # this number in the same change.
       - name: Assert the surface test count
         if: ${{ !cancelled() }}
-        run: scripts/ci/assert-test-count.sh "$RUNNER_TEMP/mac-report.json" 7
+        run: scripts/ci/assert-test-count.sh "$RUNNER_TEMP/mac-report.json" 1
 
       # flutter test left the generated Xcode config pointing at the
       # integration test; --config-only puts it back on lib/main.dart, the
