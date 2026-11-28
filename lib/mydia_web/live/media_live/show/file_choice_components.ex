@@ -13,14 +13,22 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
   alias Mydia.Downloads.{FileSelection, FileTree}
   alias Mydia.Downloads.Queue.FilePreview
   alias MydiaWeb.MediaLive.Show.FileChoiceEvents
+  alias Phoenix.LiveView.JS
 
   attr :file_choice, :map, required: true
 
   def file_choice_modal(assigns) do
     ~H"""
-    <div id="file-choice-modal" class="modal modal-open" role="dialog" aria-modal="true">
-      <div class="modal-box max-w-2xl">
-        <h3 class="text-lg font-bold">{gettext("Choose files…")}</h3>
+    <div id="file-choice-modal" class="modal modal-open">
+      <div
+        id="file-choice-box"
+        class="modal-box max-w-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="file-choice-title"
+        phx-mounted={JS.focus_first()}
+      >
+        <h3 id="file-choice-title" class="text-lg font-bold">{gettext("Choose files…")}</h3>
         <p class="mt-1 break-all text-sm text-base-content/70">{@file_choice.title}</p>
         <.loading :if={@file_choice.status == :loading} />
         <.ready :if={@file_choice.status == :ready} file_choice={@file_choice} />
