@@ -132,6 +132,70 @@ the `nix build` above, `./result-player-e2e` for `./dev player e2e`):
 Player E2E tests live in `player/integration_test/`, with streaming helpers in
 `player/integration_test/helpers/streaming_helpers.dart`.
 
+### The playback E2E
+
+`player/integration_test/playback_test.dart` plays real video in the E2E
+VM. It is registered in `all_tests.dart` as the `playback` group and mounts
+the real `PlayerScreen` on a real media_kit `Player`, then reads mpv's own
+properties. It does not use the server's seeded movie: `scripts/e2e/run-tests.sh`
+writes two clips with ffmpeg on the client VM (a 10 s 1280x720 `testsrc2` mp4
+and the same video with one English SRT cue muxed in) and passes their
+directory as `--dart-define=MYDIA_E2E_CLIPS`. The rig that does the mounting
+is `integration_test/helpers/playback_rig.dart`. With no define the file
+registers one skipped test; with the define and a clip missing it fails naming
+the path.
+
+The group has seven tests: a clip decodes and advances, the video output does
+not hit the EGL display failure, a text subtitle draws in `kAppFontFamily`,
+the fullscreen button enters and leaves fullscreen, closing mid-playback
+disposes the player, closing right after opening leaves the app responsive,
+and the stats sampler reports the render path.
+
+**What the render assertion does not prove.** Under llvmpipe in the VM the
+hardware path is unreachable: the patched video output gets past the display
+check, fails `eglMakeCurrent` on its surfaceless context and publishes `sw`
+either way. So the test asserts that media_kit never prints `EGL display or
+context is invalid` on stderr (the rig captures the process's native stderr
+for this), and that the output printed something at all. It catches the
+regression that cost the player its hardware rendering once. It does not show
+that frames render on the GPU, and a later break inside the hardware path
+would pass.
+
+Three things about the VM setup are not obvious:
+
+- Fullscreen needs a window manager, so `run-tests.sh` starts `openbox` inside
+  `xvfb-run`, on a 1920x1080 screen. Without one the fullscreen request goes
+  unanswered.
+- Every pump goes through `pumpBounded`. A flutter_test pump can hang forever
+  when test code resumed by a microtask lands between a frame's `beginFrame`
+  and `drawFrame`: the skipped frame leaves the scheduler believing one is
+  still scheduled and none is ever drawn. `pumpBounded` runs each pump from a
+  timer turn and fails with the scheduler's state after 10 s. Use it, and
+  `waitFor`, for any pump in a test that plays video; a bare `tester.pump` can
+  freeze the run.
+- A frozen GTK thread stops Dart timers too, so no in-test timeout fires.
+  `run-tests.sh` runs a watchdog: after 600 s it prints the app's native stacks
+  with gdb and kills `bundle/mydia-player`, which fails the run with something
+  to read.
+
+**The count guard.** A skipped test, or one that returns before asserting,
+still leaves `flutter test` at exit 0. After the suite, `run-tests.sh` calls
+`scripts/ci/assert-test-count.sh` on the run's JSON report and fails unless at
+least `PLAYBACK_MIN_PASSED` tests whose names start with `playback ` passed.
+Adding a playback test means raising that constant at the top of
+`run-tests.sh` in the same change; removing one means lowering it.
+`scripts/ci/assert-test-count-test.sh` tests the guard itself and runs in
+`Check / Repo Contracts`.
+
+**Running only the playback file.** `E2E_TEST_TARGET=integration_test/playback_test.dart`
+runs only that file through `run-tests.sh`, and so does plain
+`flutter test integration_test/playback_test.dart -d linux
+--dart-define=MYDIA_E2E_CLIPS=<dir>` with clips you generated yourself. Outside
+`all_tests.dart` the tests have no `playback` group in front of their names, so
+the guard's `playback ` prefix matches none of them and it fails with zero
+passed. That is expected for a single-file run: read the test results, not the
+guard.
+
 ### A failure named `simple` is usually not from `simple`
 
 CI runs every file through `all_tests.dart` in one isolate. The engine's frame

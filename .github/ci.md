@@ -737,6 +737,17 @@ pull_request (player/, native/, the GraphQL schema, `rust-toolchain.toml`
 and the workflow itself) instead of the `changes` job it had while it held
 required checks. A PR that changes only translated ARB catalogs, not the
 `app_en.arb` template, does not trigger it; `player-l10n-test` covers those.
+`Integration / macOS` (`integration-macos`) runs `macos/RunnerTests` through
+`xcodebuild test` on the Debug app, on the same `xcode-27` image as the macOS
+build leg. It covers the surface and window plugins' native tests. It does not
+play video: the hosted runner's only GPU is Apple's paravirtual one, where
+gpu-next segfaults in MoltenVK and the texture path traps in media_kit_video's
+OpenGL pixel format helper, so `integration_test/mac_surface_test.dart` skips
+itself there and is not run. No CI job covers macOS playback; it is checked on
+a Mac by hand (`player/docs/playback.md`, "The integration test"). On failure
+the job uploads the app's unified log, any crash reports and the xcresult as
+`integration-macos-logs`. Real playback in CI is the Linux E2E
+(`player/docs/testing.md`, "The playback E2E"), inside `Test / Player E2E`.
 The AppImage dry run is `ci-player-appimage.yml`, filtered on the packaging
 files alone.
 

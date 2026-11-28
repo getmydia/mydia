@@ -34,12 +34,13 @@ Why the gate missed them:
 
 ## Shape
 
-Two additions, both on every pull request that touches `player/**`, both
-blocking. One PR.
+One addition that runs real video, and one that does not. Both run on every
+pull request that touches `player/**`. One PR.
 
 1. Linux: a real-playback test file inside the existing `player-e2e` VM test.
-2. macOS: a new job in `ci-player.yml` that runs `mac_surface_test.dart` and
-   `RunnerTests`.
+   Blocking, through `Test / Player E2E`.
+2. macOS: an `Integration / macOS` job in `ci-player.yml` that runs
+   `RunnerTests`. Not a required context, and it plays no video (see below).
 
 Windows, Android, iOS and screenshot goldens are out of scope. Goldens were
 considered for the two visual escapes and rejected: pixel output differs
@@ -48,74 +49,97 @@ a re-baseline at the moment the test most needs to be trusted.
 
 ## Linux: `integration_test/playback_test.dart`
 
-A new file, added to `all_tests.dart` as the `playback` group. It pairs, opens
-the seeded movie (`/media/movies/e2e-test-video.mp4`, 5 s of `testsrc2`
-written by `scripts/e2e/seed.sh`) through the real `PlayerScreen`, and reads
-mpv's own properties from the live `Player`.
+A new file, added to `all_tests.dart` as the `playback` group. It mounts the
+real `PlayerScreen` on a real media_kit `Player` and reads mpv's own
+properties. It does not pair or use the server's seeded movie: the clips are
+generated on the VM client by `scripts/e2e/run-tests.sh` (a 10 s 1280x720
+`testsrc2` mp4, and the same video with one English SRT cue muxed in) and
+reach the test as `--dart-define=MYDIA_E2E_CLIPS`. The rig is
+`integration_test/helpers/playback_rig.dart`.
 
-| Assertion | Escape it would have caught |
+Seven tests:
+
+| Test | Escape it would have caught |
 | --- | --- |
-| `time-pos` passes 2 s and `estimated-vf-fps` is above zero | none yet; proves frames are decoded |
-| `user-data/media-kit/render` (`renderPathProperty`) reports the hardware path, and the client log has no `S/W rendering` line | CPU rendering |
-| A text subtitle is on screen and its resolved `fontFamily` is `kAppFontFamily` | Roboto subtitles |
+| A local clip decodes and advances (`time-pos` passes 2 s, `estimated-vf-fps` above zero) | frames not decoded |
+| The Linux video output does not hit the EGL display failure | CPU rendering after Flutter 3.50 |
+| A text subtitle draws with `kAppFontFamily` | Roboto subtitles |
 | The fullscreen button enters fullscreen and the same button leaves it | fullscreen exit |
-| Closing the player mid-playback disposes it and the app keeps running | quit and teardown crashes |
+| Closing mid-playback disposes the player and the app keeps responding | quit and teardown crashes |
+| Closing right after opening, five times, leaves the app responsive | a GTK-thread deadlock found while building the suite |
+| The stats sampler reports the Linux render path | the stats panel missing software rendering |
 
-The seed gains a second clip with a muxed SRT track for the subtitle
-assertion, built the way `player/docs/playback.md` builds `sdr_subs.mkv`.
+The render assertion is the weaker form. Under llvmpipe the hardware path is
+unreachable, so the test asserts that media_kit never logs `EGL display or
+context is invalid` (captured from the process's native stderr) and that the
+output logged at all. It does not prove hardware rendering, and a regression
+later in the hardware path would not be caught.
 
-Every precondition is an `expect`. A missing movie, an empty library or a
-player that never mounts fails the test. The early `return`s in the existing
-"Player can navigate to video and start playback" test are removed, and that
-test is deleted if the new file covers all of it.
+Fullscreen needs a window manager: the VM client runs `openbox` inside
+`xvfb-run`, on a 1920x1080 screen. A watchdog in `run-tests.sh` prints the
+app's native stacks with gdb and kills it if the suite outlives 600 s, since a
+frozen GTK thread stops every Dart timer. Every pump in the file goes through
+a bounded helper (`pumpBounded`) that works around a flutter_test frame-stall
+race, and every wait has a deadline.
 
-The test waits on conditions with a timeout (the `_pumpUntil` pattern in
-`mac_surface_test.dart`), never on fixed sleeps.
+Every precondition is an `expect` or `fail`. A missing clip, or a player that
+never mounts, fails the test. The early `return`s in the old "Player can
+navigate to video and start playback" test are gone: it now taps through to
+the player screen and back, and asserts each step.
 
 ## macOS: `Integration / macOS` in `ci-player.yml`
 
-A new job on the same runner image and Xcode as the existing macOS build.
+The spec planned to run `mac_surface_test.dart` and `RunnerTests`. GitHub's
+hosted macOS runner is a virtual machine whose only GPU is Apple's paravirtual
+device, and both video outputs kill the app on it: gpu-next segfaults in
+MoltenVK on its first texture upload, and media_kit's texture path traps in
+the OpenGL pixel format helper. So the job runs `RunnerTests` through
+`xcodebuild test` and nothing else, on the same image and Xcode as the macOS
+build leg.
 
-1. Generate fixtures with `scripts/generate-hdr-fixtures.sh`, then mux
-   `sdr_subs.mkv` as `player/docs/playback.md` describes. Cache the output
-   keyed on the script's hash.
-2. `flutter test integration_test/mac_surface_test.dart -d macos
-   --dart-define=MYDIA_HDR_FIXTURES=<dir>`. With the define set, a missing
-   clip fails the run.
-3. `xcodebuild test` on the `Runner` scheme for `RunnerTests`.
-
-A hosted runner has no HDR display and no built-in panel.
-`mac_surface_test.dart` gets one explicit capability check: the HDR10 and PQ
-cases skip with a logged reason when no display reports EDR headroom, and
-`_moveToBuiltIn` falls back to the main display. SDR playback, fill, text
-subtitles, fullscreen, close mid-playback, the source switch and the open and
-close cycles must run.
+`mac_surface_test.dart` is not run in CI. It stays a test to run on a Mac, and
+it now skips every case on a paravirtual GPU (and the HDR10 case on a screen
+with no EDR headroom). No CI job covers macOS playback.
 
 ## No silent passes
 
-A skipped test reads as green, which is how the existing playback test hid.
-Both jobs parse the reporter's JSON output and fail when the number of tests
-that ran and passed is below a minimum pinned next to the job: all of the
-`playback` group on Linux, and every non-HDR case on macOS. Raising the count
-is part of adding a test.
+A skipped test reads as green, which is how the old playback test hid. The
+Linux run writes the reporter's JSON and `scripts/ci/assert-test-count.sh`
+fails the run when fewer than `PLAYBACK_MIN_PASSED` (7, in `run-tests.sh`)
+tests named `playback *` passed, or when the report is missing or has no
+`done` event. Raising the count is part of adding a test. The guard has its
+own test, `scripts/ci/assert-test-count-test.sh`. There is no counterpart on
+macOS, since no playback test runs there.
 
-## Unknowns, probed before the rest
+## How the unknowns resolved
 
-Each is the first task of its half. The fallback is decided here so a negative
-result does not reopen the design.
+1. **Does llvmpipe EGL in the VM reach media_kit's hardware branch?** No. The
+   patched output passes the display check, then fails `eglMakeCurrent` on its
+   surfaceless context and publishes `sw`. The fallback assertion is used.
+2. **Does fullscreen work under Xvfb with no window manager?** No. `openbox`
+   is added, and the Xvfb screen is 1920x1080.
+3. **Can a hosted macOS runner play video?** No. The job is reduced to
+   `RunnerTests`, as this spec said it would be if the display link never
+   fired.
 
-1. **Does llvmpipe EGL in the VM reach media_kit's hardware branch?** KVM is
-   available on the dev machine, so this is settled locally. If it does not,
-   the render assertion becomes "the log has no `EGL display or context is
-   invalid` line", which is the exact failure 3.50 introduced.
-2. **Does fullscreen work under Xvfb with no window manager?** If it does
-   not, the VM client starts a minimal one (`openbox`) inside `xvfb-run`.
-3. **Does a hosted macOS runner give the test a window session that can
-   enter fullscreen and keep a display link alive?** Settled by the first
-   push of the job. If fullscreen cannot run there, that case stays local and
-   the window behaviour is covered by `WindowPluginTests` in `RunnerTests`.
-   If the display link never fires, the macOS job reduces to `RunnerTests`
-   and the spec is updated to say what was lost.
+## Found along the way
+
+The new tests found four defects, fixed in the same PR:
+
+- The stats panel never reported software rendering: mpv returns the render
+  path JSON-quoted (`"sw"`) and the sampler matched only the bare word.
+- A deadlock in the vendored `media_kit_video` on Linux: a software redraw
+  queued on the GTK thread with a bare pointer could run after the output was
+  freed when a player closed right after opening (`MYDIA_PATCHES.md`).
+- The player chrome notified a listener during a build.
+- The old "Player can navigate to video and start playback" E2E test had never
+  reached the player.
+
+## Not covered
+
+- The hardware render path on Linux.
+- All macOS playback.
+- Windows, Android and iOS.
 
 ## Flakes
 
@@ -126,13 +150,11 @@ wrapped in a retry.
 ## Verification
 
 - `./dev player e2e` green locally with the new file.
-- Each Linux assertion shown to fail on the commit before its fix: revert
-  `d21bb3683` and `f0c053655` in a scratch branch and confirm red.
-- The macOS job green on the PR, and its log lists every non-HDR case as run.
-- The minimum-count guard shown to fail when one test is marked `skip`.
+- Each Linux assertion shown to fail on the commit before its fix.
+- The count guard shown to fail when a test is skipped.
 
 ## Docs
 
-`player/docs/testing.md` gains the Linux playback test and the count guard.
-`player/docs/playback.md` drops "is not part of CI" for the macOS test.
-`.github/ci.md` lists the new job.
+`player/docs/testing.md` describes the Linux playback test and the count
+guard. `player/docs/playback.md` says why the macOS test is not in CI.
+`.github/ci.md` describes the `Integration / macOS` job.
