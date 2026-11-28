@@ -151,12 +151,15 @@ the fullscreen button enters and leaves fullscreen, closing mid-playback
 disposes the player, closing right after opening leaves the app responsive,
 and the stats sampler reports the render path.
 
-**What the render assertion does not prove.** Under llvmpipe in the VM the
-hardware path is unreachable: the patched video output gets past the display
-check, fails `eglMakeCurrent` on its surfaceless context and publishes `sw`
-either way. So the test asserts that media_kit never prints `EGL display or
-context is invalid` on stderr (the rig captures the process's native stderr
-for this), and that the output printed something at all. It catches the
+**What the render assertion does not prove.** A published `hw` passes the
+test outright, since only the patched display lookup can get there. Under
+llvmpipe in the VM, today, the hardware path is unreachable: the patched video
+output gets past the display check, fails `eglMakeCurrent` on its surfaceless
+context and publishes `sw`, as the unpatched one would. On that path the test
+asserts that media_kit never prints `EGL display or context is invalid` on
+stderr (the rig captures the process's native stderr for this), and that the
+output printed something there at all. Its success lines go to stdout, so
+that second check is skipped when the path is `hw`. It catches the
 regression that cost the player its hardware rendering once. It does not show
 that frames render on the GPU, and a later break inside the hardware path
 would pass.

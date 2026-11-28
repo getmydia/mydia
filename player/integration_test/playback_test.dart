@@ -91,12 +91,14 @@ void main() {
   // without a word to the app: playback still advances. The vendored patch
   // resolves the platform display instead (MYDIA_PATCHES.md).
   //
-  // This VM cannot assert `hw` itself. Its Mesa is llvmpipe under Xvfb, and
-  // there the patched output gets past the display check and then fails
+  // A published `hw` passes outright: only the patched lookup gets there.
+  // Today this VM does not. Its Mesa is llvmpipe under Xvfb, and there the
+  // patched output gets past the display check and then fails
   // `eglMakeCurrent` on its surfaceless context (EGL_BAD_ACCESS, 0x3002),
-  // so it publishes `sw` either way. What does tell the two apart is the
-  // reason on stderr: only the unpatched lookup reports `EGL display or
-  // context is invalid`.
+  // so it publishes `sw` whichever lookup ran. What tells the two apart
+  // then is the reason on stderr: only the unpatched lookup reports `EGL
+  // display or context is invalid`. Success lines go to stdout (`g_print`),
+  // so stderr holds a `media_kit:` line only on the software path.
   testWidgets(
     'Linux video output does not hit the EGL display failure',
     (tester) async {
@@ -107,18 +109,20 @@ void main() {
         'render path published',
         () async => (await rig.prop(renderPathProperty)).isNotEmpty,
       );
-      debugPrint(
-        '[playback_test] $renderPathProperty='
-        '${await rig.prop(renderPathProperty)}',
-      );
+      final renderPath = await rig.prop(renderPathProperty);
+      debugPrint('[playback_test] $renderPathProperty=$renderPath');
+      // libmpv returns it JSON-quoted (`"hw"`); the sampler matches both.
+      final hardware = renderPath == 'hw' || renderPath == '"hw"';
       final stderr = rig.nativeStderr;
-      expect(
-        stderr,
-        contains('media_kit: VideoOutput:'),
-        reason:
-            'the video output reported nothing, so the check below '
-            'would pass on an empty capture',
-      );
+      if (!hardware) {
+        expect(
+          stderr,
+          contains('media_kit: VideoOutput:'),
+          reason:
+              'the video output reported nothing, so the check below '
+              'would pass on an empty capture',
+        );
+      }
       expect(stderr, isNot(contains('EGL display or context is invalid')));
       await rig.close(tester);
     },
