@@ -228,6 +228,42 @@ void main() {
     expect(find.text('after close'), findsOneWidget);
   });
 
+  // The software video output queued its redraws with a bare pointer, so a
+  // redraw still queued when the screen closed ran on the freed output and
+  // could lock a freed mutex, freezing the GTK thread (and with it every
+  // Dart timer) for good. Closing just as the output starts delivering
+  // frames is the window; a few rounds make hitting it likely. A freeze
+  // here cannot fail from inside the test: run-tests.sh's watchdog ends
+  // the run and prints the app's native stacks.
+  testWidgets(
+    'closing right after opening leaves the app responsive',
+    (tester) async {
+      for (var round = 1; round <= 5; round++) {
+        final rig = await pumpPlayerScreen(tester, sdrClip);
+        await waitFor(
+          tester,
+          'render path published (round $round)',
+          () async => (await rig.prop(renderPathProperty)).isNotEmpty,
+        );
+        await rig.close(tester);
+      }
+      await pumpBounded(
+        tester,
+        'a frame after the early closes',
+        () => tester.pumpWidget(
+          const Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text('after early closes'),
+          ),
+        ),
+      );
+      expect(find.text('after early closes'), findsOneWidget);
+    },
+    // `testWidgets` takes no reason: the render path is published on Linux
+    // only.
+    skip: !Platform.isLinux,
+  );
+
   // libmpv returns the render path JSON-quoted (`"sw"`), and the sampler
   // once matched only the bare word, so the stats panel never reported
   // software rendering.
