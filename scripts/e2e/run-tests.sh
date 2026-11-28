@@ -134,7 +134,14 @@ flutter_cmd=(
 )
 
 test_exit=0
-xvfb-run -a "${flutter_cmd[@]}" || test_exit=$?
+# openbox gives the bare Xvfb display a window manager: without one GTK's
+# fullscreen request goes unanswered and the window never reports it, which
+# playback_test.dart's fullscreen test needs. A window manager also keeps
+# the window inside the screen, and xvfb-run's default screen is 640x480,
+# which would push the login screen's Connect button out of the window: the
+# screen is sized for a desktop instead.
+xvfb-run -a -s "-screen 0 1920x1080x24" \
+    sh -c 'openbox & exec "$@"' sh "${flutter_cmd[@]}" || test_exit=$?
 
 echo ""
 echo "Skipped tests across all of integration_test/ (static grep, not scoped to E2E_TEST_TARGET; see each skip reason):"

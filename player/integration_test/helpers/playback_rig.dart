@@ -214,11 +214,14 @@ class PlaybackRig {
     return p;
   }
 
-  /// The newest player's mpv instance.
-  NativePlayer get native {
+  /// The newest player the screen created.
+  Player get player {
     expect(_players, isNotEmpty, reason: 'the screen created no player');
-    return _players.last.native;
+    return _players.last;
   }
+
+  /// The newest player's mpv instance.
+  NativePlayer get native => (player as _RigPlayer).native;
 
   /// mpv's [name] property on the newest player; empty when unset.
   Future<String> prop(String name) async =>

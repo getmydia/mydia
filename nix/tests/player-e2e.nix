@@ -53,8 +53,9 @@ let
     name = "player-e2e-client-env";
     nativeBuildInputs = [ ciPlayer.flutterShim ciPlayer.flutter ]
       ++ ciPlayer.linuxBuildInputs
-      # ffmpeg writes the clips playback_test.dart plays.
-      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run pkgs.ffmpeg ];
+      # ffmpeg writes the clips playback_test.dart plays; openbox is the
+      # window manager its fullscreen test needs under Xvfb.
+      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run pkgs.ffmpeg pkgs.openbox ];
     buildCommand = ''
       envFile=$out
       unset HOME TMPDIR TMP TEMP TEMPDIR NIX_BUILD_TOP NIX_BUILD_CORES \

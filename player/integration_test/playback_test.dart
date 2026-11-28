@@ -10,11 +10,22 @@
 
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:media_kit/media_kit.dart' show SubtitleTrack;
+import 'package:media_kit_video/media_kit_video.dart'
+    show defaultExitNativeFullscreen;
 import 'package:player/core/playback/frame_stats_sampler_native.dart'
     show renderPathProperty;
+import 'package:player/core/theme/app_theme.dart' show kAppFontFamily;
+import 'package:player/core/window/native_window_host.dart';
+import 'package:player/core/window/window_controller_native.dart';
+import 'package:player/core/window/window_fullscreen.dart';
+import 'package:player/core/window/window_fullscreen_controller.dart';
+import 'package:player/presentation/widgets/video_controls/panel_controls.dart'
+    show SecondaryCluster;
 
 import 'helpers/playback_rig.dart';
 import 'helpers/test_bootstrap.dart';
@@ -38,7 +49,27 @@ void main() {
     return;
   }
 
-  setUpAll(ensureTestBootstrap);
+  // As `desktop_window_native.dart` does in the app: the player's
+  // fullscreen state follows `windowFullscreenSignal`, which only this
+  // listener updates. Without it the screen never learns the window went
+  // fullscreen and its button keeps asking to enter.
+  WindowFullscreenController? fullscreen;
+  setUpAll(() async {
+    await ensureTestBootstrap();
+    if (!Platform.isLinux) return;
+    final controller = WindowFullscreenController(
+      window: nativeWindowController(),
+    );
+    await controller.seed();
+    NativeWindowHost.instance.addListener(controller);
+    fullscreen = controller;
+  });
+  tearDownAll(() {
+    final controller = fullscreen;
+    if (controller != null) {
+      NativeWindowHost.instance.removeListener(controller);
+    }
+  });
 
   testWidgets('a local clip decodes and advances', (tester) async {
     final rig = await pumpPlayerScreen(tester, sdrClip);
@@ -47,7 +78,11 @@ void main() {
       'time-pos past 2 s',
       () async => (double.tryParse(await rig.prop('time-pos')) ?? 0) > 2.0,
     );
-    expect(double.parse(await rig.prop('estimated-vf-fps')), greaterThan(0));
+    expect(
+      double.tryParse(await rig.prop('estimated-vf-fps')) ?? 0,
+      greaterThan(0),
+      reason: 'mpv estimated no output frame rate',
+    );
     await rig.close(tester);
   });
 
@@ -63,7 +98,7 @@ void main() {
   // reason on stderr: only the unpatched lookup reports `EGL display or
   // context is invalid`.
   testWidgets(
-    'Linux video renders on the hardware path',
+    'Linux video output does not hit the EGL display failure',
     (tester) async {
       final rig = await pumpPlayerScreen(tester, sdrClip);
       // Set at the end of the output's setup, after every line it prints.
@@ -91,4 +126,122 @@ void main() {
     // only.
     skip: !Platform.isLinux,
   );
+
+  // The material_ui migration left subtitles in Roboto: media_kit wraps the
+  // cue in flutter/material's `Material`, whose theme is not the app's, so
+  // the family has to be named in `subtitle_size.dart`.
+  testWidgets('a text subtitle draws in the app font', (tester) async {
+    final rig = await pumpPlayerScreen(tester, subsClip);
+    final player = rig.player;
+    bool english(SubtitleTrack t) => t.language == 'eng';
+    await waitFor(
+      tester,
+      'the English subtitle track',
+      () => player.state.tracks.subtitle.any(english),
+    );
+    final eng = player.state.tracks.subtitle.firstWhere(english);
+    if (player.state.track.subtitle.id != eng.id) {
+      debugPrint(
+        '[playback_test] subtitle track at load: '
+        '${player.state.track.subtitle.id}; selecting ${eng.id}',
+      );
+      await player.setSubtitleTrack(eng);
+    }
+    final cue = find.byWidgetPredicate(
+      (w) => w is Text && (w.data?.contains(subtitleText) ?? false),
+    );
+    await waitFor(
+      tester,
+      'the subtitle cue on screen',
+      () => cue.evaluate().isNotEmpty,
+    );
+    final element = cue.evaluate().first;
+    final text = element.widget as Text;
+    final style = DefaultTextStyle.of(element).style.merge(text.style);
+    expect(style.fontFamily, kAppFontFamily);
+    await rig.close(tester);
+  });
+
+  // The button once entered fullscreen and then had no way back out.
+  testWidgets(
+    'the fullscreen button enters and leaves fullscreen',
+    (tester) async {
+      final window = nativeWindowController();
+      expect(
+        await window.isFullScreen(),
+        isFalse,
+        reason: 'the window has to start windowed',
+      );
+      // A failure while fullscreen must not leave the window that way.
+      addTearDown(() async {
+        if (await window.isFullScreen()) await defaultExitNativeFullscreen();
+      });
+      final rig = await pumpPlayerScreen(tester, sdrClip);
+      await waitFor(
+        tester,
+        'time-pos past 0.5 s',
+        () async => (double.tryParse(await rig.prop('time-pos')) ?? 0) > 0.5,
+      );
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+
+      await _clickFullscreen(tester, mouse);
+      await waitFor(
+        tester,
+        'the window to report fullscreen',
+        () async => await window.isFullScreen() && windowFullscreen.value,
+      );
+
+      await _clickFullscreen(tester, mouse);
+      await waitFor(
+        tester,
+        'the window to report windowed',
+        () async => !await window.isFullScreen() && !windowFullscreen.value,
+      );
+      await rig.close(tester);
+    },
+    // `testWidgets` takes no reason: the listener above is wired on Linux
+    // only.
+    skip: !Platform.isLinux,
+  );
+
+  // Quitting mid-playback used to crash the app.
+  testWidgets('closing mid-playback disposes the player', (tester) async {
+    final rig = await pumpPlayerScreen(tester, sdrClip);
+    await waitFor(
+      tester,
+      'time-pos past 1 s',
+      () async => (double.tryParse(await rig.prop('time-pos')) ?? 0) > 1.0,
+    );
+    await rig.close(tester);
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Text('after close'),
+      ),
+    );
+    expect(find.text('after close'), findsOneWidget);
+  });
+}
+
+/// Hovers the fullscreen button with [mouse], which reveals the chrome if it
+/// has auto-hidden and holds it open, then clicks it.
+Future<void> _clickFullscreen(WidgetTester tester, TestGesture mouse) async {
+  final button = find.byKey(SecondaryCluster.fullscreenKey);
+  await waitFor(
+    tester,
+    'the fullscreen button',
+    () => button.evaluate().isNotEmpty,
+  );
+  final center = tester.getCenter(button);
+  await mouse.moveTo(center);
+  await waitFor(
+    tester,
+    'the chrome to show the fullscreen button',
+    () => button.hitTestable().evaluate().isNotEmpty,
+  );
+  await mouse.down(center);
+  await mouse.up();
+  await tester.pump();
 }
