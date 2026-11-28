@@ -23367,3 +23367,8 @@ msgstr ""
 #, elixir-autogen, elixir-format
 msgid "These files are already in the library."
 msgstr ""
+
+#: lib/mydia_web/components/file_tree_components.ex:136
+#, elixir-autogen, elixir-format
+msgid "%{selected} of %{total}"
+msgstr ""
