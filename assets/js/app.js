@@ -28,6 +28,7 @@ import VideoPlayer from "./hooks/video_player";
 import ExternalAuthPopup from "./hooks/external_auth_popup";
 import DockNav from "./hooks/dock_nav";
 import PersistedCheckbox from "./hooks/persisted_checkbox.mjs";
+import IndeterminateCheckbox from "./hooks/indeterminate_checkbox.mjs";
 import FlashAutoDismiss from "./hooks/flash_auto_dismiss.mjs";
 import TrailerPlayer from "./hooks/trailer_player.mjs";
 import GridDensity from "./hooks/grid_density.mjs";
@@ -444,6 +445,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ExternalAuthPopup,
     DockNav,
     PersistedCheckbox,
+    IndeterminateCheckbox,
     FlashAutoDismiss,
     TrailerPlayer,
     PwaInstallMenuItem,

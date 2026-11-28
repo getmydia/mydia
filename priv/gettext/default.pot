@@ -7876,7 +7876,7 @@ msgid "Recoverable from Configuration > Trash until it is purged"
 msgstr ""
 
 #: lib/mydia_web/live/admin_remote_access_live/components.ex:154
-#: lib/mydia_web/live/downloads_live/files_panel.ex:122
+#: lib/mydia_web/live/downloads_live/files_panel.ex:134
 #: lib/mydia_web/live/downloads_live/index.html.heex:22
 #: lib/mydia_web/live/jobs_live/components.ex:8
 #, elixir-autogen, elixir-format
@@ -22162,17 +22162,17 @@ msgstr ""
 msgid "Upload limit (KiB/s)"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:54
+#: lib/mydia_web/live/downloads_live/files_panel.ex:69
 #, elixir-autogen, elixir-format
 msgid "Couldn't update the file selection."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:109
+#: lib/mydia_web/live/downloads_live/files_panel.ex:121
 #, elixir-autogen, elixir-format
 msgid "Files"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:45
+#: lib/mydia_web/live/downloads_live/files_panel.ex:60
 #, elixir-autogen, elixir-format
 msgid "Keep at least one video file."
 msgstr ""
@@ -22200,7 +22200,7 @@ msgstr ""
 msgid "Remove from client"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:166
+#: lib/mydia_web/live/downloads_live/files_panel.ex:163
 #, elixir-autogen, elixir-format
 msgid "Save selection"
 msgstr ""
@@ -22240,7 +22240,7 @@ msgstr ""
 msgid "The seeding target of a ratio of %{ratio} or %{time} of seeding is not yet reached."
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:51
+#: lib/mydia_web/live/downloads_live/files_panel.ex:66
 #, elixir-autogen, elixir-format
 msgid "This download was already imported."
 msgstr ""
@@ -22256,7 +22256,7 @@ msgstr ""
 msgid "target %{progress}"
 msgstr ""
 
-#: lib/mydia_web/live/downloads_live/files_panel.ex:112
+#: lib/mydia_web/live/downloads_live/files_panel.ex:124
 #, elixir-autogen, elixir-format
 msgid "The file list is not available yet."
 msgstr ""
@@ -23295,4 +23295,14 @@ msgstr[1] ""
 #: lib/mydia_web/live/dashboard_live/health_components.ex:68
 #, elixir-autogen, elixir-format
 msgid "Fix"
+msgstr ""
+
+#: lib/mydia_web/components/file_tree_components.ex:51
+#, elixir-autogen, elixir-format
+msgid "%{selected} of %{total} selected"
+msgstr ""
+
+#: lib/mydia_web/live/downloads_live/files_panel.ex:154
+#, elixir-autogen, elixir-format
+msgid "Unsaved changes"
 msgstr ""

@@ -12,8 +12,9 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
   """
   use MydiaWeb, :live_component
 
-  import MydiaWeb.Formatters, only: [format_file_size: 1]
+  import MydiaWeb.FileTreeComponents, only: [file_tree: 1]
 
+  alias Mydia.Downloads.FileTree
   alias Mydia.Downloads.TorrentFiles
 
   @impl true
@@ -33,9 +34,23 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
   @impl true
   def handle_event("refresh", _params, socket), do: {:noreply, load(socket)}
 
-  def handle_event("save", params, socket) do
+  def handle_event("toggle_files", params, socket) do
+    target =
+      case params do
+        %{"folder" => path} -> {:folder, path}
+        %{"index" => index} -> {:file, String.to_integer(index)}
+      end
+
+    {:noreply, change_selection(socket, &FileTree.toggle(&1, socket.assigns.files, target))}
+  end
+
+  def handle_event("toggle_all_files", _params, socket) do
+    {:noreply, change_selection(socket, &FileTree.toggle_all(&1, socket.assigns.files))}
+  end
+
+  def handle_event("save", _params, socket) do
     download = socket.assigns.download
-    indexes = params |> Map.get("files", []) |> Enum.flat_map(&parse_index/1)
+    indexes = socket.assigns.selected |> MapSet.to_list() |> Enum.sort()
 
     case TorrentFiles.save(download, indexes) do
       :ok ->
@@ -55,14 +70,23 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
     end
   end
 
+  defp change_selection(%{assigns: %{editable: false}} = socket, _fun), do: socket
+
+  defp change_selection(socket, fun),
+    do: assign(socket, :selected, fun.(socket.assigns.selected))
+
   defp load(socket) do
     download = socket.assigns.download
     supported = TorrentFiles.supported?(download)
     files = list_files(download, supported)
 
+    selected = files |> Enum.filter(& &1.included?) |> MapSet.new(& &1.index)
+
     assign(socket,
       supported: supported,
       files: files,
+      selected: selected,
+      saved: selected,
       error: nil,
       loaded_id: if(files != [], do: download.id),
       pending_id: if(files == [], do: download.id)
@@ -88,18 +112,6 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
       _ -> []
     end
   end
-
-  defp parse_index(value) do
-    case Integer.parse(to_string(value)) do
-      {index, ""} when index >= 0 -> [index]
-      _ -> []
-    end
-  end
-
-  defp file_progress(%{size: size, downloaded: downloaded}) when size > 0,
-    do: min(100, trunc(downloaded * 100 / size))
-
-  defp file_progress(_file), do: 0
 
   @impl true
   def render(assigns) do
@@ -130,32 +142,17 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
           phx-submit="save"
           phx-target={@myself}
         >
-          <ul class="flex flex-col gap-2">
-            <li :for={file <- @files} id={"download-file-#{file.index}"}>
-              <label class="flex items-start gap-3 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="files[]"
-                  value={file.index}
-                  checked={file.included?}
-                  disabled={not @editable}
-                  class="checkbox checkbox-sm mt-0.5"
-                />
-                <span class="min-w-0 flex-1">
-                  <span class="block break-all">{file.path}</span>
-                  <span class="flex items-center gap-2 text-xs text-base-content/60">
-                    <span>{format_file_size(file.size)}</span>
-                    <progress
-                      :if={file.included?}
-                      class="progress progress-primary w-24"
-                      value={file_progress(file)}
-                      max="100"
-                    ></progress>
-                  </span>
-                </span>
-              </label>
-            </li>
-          </ul>
+          <.file_tree
+            id="download-files-tree"
+            files={@files}
+            selected={@selected}
+            disabled={not @editable}
+            target={@myself}
+            show_progress={true}
+          />
+          <p :if={@selected != @saved} id="download-files-unsaved" class="text-warning text-sm mt-2">
+            {gettext("Unsaved changes")}
+          </p>
           <p :if={@error} id="download-files-error" class="text-error text-sm mt-2">{@error}</p>
           <button
             :if={@editable}
