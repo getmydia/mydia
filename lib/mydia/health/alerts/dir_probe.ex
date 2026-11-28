@@ -31,30 +31,49 @@ defmodule Mydia.Health.Alerts.DirProbe do
   end
 
   defp probe(table, path, check, timeout) do
-    case :ets.lookup(table, path) do
-      [{^path, pid}] ->
-        if Process.alive?(pid), do: :timeout, else: start(table, path, check, timeout)
+    worker = spawn_worker(table, path, check)
 
-      [] ->
-        start(table, path, check, timeout)
+    # insert_new is the claim: of several concurrent callers, exactly one
+    # registers its worker. The worker waits for :go, so it is always
+    # registered before it can finish and remove its own entry.
+    if :ets.insert_new(table, {path, worker}) do
+      send(worker, {:go, self()})
+      await(worker, timeout)
+    else
+      Process.exit(worker, :kill)
+      claimed(table, path, check, timeout)
     end
   end
 
-  defp start(table, path, check, timeout) do
-    caller = self()
-    ref = make_ref()
+  defp claimed(table, path, check, timeout) do
+    case :ets.lookup(table, path) do
+      [{^path, pid}] ->
+        if Process.alive?(pid) do
+          :timeout
+        else
+          :ets.delete_object(table, {path, pid})
+          probe(table, path, check, timeout)
+        end
 
-    pid =
-      spawn(fn ->
-        result = check.(path)
-        :ets.delete_object(table, {path, self()})
-        send(caller, {ref, result})
-      end)
+      [] ->
+        probe(table, path, check, timeout)
+    end
+  end
 
-    :ets.insert(table, {path, pid})
+  defp spawn_worker(table, path, check) do
+    spawn(fn ->
+      receive do
+        {:go, caller} ->
+          result = check.(path)
+          :ets.delete_object(table, {path, self()})
+          send(caller, {:dir_probe, self(), result})
+      end
+    end)
+  end
 
+  defp await(worker, timeout) do
     receive do
-      {^ref, result} -> result
+      {:dir_probe, ^worker, result} -> result
     after
       timeout -> :timeout
     end

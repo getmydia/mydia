@@ -43,6 +43,51 @@ defmodule Mydia.Health.Alerts.DirProbeTest do
     assert :ets.tab2list(table) == []
   end
 
+  test "a check that finishes instantly never leaves an entry behind", %{table: table} do
+    for _ <- 1..300 do
+      assert DirProbe.dir?("/fast", table: table, check: fn _ -> false end) == false
+      assert :ets.tab2list(table) == []
+    end
+  end
+
+  test "a path already claimed by a live probe is not checked again", %{table: table} do
+    holder = spawn(fn -> Process.sleep(:infinity) end)
+    :ets.insert(table, {"/claimed", holder})
+    test_pid = self()
+
+    check = fn _ -> send(test_pid, :probing) end
+    assert DirProbe.dir?("/claimed", table: table, timeout: 50, check: check) == :timeout
+    refute_receive :probing, 50
+  end
+
+  test "a stale entry from a dead probe is replaced", %{table: table} do
+    dead = spawn(fn -> :ok end)
+    ref = Process.monitor(dead)
+    assert_receive {:DOWN, ^ref, _, _, _}
+    :ets.insert(table, {"/stale", dead})
+
+    assert DirProbe.dir?("/stale", table: table, check: fn _ -> true end) == true
+    assert :ets.tab2list(table) == []
+  end
+
+  test "concurrent probes of one path start a single check", %{table: table} do
+    test_pid = self()
+
+    check = fn _ ->
+      send(test_pid, :probing)
+      Process.sleep(:infinity)
+    end
+
+    1..20
+    |> Enum.map(fn _ ->
+      Task.async(fn -> DirProbe.dir?("/race", table: table, timeout: 100, check: check) end)
+    end)
+    |> Task.await_many()
+
+    assert_receive :probing
+    refute_receive :probing, 50
+  end
+
   test "without a table it checks inline" do
     assert DirProbe.dir?("/nonexistent-b", table: :no_such_dir_probe_table) == false
   end
