@@ -29,6 +29,7 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.PosterPicker
   alias MydiaWeb.MediaLive.Show.FindFileComponents
   alias MydiaWeb.MediaLive.Show.FindFileEvents
+  alias MydiaWeb.MediaLive.Show.FileChoiceEvents
   alias MydiaWeb.MediaLive.Show.RenameEvents
   alias MydiaWeb.MediaLive.Show.RenameModal
   alias MydiaWeb.MediaLive.Show.SearchEvents
@@ -53,6 +54,8 @@ defmodule MydiaWeb.MediaLive.Show do
   import MydiaWeb.MediaLive.Show.SearchHelpers
   import MydiaWeb.MediaLive.Show.Loaders
   import MydiaWeb.MediaLive.Show.SeasonDeleteEvents, only: [is_season_delete_event: 1]
+  import MydiaWeb.MediaLive.Show.FileChoiceEvents, only: [is_file_choice_event: 1]
+  import MydiaWeb.MediaLive.Show.RenameEvents, only: [is_rename_event: 1]
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -401,26 +404,8 @@ defmodule MydiaWeb.MediaLive.Show do
   def handle_event("cancel_transcode", params, socket),
     do: FileEvents.cancel_transcode(params, socket)
 
-  def handle_event("show_rename_modal", params, socket),
-    do: RenameEvents.show_rename_modal(params, socket)
-
-  def handle_event("hide_rename_modal", params, socket),
-    do: RenameEvents.hide_rename_modal(params, socket)
-
-  def handle_event("toggle_rename_file", params, socket),
-    do: RenameEvents.toggle_rename_file(params, socket)
-
-  def handle_event("toggle_rename_season", params, socket),
-    do: RenameEvents.toggle_rename_season(params, socket)
-
-  def handle_event("select_all_rename", params, socket),
-    do: RenameEvents.select_all_rename(params, socket)
-
-  def handle_event("clear_rename_selection", params, socket),
-    do: RenameEvents.clear_rename_selection(params, socket)
-
-  def handle_event("confirm_rename_files", params, socket),
-    do: RenameEvents.confirm_rename_files(params, socket)
+  def handle_event(event, params, socket) when is_rename_event(event),
+    do: RenameEvents.handle_event(event, params, socket)
 
   def handle_event("mark_file_preferred", params, socket),
     do: FileEvents.mark_file_preferred(params, socket)
@@ -473,6 +458,9 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("download_from_search", params, socket),
     do: SearchEvents.download_from_search(params, socket)
+
+  def handle_event(event, params, socket) when is_file_choice_event(event),
+    do: FileChoiceEvents.handle_event(event, params, socket)
 
   def handle_event("retry_indexer", %{"id" => indexer_id}, socket),
     do: SearchEvents.handle_retry_indexer(indexer_id, socket)
@@ -865,6 +853,9 @@ defmodule MydiaWeb.MediaLive.Show do
   @impl true
   def handle_async(:search, result, socket),
     do: SearchEvents.handle_search_async(result, socket)
+
+  def handle_async(:file_preview, result, socket),
+    do: FileChoiceEvents.handle_preview_async(result, socket)
 
   def handle_async({:retry, indexer_id}, result, socket),
     do: SearchEvents.handle_retry_async(indexer_id, result, socket)

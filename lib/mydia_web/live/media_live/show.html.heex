@@ -556,8 +556,14 @@
       }
       min_seeders={@min_seeders}
       sort_by={@sort_by}
+      file_choice?={@file_choice?}
     />
   <% end %>
+  <%!-- Over the manual search modal it was opened from. --%>
+  <MydiaWeb.MediaLive.Show.FileChoiceComponents.file_choice_modal
+    :if={@file_choice}
+    file_choice={@file_choice}
+  />
   <%!-- After the manual search modal so it stacks on top when opened from the
        dialog's "already downloading" banner. --%>
   <%= if @show_download_details_modal && @download_details do %>
