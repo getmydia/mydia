@@ -88,6 +88,28 @@ defmodule Mydia.Health.Alerts.DirProbeTest do
     refute_receive :probing, 50
   end
 
+  test "a claimed worker whose caller dies before :go frees the path", %{table: table} do
+    caller = spawn(fn -> Process.sleep(:infinity) end)
+    worker = DirProbe.spawn_worker(table, "/orphan", fn _ -> true end, caller)
+    :ets.insert(table, {"/orphan", worker})
+    ref = Process.monitor(worker)
+
+    Process.exit(caller, :kill)
+
+    assert_receive {:DOWN, ^ref, _, _, _}
+    assert :ets.tab2list(table) == []
+  end
+
+  test "a claimed worker that never gets :go gives up after its deadline", %{table: table} do
+    caller = spawn(fn -> Process.sleep(:infinity) end)
+    worker = DirProbe.spawn_worker(table, "/stuck", fn _ -> true end, caller, 50)
+    :ets.insert(table, {"/stuck", worker})
+    ref = Process.monitor(worker)
+
+    assert_receive {:DOWN, ^ref, _, _, _}, 500
+    assert :ets.tab2list(table) == []
+  end
+
   test "without a table it checks inline" do
     assert DirProbe.dir?("/nonexistent-b", table: :no_such_dir_probe_table) == false
   end

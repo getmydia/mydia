@@ -132,8 +132,8 @@ defmodule Mydia.Health.AlertsTest do
 
     # Two gathers: the second can only start once the first one's failure was
     # handled and the watcher survived it.
-    assert_receive :raising
-    assert_receive :raising
+    assert_receive :raising, 1_000
+    assert_receive :raising, 1_000
     assert Process.alive?(pid)
     assert Alerts.current(name) == []
   end

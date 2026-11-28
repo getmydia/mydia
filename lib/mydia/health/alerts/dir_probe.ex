@@ -16,6 +16,7 @@ defmodule Mydia.Health.Alerts.DirProbe do
 
   @table :mydia_health_dir_probes
   @timeout 5_000
+  @start_timeout 1_000
 
   @doc "Creates the shared probe table. Called by the owning process."
   def create_table, do: :ets.new(@table, [:set, :public, :named_table])
@@ -31,7 +32,7 @@ defmodule Mydia.Health.Alerts.DirProbe do
   end
 
   defp probe(table, path, check, timeout) do
-    worker = spawn_worker(table, path, check)
+    worker = spawn_worker(table, path, check, self())
 
     # insert_new is the claim: of several concurrent callers, exactly one
     # registers its worker. The worker waits for :go, so it is always
@@ -60,13 +61,26 @@ defmodule Mydia.Health.Alerts.DirProbe do
     end
   end
 
-  defp spawn_worker(table, path, check) do
+  @doc false
+  # Public for tests. The worker runs `check` only after `{:go, caller}`. If
+  # the caller dies first, or `:go` does not come within `start_timeout`, it
+  # removes its own claim and exits, so a lost handshake cannot leave the path
+  # reading `:timeout` for good.
+  def spawn_worker(table, path, check, caller, start_timeout \\ @start_timeout) do
     spawn(fn ->
+      ref = Process.monitor(caller)
+
       receive do
-        {:go, caller} ->
+        {:go, ^caller} ->
+          Process.demonitor(ref, [:flush])
           result = check.(path)
           :ets.delete_object(table, {path, self()})
           send(caller, {:dir_probe, self(), result})
+
+        {:DOWN, ^ref, :process, _, _} ->
+          :ets.delete_object(table, {path, self()})
+      after
+        start_timeout -> :ets.delete_object(table, {path, self()})
       end
     end)
   end
