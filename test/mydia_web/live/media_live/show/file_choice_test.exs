@@ -189,6 +189,34 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
       assert has_element?(view, "#manual-search-modal")
     end
 
+    test "a duplicate found at preview offers no download and marks the row", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")
+      open_with_release(view)
+
+      {:ok, _other} =
+        History.create_download(%{
+          indexer: @release.indexer,
+          title: @release.title,
+          download_url: @release.download_url,
+          media_item_id: ctx.show.id,
+          metadata: Queue.build_download_metadata(@release)
+        })
+
+      choose_files(view)
+      capture_log(fn -> render_async(view) end)
+
+      assert has_element?(view, "#file-choice-error", "Already downloading")
+      refute has_element?(view, "#file-choice-auto")
+      refute has_element?(view, "#file-choice-confirm")
+      assert has_element?(view, "#file-choice-cancel")
+      assert has_element?(view, ~s(#manual-search-results button[title="Already downloading"]))
+      refute_received {:list_only, _}
+
+      view |> element("#file-choice-cancel") |> render_click()
+      refute has_element?(view, "#file-choice-modal")
+      assert has_element?(view, ~s(#manual-search-results button[title="Already downloading"]))
+    end
+
     test "a duplicate found at confirm shows already downloading", ctx do
       expect_rqbit(ctx.bypass, :ok)
       {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")

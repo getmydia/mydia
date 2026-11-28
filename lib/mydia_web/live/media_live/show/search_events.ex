@@ -647,7 +647,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   # stream. `:result_states` is what SearchHelpers.stream_prepared_results/2
   # folds back in on each rebuild, so a badge survives the next indexer
   # reporting mid-search.
-  defp mark_result(socket, download_url, extra) do
+  @doc false
+  def mark_result(socket, download_url, extra) do
     states =
       Map.update(
         Map.get(socket.assigns, :result_states, %{}),

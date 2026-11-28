@@ -21,13 +21,17 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
   import MydiaWeb.FileTreeComponents, only: [toggle_target: 1]
 
   alias Mydia.Downloads
-  alias Mydia.Downloads.{FileSelection, FileTree}
+  alias Mydia.Downloads.{Client, FileSelection, FileTree}
   alias Mydia.Downloads.Queue.FilePreview
   alias Mydia.Indexers.SearchResult
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.MediaLive.Show.SearchEvents
 
   require Logger
+
+  # The release is already downloading or on disk: the row says so, as a plain
+  # Download would, and the modal offers no download.
+  @duplicate_reasons [:duplicate_download, :already_have_files]
 
   @events ~w(choose_files toggle_files toggle_all_files confirm_file_choice
              cancel_file_choice download_auto_from_choice)
@@ -80,7 +84,10 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
   def handle_preview_async({:ok, {ref, result}}, socket) do
     case socket.assigns.file_choice do
       %{ref: ^ref, status: :loading} = choice ->
-        {:noreply, assign(socket, :file_choice, apply_preview(choice, result))}
+        {:noreply,
+         socket
+         |> assign(:file_choice, apply_preview(choice, result))
+         |> mark_duplicate(ref, result)}
 
       _closed_or_other ->
         {:noreply, socket}
@@ -90,7 +97,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
   def handle_preview_async({:exit, reason}, socket) do
     case socket.assigns.file_choice do
       %{status: :loading} = choice ->
-        Logger.warning("File preview crashed: #{inspect(reason)}")
+        Logger.warning("File preview crashed", reason: inspect(reason_kind(reason)))
         {:noreply, assign(socket, :file_choice, %{choice | status: {:error, :crashed}})}
 
       _closed ->
@@ -140,6 +147,9 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
     end
   end
 
+  @doc "True when a failed preview found the release already downloading or on disk."
+  def duplicate?(reason), do: reason in @duplicate_reasons
+
   @doc "Why the file list could not be shown, for the modal."
   def error_message(:duplicate_download), do: gettext("Already downloading")
   def error_message(:already_have_files), do: gettext("These files are already in the library.")
@@ -161,9 +171,35 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceEvents do
   end
 
   defp apply_preview(choice, {:error, reason}) do
-    Logger.info("File preview unavailable: #{inspect(reason)}", title: choice.title)
+    Logger.info("File preview unavailable",
+      title: choice.title,
+      reason: inspect(reason_kind(reason))
+    )
+
     %{choice | status: {:error, reason}}
   end
+
+  defp mark_duplicate(socket, ref, {:error, reason}) when reason in @duplicate_reasons do
+    case SearchEvents.find_search_result(socket, ref) do
+      %SearchResult{download_url: url} ->
+        SearchEvents.mark_result(socket, url, %{duplicate: true})
+
+      nil ->
+        socket
+    end
+  end
+
+  defp mark_duplicate(socket, _ref, _result), do: socket
+
+  # Only the kind of failure is logged: a fetch error's message or an exit's
+  # stacktrace can carry the release URL, and with it a tracker passkey.
+  defp reason_kind(reason) when is_atom(reason), do: reason
+
+  defp reason_kind(%Client.Error{type: type}), do: {:client_error, type}
+
+  defp reason_kind(%module{}), do: module
+  defp reason_kind(reason) when is_tuple(reason) and is_atom(elem(reason, 0)), do: elem(reason, 0)
+  defp reason_kind(_reason), do: :other
 
   defp change_selection(socket, fun) do
     case socket.assigns.file_choice do

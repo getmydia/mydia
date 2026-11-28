@@ -94,7 +94,12 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
 
   defp failed(assigns) do
     {:error, reason} = assigns.status
-    assigns = assign(assigns, :message, FileChoiceEvents.error_message(reason))
+
+    assigns =
+      assign(assigns,
+        message: FileChoiceEvents.error_message(reason),
+        duplicate?: FileChoiceEvents.duplicate?(reason)
+      )
 
     ~H"""
     <div role="alert" id="file-choice-error" class="alert alert-warning mt-4">
@@ -104,6 +109,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceComponents do
     <div class="modal-action">
       <.cancel_button />
       <button
+        :if={not @duplicate?}
         id="file-choice-auto"
         type="button"
         class="btn btn-primary"

@@ -241,7 +241,7 @@ msgstr ""
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:45
 #: lib/mydia_web/live/media_live/show/delete_modals.ex:217
 #: lib/mydia_web/live/media_live/show/download_audio_components.ex:98
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:122
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:128
 #: lib/mydia_web/live/media_live/show/fix_match_modal.ex:147
 #: lib/mydia_web/live/media_live/show/modals.ex:113
 #: lib/mydia_web/live/media_live/show/modals.ex:265
@@ -2845,7 +2845,7 @@ msgstr ""
 msgid "Allow once"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_events.ex:144
+#: lib/mydia_web/live/media_live/show/file_choice_events.ex:154
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:388
 #: lib/mydia_web/live/media_live/show/manual_search_components.ex:392
 #, elixir-autogen, elixir-format
@@ -8570,7 +8570,7 @@ msgid "Search failed"
 msgstr ""
 
 #: lib/mydia_web/live/media_live/show/fix_match_events.ex:86
-#: lib/mydia_web/live/media_live/show/search_events.ex:763
+#: lib/mydia_web/live/media_live/show/search_events.ex:764
 #: lib/mydia_web/live/search_live/index.ex:710
 #, elixir-autogen, elixir-format
 msgid "Search failed unexpectedly"
@@ -8583,7 +8583,7 @@ msgstr ""
 
 #: lib/mydia_web/live/media_live/show/fix_match_events.ex:96
 #: lib/mydia_web/live/media_live/show/messages.ex:16
-#: lib/mydia_web/live/media_live/show/search_events.ex:754
+#: lib/mydia_web/live/media_live/show/search_events.ex:755
 #: lib/mydia_web/live/search_live/index.ex:701
 #: lib/mydia_web/live/search_live/index.ex:864
 #, elixir-autogen, elixir-format
@@ -21517,7 +21517,7 @@ msgstr ""
 msgid "Searches per day"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_events.ex:188
+#: lib/mydia_web/live/media_live/show/file_choice_events.ex:224
 #: lib/mydia_web/live/media_live/show/search_events.ex:545
 #, elixir-autogen, elixir-format
 msgid "That release is no longer in the results. Search again."
@@ -23326,7 +23326,7 @@ msgstr ""
 msgid "Choose files…"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_events.ex:151
+#: lib/mydia_web/live/media_live/show/file_choice_events.ex:161
 #, elixir-autogen, elixir-format
 msgid "Couldn't fetch the file list."
 msgstr ""
@@ -23336,7 +23336,7 @@ msgstr ""
 msgid "Download selected (%{size})"
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_components.ex:113
+#: lib/mydia_web/live/media_live/show/file_choice_components.ex:119
 #, elixir-autogen, elixir-format
 msgid "Download with automatic selection"
 msgstr ""
@@ -23353,17 +23353,17 @@ msgid_plural "Mydia picked %{count} of %{total} files"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_events.ex:148
+#: lib/mydia_web/live/media_live/show/file_choice_events.ex:158
 #, elixir-autogen, elixir-format
 msgid "The download client cannot choose files for this release."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_events.ex:150
+#: lib/mydia_web/live/media_live/show/file_choice_events.ex:160
 #, elixir-autogen, elixir-format
 msgid "The torrent did not list any files."
 msgstr ""
 
-#: lib/mydia_web/live/media_live/show/file_choice_events.ex:145
+#: lib/mydia_web/live/media_live/show/file_choice_events.ex:155
 #, elixir-autogen, elixir-format
 msgid "These files are already in the library."
 msgstr ""
