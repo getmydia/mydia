@@ -1,9 +1,9 @@
 name: CI / Player Desktop
 
 # The player jobs Nix CI does not cover: the Windows and macOS builds, the
-# macOS playback integration test and the Flatpak checks. Test / Player, Build / Web, Build / Linux, Check / Web icons
-# and Build / Android live in ci.yml (.github/ci.md, "ci.yml: the flake-check
-# graph"), so nothing here is a required context and a path filter is safe:
+# macOS native tests and the Flatpak checks. Test / Player, Build / Web,
+# Build / Linux, Check / Web icons and Build / Android live in ci.yml
+# (.github/ci.md, "ci.yml: the flake-check graph"), so nothing here is a required context and a path filter is safe:
 # a workflow the filter skips reports nothing, which would leave a required
 # check pending forever, and none of these is required.
 #
@@ -203,12 +203,18 @@ jobs:
           path: ${{ matrix.artifact_path }}
           retention-days: 7
 
-  # Real playback on macOS: integration_test/mac_surface_test.dart plays
-  # generated clips through the shipped libmpv, then RunnerTests runs the
-  # native plugin tests. The runner's paravirtual GPU cannot run gpu-next
-  # (see the count below), so here the surface cases skip and only the
-  # texture path plays; on a Mac they all run. Not a required context, like
-  # everything in this workflow.
+  # The macOS native tests: RunnerTests (MpvSurfacePlugin, WindowPlugin and
+  # the rest of macos/RunnerTests) through xcodebuild. Not a required
+  # context, like everything in this workflow.
+  #
+  # integration_test/mac_surface_test.dart cannot run here. The hosted
+  # runner is a macOS VM whose only GPU is the Apple Paravirtual device, and
+  # both video outputs kill the app on it: gpu-next segfaults in MoltenVK
+  # (vkBindImageMemory, inside AppleParavirtGPUMetalIOGPUFamily) on its
+  # first texture upload, and media_kit's texture path finds no accelerated
+  # OpenGL pixel format and force-unwraps it. Every case in that file skips
+  # on that GPU, so it stays a run-on-a-Mac test (player/docs/playback.md,
+  # "The integration test").
   integration-macos:
     name: Integration / macOS
     # The same image and Xcode as the macOS build leg above.
@@ -246,92 +252,11 @@ jobs:
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
 
-      # The clips are generated, never committed. The key covers the
-      # generator; the subtitle mux below is not in it, so bump the v1 when
-      # that step changes.
-      - name: Cache HDR fixtures
-        id: fixtures
-        uses: actions/cache@v6
-        with:
-          path: ~/mydia-hdr/fixtures
-          key: ${{ runner.os }}-${{ runner.arch }}-hdr-fixtures-v1-${{ hashFiles('scripts/generate-hdr-fixtures.sh') }}
-
-      # The generator needs ffmpeg with zscale, libx265 and libx264, and
-      # dovi_tool. It re-execs under `nix shell` when the runner lacks them,
-      # which a Homebrew ffmpeg may. Same pinned installer as the nix-ci
-      # action and deploy-web-player.yml.
-      - name: Install Nix
-        if: steps.fixtures.outputs.cache-hit != 'true'
-        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      # sdr_subs.mkv is muxed exactly as player/docs/playback.md shows,
-      # through the nix ffmpeg the generator uses.
-      - name: Generate HDR fixtures
-        if: steps.fixtures.outputs.cache-hit != 'true'
-        run: |
-          fixtures="$HOME/mydia-hdr/fixtures"
-          scripts/generate-hdr-fixtures.sh "$fixtures"
-          cd "$fixtures"
-          printf '1\n00:00:00,000 --> 00:00:10,000\nMydia surface subtitle check\n' > subs.srt
-          nix shell nixpkgs#ffmpeg-full --command \
-            ffmpeg -i sdr_testsrc.mp4 -i subs.srt -map 0:v -map 1:s -c:v copy \
-            -c:s srt -metadata:s:s:0 language=eng sdr_subs.mkv
-
-      # On a cache hit too: a truncated or partial cache entry must fail here,
-      # by name, not as a test that cannot open its clip.
-      - name: Check HDR fixtures
-        run: |
-          missing=0
-          for clip in levels_hdr10.mp4 sdr_testsrc.mp4 sdr_subs.mkv; do
-            if [ ! -s "$HOME/mydia-hdr/fixtures/$clip" ]; then
-              echo "::error::fixture $clip is missing or empty in ~/mydia-hdr/fixtures"
-              missing=1
-            fi
-          done
-          ls -l "$HOME/mydia-hdr/fixtures"
-          exit "$missing"
-
-      # caffeinate -d keeps the display awake for the whole run: with every
-      # display asleep when the video output starts, mpv's mac output waits
-      # for a display link that never fires and the test hangs. The -u pass
-      # first wakes a display that is already asleep.
-      - name: Run the macOS surface test
-        working-directory: ${{ env.PLAYER_PATH }}
-        run: |
-          caffeinate -u -t 2
-          caffeinate -d &
-          caffeinate_pid=$!
-          trap 'kill "$caffeinate_pid" 2>/dev/null || true' EXIT
-          mkdir -p "$RUNNER_TEMP/mpv-logs"
-          flutter test integration_test/mac_surface_test.dart -d macos \
-            --dart-define=MYDIA_HDR_FIXTURES="$HOME/mydia-hdr/fixtures" \
-            --dart-define=MYDIA_MPV_LOG_DIR="$RUNNER_TEMP/mpv-logs" \
-            --file-reporter "json:$RUNNER_TEMP/mac-report.json" \
-            2>&1 | tee "$RUNNER_TEMP/mac-surface.log"
-
-      # flutter test exits 0 when a case skips. mac_surface_test.dart has 8
-      # cases. The hosted runner is a VM whose only GPU is the Apple
-      # Paravirtual device, where MoltenVK crashes the app on gpu-next's
-      # first texture upload, so the 7 gpu-next cases skip (HDR10 included)
-      # and the escape hatch, which plays on the texture path, is the 1 that
-      # must run and pass. On a Mac with a real GPU 7 or 8 run (HDR10 needs
-      # an EDR screen). Adding a case that runs on the VM means raising
-      # this number in the same change.
-      - name: Assert the surface test count
-        if: ${{ !cancelled() }}
-        run: scripts/ci/assert-test-count.sh "$RUNNER_TEMP/mac-report.json" 1
-
-      # flutter test left the generated Xcode config pointing at the
-      # integration test; --config-only puts it back on lib/main.dart, the
-      # app RunnerTests is hosted in, without building. The derived data and
-      # build roots are the ones flutter uses, so the app and its Rust core
-      # build incrementally. Runs after a failed surface test too: it is
-      # independent evidence.
+      # --config-only writes macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+      # (target lib/main.dart, the app RunnerTests is hosted in) and installs
+      # the pods, without building. xcodebuild then builds the Debug app,
+      # its Rust core and the test bundle into flutter's own build roots.
       - name: Run RunnerTests
-        if: ${{ !cancelled() }}
         working-directory: ${{ env.PLAYER_PATH }}
         run: |
           flutter build macos --debug --config-only
@@ -347,10 +272,8 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             2>&1 | tee "$RUNNER_TEMP/runner-tests.log"
 
-      # The app's own NSLog lines (MpvSurface, the window plugin) go to the
-      # unified log, not to flutter test's output. An app that dies under a
-      # test only reports it as an error with no message; its crash report
-      # (the faulting thread's stack) is the evidence.
+      # The host app's NSLog lines go to the unified log, and a host app that
+      # dies under a test leaves its stack only in a crash report.
       - name: Collect the app log
         if: failure()
         run: |
@@ -368,10 +291,7 @@ jobs:
         with:
           name: integration-macos-logs
           path: |
-            ${{ runner.temp }}/mac-report.json
-            ${{ runner.temp }}/mac-surface.log
             ${{ runner.temp }}/mac-app.log
-            ${{ runner.temp }}/mpv-logs
             ${{ runner.temp }}/crash-reports
             ${{ runner.temp }}/runner-tests.log
             ${{ runner.temp }}/RunnerTests.xcresult

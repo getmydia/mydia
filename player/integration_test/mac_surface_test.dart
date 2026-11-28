@@ -18,11 +18,11 @@
 // The whole file skips anywhere but macOS, and on the default fixtures
 // path when a clip is missing. With `MYDIA_HDR_FIXTURES` given, a missing
 // clip fails the run instead, naming it: a wrong path must not pass as a
-// skip. Every gpu-next case skips on the Apple Paravirtual GPU of a macOS
-// virtual machine (see `_gpuNextBlocker`), which leaves a hosted CI runner
-// only the escape hatch; the HDR10 case also skips when the window's screen
-// reports no EDR headroom. It is not in `all_tests.dart`: CI's player E2E
-// runs on Linux; ci-player.yml runs this file on its own.
+// skip. Every case skips on the Apple Paravirtual GPU of a macOS virtual
+// machine, where neither video output can run (see `_paravirtualGpu`), so a
+// hosted CI runner cannot run this file; the HDR10 case also skips when the
+// window's screen reports no EDR headroom. It is not in `all_tests.dart`:
+// CI's player E2E runs on Linux.
 //
 // Keep the Mac's displays awake for the whole run (`caffeinate -u` in a
 // loop when driving it over ssh). If every display is asleep when the video
@@ -82,7 +82,7 @@ String _clip(String name) => '$_fixtures/$name';
 
 /// When set, every player writes mpv's verbose log to
 /// `<dir>/mpv-<handle>.log`: the only record of what mpv did when the app
-/// dies under it. CI sets it and uploads the directory on failure.
+/// dies under it.
 const _mpvLogDir = String.fromEnvironment('MYDIA_MPV_LOG_DIR');
 
 const _hdr10 = 'levels_hdr10.mp4';
@@ -162,50 +162,47 @@ Future<bool> _consoleLocked() async {
   }
 }
 
-/// Why gpu-next cannot run on this Mac's GPU, or null when it can.
+/// Whether this Mac's only GPU is the Apple Paravirtual device of a macOS
+/// virtual machine (every hosted CI runner), whose Metal driver is
+/// `AppleParavirtGPUMetalIOGPUFamily`. Neither video output survives it,
+/// and both fail by killing the app, so neither can be probed by trying:
 ///
-/// A macOS virtual machine (every hosted CI runner) has only the Apple
-/// Paravirtual GPU, whose Metal driver is `AppleParavirtGPUMetalIOGPUFamily`.
-/// MoltenVK segfaults inside that driver on libplacebo's first texture
-/// upload (`vkBindImageMemory` -> `MVKImagePlane::updateMTLTextureContent`),
-/// which kills the app, so the capability cannot be probed by trying it.
-/// The GPU's own Metal driver is the closest probe: the accelerators'
-/// IORegistry entries name it, and system_profiler names the chipset.
-/// Probed once, and both outputs are logged.
-Future<String?> _gpuNextBlocker() => _gpuNextBlockerProbe ??= () async {
-  final accelerators = await Process.run('/usr/sbin/ioreg', [
+/// - gpu-next: MoltenVK segfaults inside that driver on libplacebo's first
+///   texture upload (`vkBindImageMemory` ->
+///   `MVKImagePlane::updateMTLTextureContent`).
+/// - the texture path: media_kit's `TextureHW` asks CGL for an accelerated
+///   OpenGL pixel format, gets none, and force-unwraps it
+///   (`OpenGLHelpers.createPixelFormat`).
+///
+/// The GPU's Metal driver, as the accelerators' IORegistry entries name it,
+/// is the closest probe. Probed once, and logged.
+Future<bool> _paravirtualGpu() => _paravirtualGpuProbe ??= () async {
+  final r = await Process.run('/usr/sbin/ioreg', [
     '-r',
     '-c',
     'IOAccelerator',
     '-d',
     '1',
   ]);
-  final displays = await Process.run('/usr/sbin/system_profiler', [
-    'SPDisplaysDataType',
-  ]);
-  final ioreg = accelerators.stdout as String;
-  final profile = displays.stdout as String;
+  final ioreg = r.stdout as String;
   final plugins = RegExp(r'"MetalPluginName" = "[^"]*"')
       .allMatches(ioreg)
       .map((m) => m[0])
       .join(', ');
   debugPrint(
-    '[mac_surface_test] GPU probe: system_profiler (exit '
-    '${displays.exitCode}):\n$profile\nIOAccelerator: $plugins',
+    '[mac_surface_test] GPU probe (ioreg exit ${r.exitCode}): $plugins',
   );
-  if (ioreg.contains('AppleParavirtGPU') || profile.contains('Paravirtual')) {
-    return 'the Apple Paravirtual GPU: MoltenVK crashes the app in its '
-        'Metal driver on the first texture upload';
-  }
-  return null;
+  return ioreg.contains('AppleParavirtGPU');
 }();
-Future<String?>? _gpuNextBlockerProbe;
+Future<bool>? _paravirtualGpuProbe;
 
-/// False, with the test marked skipped, when gpu-next cannot run here.
-Future<bool> _gpuNextRuns() async {
-  final blocker = await _gpuNextBlocker();
-  if (blocker == null) return true;
-  markTestSkipped('gpu-next cannot run on $blocker');
+/// False, with the test marked skipped, when the GPU is the paravirtual
+/// one; [output] names the video output that cannot run on it.
+Future<bool> _outputRuns(String output) async {
+  if (!await _paravirtualGpu()) return true;
+  markTestSkipped(
+    '$output cannot run on the Apple Paravirtual GPU of a virtual machine',
+  );
   return false;
 }
 
@@ -536,12 +533,11 @@ void main() {
   setUp(_log.clear);
 
   testWidgets('HDR10 plays through gpu-next with PQ output', (tester) async {
-    if (!await _gpuNextRuns()) return;
+    if (!await _outputRuns('gpu-next')) return;
     final display = await _moveToTestDisplay();
     debugPrint('[mac_surface_test] window moved to: $display');
-    // A screen with no EDR headroom (an SDR external display, a virtual
-    // machine's) leaves no HDR output to check. Skipped, not passed: the
-    // count guard in ci-player.yml does not count it.
+    // A screen with no EDR headroom (an SDR external display) leaves no
+    // HDR output to check: skipped, not passed.
     if (!await _hdrDisplay()) {
       markTestSkipped('no HDR display');
       return;
@@ -629,7 +625,7 @@ void main() {
   testWidgets('SDR plays through gpu-next, and fill sets panscan', (
     tester,
   ) async {
-    if (!await _gpuNextRuns()) return;
+    if (!await _outputRuns('gpu-next')) return;
     final rig = await _rig();
     await _mount(tester, rig, _sdr);
     await _waitFor(tester, 'SDR tracks', () => _playing(rig));
@@ -668,7 +664,7 @@ void main() {
   });
 
   testWidgets('a text subtitle shows in MydiaSubtitleView', (tester) async {
-    if (!await _gpuNextRuns()) return;
+    if (!await _outputRuns('gpu-next')) return;
     final rig = await _rig();
     await _mount(tester, rig, _subs);
     await _waitFor(tester, 'subtitle clip tracks', () => _playing(rig));
@@ -696,7 +692,7 @@ void main() {
   });
 
   testWidgets('fullscreen keeps the one surface view', (tester) async {
-    if (!await _gpuNextRuns()) return;
+    if (!await _outputRuns('gpu-next')) return;
     final rig = await _rig();
     await _mount(tester, rig, _sdr);
     await _waitFor(tester, 'SDR tracks', () => _playing(rig));
@@ -762,7 +758,7 @@ void main() {
   testWidgets('closing mid-playback detaches first and does not hang', (
     tester,
   ) async {
-    if (!await _gpuNextRuns()) return;
+    if (!await _outputRuns('gpu-next')) return;
     final rig = await _rig();
     await _mount(tester, rig, _hdr10);
     await _waitFor(tester, 'tracks', () => _playing(rig));
@@ -790,7 +786,7 @@ void main() {
   testWidgets('the next source detaches the old handle before attaching', (
     tester,
   ) async {
-    if (!await _gpuNextRuns()) return;
+    if (!await _outputRuns('gpu-next')) return;
     final rig = await _rig();
     await _mount(tester, rig, _sdr, fileId: 'file-a');
     await _waitFor(tester, 'first source', () => _playing(rig));
@@ -827,7 +823,7 @@ void main() {
   });
 
   testWidgets('ten open and close cycles in a row', (tester) async {
-    if (!await _gpuNextRuns()) return;
+    if (!await _outputRuns('gpu-next')) return;
     for (var i = 0; i < 10; i++) {
       _log.clear();
       final rig = await _rig();
@@ -847,6 +843,7 @@ void main() {
   testWidgets('the escape hatch puts a new playback on the texture path', (
     tester,
   ) async {
+    if (!await _outputRuns('the texture path')) return;
     final rig = await _rig();
     await rig.settings.setLegacyMacVideoOutput(true);
     await _mount(tester, rig, _sdr);
