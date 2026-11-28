@@ -324,6 +324,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
       assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "surfshark"}]) == "surfshark"
       assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "  "}]) == "private internet access"
       assert provider(Path.join(dir, "missing"), []) == ""
+      assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "PIA"}]) == "private internet access"
+      assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "Mullvad"}]) == "mullvad"
     end
   end
 
@@ -376,7 +378,8 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
     defp update(dir, bin, provider) do
       runner =
         ~s(gluetun_bin="$2"; dir="$3"; run="$3"; log="$3/gluetun.log"; ) <>
-          ~s(servers_stamp="$3/servers-updated"; hash=h; dropped=; invalid=0; ) <>
+          ~s(servers_stamp="$3/servers-updated"; servers_json="$3/servers.json"; ) <>
+          ~s(hash=h; dropped=; invalid=0; ) <>
           ~s(update_servers "$4")
 
       {_, 0} = sh(runner, [bin, dir, provider])
@@ -400,7 +403,16 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
     end
 
     test "a failed refresh is logged and stamped, never fatal", %{tmp_dir: dir} do
-      update(dir, fake_gluetun(dir, 1), "mullvad")
+      File.write!(Path.join(dir, "servers.json"), "previous list")
+      bin = Path.join(dir, "gluetun")
+
+      # Truncates the list, as gluetun's writer does, then fails.
+      File.write!(bin, "#!/bin/sh\n: > \"$(dirname \"$0\")/servers.json\"\nexit 1\n")
+      File.chmod!(bin, 0o755)
+      update(dir, bin, "mullvad")
+
+      assert File.read!(Path.join(dir, "servers.json")) == "previous list"
+      refute File.exists?(Path.join(dir, "servers.json.bak"))
 
       assert File.read!(Path.join(dir, "gluetun.log")) =~ "Server list refresh failed"
 

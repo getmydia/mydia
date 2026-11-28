@@ -250,13 +250,20 @@ rotate_log() {
 
 # The provider gluetun will use: a non-blank MYDIA_VPN_SERVICE_PROVIDER, as in
 # run_with_gluetun_env, else the last VPN_SERVICE_PROVIDER line of the snapshot
-# $1. Prints nothing when neither names one.
+# $1. Prints nothing when neither names one. Normalized as gluetun's
+# readVPNServiceProvider does (lower case, `pia` for private internet access),
+# because `gluetun update -providers` takes only the canonical name.
 vpn_provider() {
     if ! blank "${MYDIA_VPN_SERVICE_PROVIDER:-}"; then
-        printf '%s' "$MYDIA_VPN_SERVICE_PROVIDER"
+        name=$MYDIA_VPN_SERVICE_PROVIDER
     elif [ -f "$1" ]; then
-        printf '%s' "$(sed -n 's/^VPN_SERVICE_PROVIDER=//p' "$1" | tail -n 1)"
+        name=$(sed -n 's/^VPN_SERVICE_PROVIDER=//p' "$1" | tail -n 1)
+    else
+        name=
     fi
+    name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
+    [ "$name" = pia ] && name="private internet access"
+    printf '%s' "$name"
 }
 
 # Prints 1 when provider $2's server list is due for a refresh, else 0. $1 is
@@ -300,12 +307,26 @@ update_servers() {
     [ "$(servers_update_due "$servers_stamp" "$1" "$now")" = 1 ] || return 0
     write_loop_status "$dir/loop-status" "$hash" "$dropped" "$invalid"
     log_line "Refreshing the $1 server list"
+    # Gluetun truncates servers.json before writing the new list, so a refresh
+    # that dies partway (a full disk, the timeout) would leave a file the next
+    # gluetun cannot decode. Keep the previous one and put it back on failure.
+    rm -f "$servers_json.bak"
+    [ -s "$servers_json" ] && cp -p "$servers_json" "$servers_json.bak"
     result=ok
     env -i PATH="$PATH" timeout 180 "$gluetun_bin" update -enduser -providers "$1" \
         > "$run/update.log" 2>&1 || result=failed
     # shellcheck disable=SC2016,SC2086 # the script runs in mydia's shell
     $as_mydia sh -c 'cat >> "$1"' sh "$log" < "$run/update.log"
-    [ "$result" = ok ] || log_line "Server list refresh failed; using the list gluetun has"
+    if [ "$result" = ok ]; then
+        rm -f "$servers_json.bak"
+    else
+        if [ -f "$servers_json.bak" ]; then
+            mv -f "$servers_json.bak" "$servers_json"
+        else
+            rm -f "$servers_json"
+        fi
+        log_line "Server list refresh failed; using the list gluetun has"
+    fi
     printf '%s %s %s\n' "$now" "$result" "$1" > "$servers_stamp"
 }
 
