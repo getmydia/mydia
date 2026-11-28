@@ -60,6 +60,9 @@ defmodule Mydia.Health.AlertsTest do
 
   test "broadcasts the empty list when cleared", ctx do
     ctx.start.(:timer.hours(1))
+    # Evaluate at t0 first: init's own first tick may otherwise run after the
+    # clock moves, making minute 10 the first failure.
+    :ok = Alerts.refresh(ctx.name)
     ctx.set.(:now, minutes(10))
     :ok = Alerts.refresh(ctx.name)
     assert_receive {:health_alerts, [_]}
