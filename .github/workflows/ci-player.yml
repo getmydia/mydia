@@ -1,7 +1,7 @@
 name: CI / Player Desktop
 
-# The player jobs Nix CI does not cover: the Windows and macOS builds and the
-# Flatpak checks. Test / Player, Build / Web, Build / Linux, Check / Web icons
+# The player jobs Nix CI does not cover: the Windows and macOS builds, the
+# macOS playback integration test and the Flatpak checks. Test / Player, Build / Web, Build / Linux, Check / Web icons
 # and Build / Android live in ci.yml (.github/ci.md, "ci.yml: the flake-check
 # graph"), so nothing here is a required context and a path filter is safe:
 # a workflow the filter skips reports nothing, which would leave a required
@@ -201,6 +201,166 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
+          retention-days: 7
+
+  # Real playback on macOS: integration_test/mac_surface_test.dart plays
+  # generated clips through the shipped libmpv and the MpvSurfacePlugin, then
+  # RunnerTests runs the native plugin tests. Not a required context, like
+  # everything in this workflow.
+  integration-macos:
+    name: Integration / macOS
+    # The same image and Xcode as the macOS build leg above.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ env.PLAYER_PATH }}/.dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run code generation
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub run build_runner build
+
+      # The clips are generated, never committed. The key covers the
+      # generator; the subtitle mux below is not in it, so bump the v1 when
+      # that step changes.
+      - name: Cache HDR fixtures
+        id: fixtures
+        uses: actions/cache@v6
+        with:
+          path: ~/mydia-hdr/fixtures
+          key: ${{ runner.os }}-${{ runner.arch }}-hdr-fixtures-v1-${{ hashFiles('scripts/generate-hdr-fixtures.sh') }}
+
+      # The generator needs ffmpeg with zscale, libx265 and libx264, and
+      # dovi_tool. It re-execs under `nix shell` when the runner lacks them,
+      # which a Homebrew ffmpeg may. Same pinned installer as the nix-ci
+      # action and deploy-web-player.yml.
+      - name: Install Nix
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # sdr_subs.mkv is muxed exactly as player/docs/playback.md shows,
+      # through the nix ffmpeg the generator uses.
+      - name: Generate HDR fixtures
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        run: |
+          fixtures="$HOME/mydia-hdr/fixtures"
+          scripts/generate-hdr-fixtures.sh "$fixtures"
+          cd "$fixtures"
+          printf '1\n00:00:00,000 --> 00:00:10,000\nMydia surface subtitle check\n' > subs.srt
+          nix shell nixpkgs#ffmpeg-full --command \
+            ffmpeg -i sdr_testsrc.mp4 -i subs.srt -map 0:v -map 1:s -c:v copy \
+            -c:s srt -metadata:s:s:0 language=eng sdr_subs.mkv
+
+      # On a cache hit too: a truncated or partial cache entry must fail here,
+      # by name, not as a test that cannot open its clip.
+      - name: Check HDR fixtures
+        run: |
+          missing=0
+          for clip in levels_hdr10.mp4 sdr_testsrc.mp4 sdr_subs.mkv; do
+            if [ ! -s "$HOME/mydia-hdr/fixtures/$clip" ]; then
+              echo "::error::fixture $clip is missing or empty in ~/mydia-hdr/fixtures"
+              missing=1
+            fi
+          done
+          ls -l "$HOME/mydia-hdr/fixtures"
+          exit "$missing"
+
+      # caffeinate -d keeps the display awake for the whole run: with every
+      # display asleep when the video output starts, mpv's mac output waits
+      # for a display link that never fires and the test hangs. The -u pass
+      # first wakes a display that is already asleep.
+      - name: Run the macOS surface test
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: |
+          caffeinate -u -t 2
+          caffeinate -d &
+          caffeinate_pid=$!
+          trap 'kill "$caffeinate_pid" 2>/dev/null || true' EXIT
+          flutter test integration_test/mac_surface_test.dart -d macos \
+            --dart-define=MYDIA_HDR_FIXTURES="$HOME/mydia-hdr/fixtures" \
+            --file-reporter "json:$RUNNER_TEMP/mac-report.json" \
+            2>&1 | tee "$RUNNER_TEMP/mac-surface.log"
+
+      # flutter test exits 0 when a case skips. mac_surface_test.dart has 8
+      # cases; the HDR10 one skips on a screen with no EDR headroom, which
+      # is every hosted runner, so 7 must run and pass. On a runner with an
+      # HDR screen all 8 run, which still clears 7. Adding a case means
+      # raising this number in the same change.
+      - name: Assert the surface test count
+        if: ${{ !cancelled() }}
+        run: scripts/ci/assert-test-count.sh "$RUNNER_TEMP/mac-report.json" 7
+
+      # flutter test left the generated Xcode config pointing at the
+      # integration test; --config-only puts it back on lib/main.dart, the
+      # app RunnerTests is hosted in, without building. The derived data and
+      # build roots are the ones flutter uses, so the app and its Rust core
+      # build incrementally. Runs after a failed surface test too: it is
+      # independent evidence.
+      - name: Run RunnerTests
+        if: ${{ !cancelled() }}
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: |
+          flutter build macos --debug --config-only
+          build_dir="$PWD/build/macos"
+          xcodebuild test \
+            -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -destination "platform=macOS,arch=$(uname -m)" \
+            -derivedDataPath "$build_dir" \
+            -resultBundlePath "$RUNNER_TEMP/RunnerTests.xcresult" \
+            "OBJROOT=$build_dir/Build/Intermediates.noindex" \
+            "SYMROOT=$build_dir/Build/Products" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee "$RUNNER_TEMP/runner-tests.log"
+
+      # The app's own NSLog lines (MpvSurface, the window plugin) go to the
+      # unified log, not to flutter test's output.
+      - name: Collect the app log
+        if: failure()
+        run: |
+          log show --last 45m --style compact \
+            --predicate 'process == "Mydia Player"' \
+            > "$RUNNER_TEMP/mac-app.log" 2>&1 || true
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-macos-logs
+          path: |
+            ${{ runner.temp }}/mac-report.json
+            ${{ runner.temp }}/mac-surface.log
+            ${{ runner.temp }}/mac-app.log
+            ${{ runner.temp }}/runner-tests.log
+            ${{ runner.temp }}/RunnerTests.xcresult
+          if-no-files-found: ignore
           retention-days: 7
 
   flatpak-validate:
