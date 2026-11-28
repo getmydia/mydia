@@ -72,27 +72,26 @@ safe to run twice (only the first run releases anything), and the mutex is
 cleared in `finalize` instead. The hardware path marks frames straight from
 mpv's callback and queues nothing, so it is unchanged.
 
-### When dispose runs late
+### Dispose runs at removal
 
-If a redraw is still queued when `VideoOutputManager.Dispose` removes the
-output from its table, that removal no longer drops the last reference. The
-queued redraw runs once more (with `destroyed` still false, against a live
-render context), and the whole of dispose, not just the freeing of memory,
-then runs from the idle source's destroy notify on the GTK thread. So
-`mpv_render_context_free` can happen after `VideoOutputManager.Dispose` has
-returned, usually one GTK main-loop iteration later. Each queued redraw holds
-its own reference, though, so redraws queued back to back postpone dispose
-until the first iteration with none left queued.
+With a redraw still queued, removing the output from
+`VideoOutputManager`'s table no longer drops the last reference, so dispose
+would wait for the GTK main loop to run that redraw. `mpv_render_context_free`
+would then happen after `VideoOutputManager.Dispose` had returned, and
+nothing would order it before media_kit destroys the mpv core, which the mpv
+render API forbids. So `video_output_manager_dispose`
+(`linux/video_output_manager.cc`) runs dispose explicitly with
+`g_object_run_dispose` before it removes the output: the render context is
+freed inside `VideoOutputManager.Dispose`, as it was upstream. That call and
+the redraws both run on the GTK thread, so a redraw that runs afterwards finds
+`destroyed` set and returns without touching mpv. Its reference now keeps only
+the object's memory (and the mutex it checks) alive, and the final unref runs
+dispose a second time, which does nothing.
 
-That is safe only while the mpv core outlives that delay. media_kit 1.2.6's
-`NativePlayer.dispose` (`lib/src/player/native/player/real.dart`) calls
-`mpv_terminate_destroy` from a `Future.delayed` of 5 seconds after it stops
-playback; the stop is not what makes this safe, the delay is. A render
-context freed, or a redraw rendered, after the core is destroyed would use
-freed mpv state. Recheck that delay on every media_kit upgrade. The window
-is not new, either: a `VideoController` disposed more than 5 seconds after
-its `Player` already freed its render context after the core was gone,
-without this patch.
+One window is upstream's and stays: media_kit 1.2.6's `NativePlayer.dispose`
+(`lib/src/player/native/player/real.dart`) calls `mpv_terminate_destroy` 5
+seconds after it stops playback, so a `VideoController` disposed more than 5
+seconds after its `Player` frees its render context after the core is gone.
 
 ### Known hazard this patch leaves alone
 

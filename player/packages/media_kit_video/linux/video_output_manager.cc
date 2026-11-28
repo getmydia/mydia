@@ -70,6 +70,15 @@ void video_output_manager_set_size(VideoOutputManager* self,
 
 void video_output_manager_dispose(VideoOutputManager* self, gint64 handle) {
   if (g_hash_table_contains(self->video_outputs, GINT_TO_POINTER(handle))) {
+    // MYDIA PATCH: release the render context now, not when the last
+    // reference goes. A queued S/W redraw holds one (see video_output.cc), so
+    // removal alone would defer mpv_render_context_free to the GTK main loop,
+    // with nothing ordering it before media_kit destroys the mpv core. This
+    // runs on the GTK thread, as the redraws do, and a redraw that runs later
+    // returns at once on |destroyed|. The object's memory still lives until
+    // that redraw lets go.
+    g_object_run_dispose(G_OBJECT(
+        g_hash_table_lookup(self->video_outputs, GINT_TO_POINTER(handle))));
     g_hash_table_remove(self->video_outputs, GINT_TO_POINTER(handle));
   }
 }
