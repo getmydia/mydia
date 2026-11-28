@@ -2,7 +2,7 @@ defmodule Mydia.Health.Alerts.Evaluator do
   @moduledoc """
   Turns per-condition observations into a debounced list of alerts.
 
-  A condition becomes an alert once it has been failing for
+  A condition becomes an alert once it has kept failing for
   `raise_after_seconds/0` (10 minutes), so restarts and brief reconnects stay
   quiet. It is dropped only after it has been clear for
   `clear_after_seconds/0` (5 minutes). A failure inside that clear window
@@ -45,8 +45,10 @@ defmodule Mydia.Health.Alerts.Evaluator do
 
     alerts =
       state
+      # Measured to the last failure, not to now: an outage that recovered
+      # before reaching 10 minutes must not raise while its clear window runs.
       |> Enum.filter(fn {_key, entry} ->
-        DateTime.diff(now, entry.first_failing_at) >= @raise_after_seconds
+        DateTime.diff(entry.last_failing_at, entry.first_failing_at) >= @raise_after_seconds
       end)
       |> Enum.map(fn {key, entry} -> to_alert(key, entry) end)
       |> Enum.sort_by(&{DateTime.to_unix(&1.since, :microsecond), inspect(&1.key)})

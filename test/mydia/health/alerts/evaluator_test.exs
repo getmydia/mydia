@@ -68,6 +68,10 @@ defmodule Mydia.Health.Alerts.EvaluatorTest do
     assert {[%Alert{title: "B"}], _} = run(steps)
   end
 
+  test "an outage that recovered before 10 minutes never raises" do
+    assert {[], _} = run(failing([0, 3, 7]) ++ clear([8, 9, 10, 11]))
+  end
+
   test "a key absent from observations counts as clear" do
     assert {[], state} = run(failing([0, 10]) ++ [{11, %{}}, {16, %{}}])
     refute Map.has_key?(state, :vpn)

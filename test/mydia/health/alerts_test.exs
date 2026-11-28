@@ -60,8 +60,6 @@ defmodule Mydia.Health.AlertsTest do
 
   test "broadcasts the empty list when cleared", ctx do
     ctx.start.(:timer.hours(1))
-    # Evaluate at t0 first: init's own first tick may otherwise run after the
-    # clock moves, making minute 10 the first failure.
     :ok = Alerts.refresh(ctx.name)
     ctx.set.(:now, minutes(10))
     :ok = Alerts.refresh(ctx.name)
@@ -74,6 +72,63 @@ defmodule Mydia.Health.AlertsTest do
     :ok = Alerts.refresh(ctx.name)
     assert_receive {:health_alerts, []}
     assert Alerts.current(ctx.name) == []
+  end
+
+  describe "a slow gather" do
+    setup do
+      test_pid = self()
+      name = :"alerts_slow_#{System.unique_integer([:positive])}"
+
+      gather = fn ->
+        send(test_pid, :gathering)
+        Process.sleep(:infinity)
+      end
+
+      start_supervised!(
+        {Alerts,
+         name: name,
+         topic: "health:alerts:#{name}",
+         built_in_topic: "built_in:#{name}",
+         interval_ms: 20,
+         gather: gather,
+         now: fn -> @t0 end}
+      )
+
+      %{slow: name}
+    end
+
+    test "never blocks current/0", %{slow: name} do
+      assert_receive :gathering
+
+      {micros, alerts} = :timer.tc(fn -> Alerts.current(name) end)
+      assert alerts == []
+      assert micros < 200_000
+    end
+
+    test "skips ticks while one is still running", %{slow: _name} do
+      assert_receive :gathering
+      refute_receive :gathering, 200
+    end
+  end
+
+  test "a raising gather does not take the watcher down" do
+    name = :"alerts_raise_#{System.unique_integer([:positive])}"
+
+    pid =
+      start_supervised!(
+        {Alerts,
+         name: name,
+         topic: "health:alerts:#{name}",
+         built_in_topic: "built_in:#{name}",
+         interval_ms: 20,
+         gather: fn -> raise "boom" end,
+         now: fn -> @t0 end},
+        id: name
+      )
+
+    Process.sleep(100)
+    assert Process.alive?(pid)
+    assert Alerts.current(name) == []
   end
 
   test "re-evaluates on built-in status broadcast", ctx do
