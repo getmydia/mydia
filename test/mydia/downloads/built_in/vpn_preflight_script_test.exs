@@ -469,13 +469,15 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
       assert File.read!(Path.join(dir, "work/servers.json")) == ~s({"version":1})
     end
 
-    test "an existing working copy is kept, and nothing persisted is no-op", %{tmp_dir: dir} do
+    test "an existing whole working copy is kept, and nothing persisted is a no-op", %{
+      tmp_dir: dir
+    } do
       File.mkdir_p!(Path.join(dir, "work"))
-      File.write!(Path.join(dir, "work/servers.json"), "newer")
-      File.write!(Path.join(dir, "servers.json"), "older")
+      File.write!(Path.join(dir, "work/servers.json"), ~s({"newer":1}\n))
+      File.write!(Path.join(dir, "servers.json"), ~s({"older":1}\n))
 
       servers(dir, "restore_servers")
-      assert File.read!(Path.join(dir, "work/servers.json")) == "newer"
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({"newer":1}\n)
 
       File.rm!(Path.join(dir, "work/servers.json"))
       File.rm!(Path.join(dir, "servers.json"))
@@ -483,13 +485,36 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
       refute File.exists?(Path.join(dir, "work/servers.json"))
     end
 
+    test "a truncated working copy is replaced by the persisted list", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "work"))
+      File.write!(Path.join(dir, "work/servers.json"), ~s({"version":1,"pia":{"serv))
+      File.write!(Path.join(dir, "servers.json"), ~s({"version":1}\n))
+
+      servers(dir, "restore_servers")
+
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({"version":1}\n)
+    end
+
+    test "a truncated list is never restored or persisted", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "work"))
+      File.write!(Path.join(dir, "work/servers.json"), ~s({"cut":))
+      File.write!(Path.join(dir, "servers.json"), ~s({"also cut))
+
+      servers(dir, "restore_servers")
+      refute File.exists?(Path.join(dir, "work/servers.json"))
+
+      File.write!(Path.join(dir, "work/servers.json"), ~s({"cut":))
+      servers(dir, "persist_servers")
+      assert File.read!(Path.join(dir, "servers.json")) == ~s({"also cut)
+    end
+
     test "persist copies the working list back to the config dir", %{tmp_dir: dir} do
       File.mkdir_p!(Path.join(dir, "work"))
-      File.write!(Path.join(dir, "work/servers.json"), "fresh")
+      File.write!(Path.join(dir, "work/servers.json"), ~s({"fresh":1}\n))
 
       servers(dir, "persist_servers")
 
-      assert File.read!(Path.join(dir, "servers.json")) == "fresh"
+      assert File.read!(Path.join(dir, "servers.json")) == ~s({"fresh":1}\n)
     end
   end
 

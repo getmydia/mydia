@@ -343,13 +343,17 @@ update_servers() {
 # never opens a path under /config, so that file is a root-owned working
 # copy: filled from the persisted list when missing (a new container), read
 # as mydia with a timeout and a 32 MiB cap, and copied back as mydia before
-# each start, which also keeps what gluetun's in-run updater fetched.
+# each start, which also keeps what gluetun's in-run updater fetched. A copy
+# that is not a whole list is never restored or persisted.
 restore_servers() {
-    [ -s "$servers_json" ] && return 0
+    servers_complete "$servers_json" && return 0
+    # Gluetun truncates the file before writing a list, so an in-run update
+    # that died partway (a full disk) leaves one it cannot decode at startup.
+    rm -f "$servers_json"
     mkdir -p "${servers_json%/*}"
     # shellcheck disable=SC2086 # $as_mydia is a command prefix
     if $as_mydia timeout 10 head -c 33554432 "$dir/servers.json" > "$servers_json.tmp" 2>/dev/null &&
-        [ -s "$servers_json.tmp" ]; then
+        servers_complete "$servers_json.tmp"; then
         mv -f "$servers_json.tmp" "$servers_json"
     else
         rm -f "$servers_json.tmp"
@@ -357,8 +361,14 @@ restore_servers() {
 }
 
 persist_servers() {
-    [ -s "$servers_json" ] || return 0
+    servers_complete "$servers_json" || return 0
     write_as_mydia "$dir/servers.json" 644 < "$servers_json"
+}
+
+# True when $1 looks like a whole list: gluetun writes one JSON object, so a
+# write cut short does not end in its closing brace.
+servers_complete() {
+    [ -s "$1" ] && [ "$(tail -c 64 "$1" | tr -d '[:space:]' | tail -c 1)" = "}" ]
 }
 
 # True while process $1 runs. An exited child not yet reaped (a zombie)
