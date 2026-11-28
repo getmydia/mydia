@@ -64,7 +64,7 @@ void main() {
     expect(valueFor(rows, 'Playing'), 'Auto -> 1080p');
     expect(valueFor(rows, 'Buffer'), '18.4 s ahead');
     expect(valueFor(rows, 'Throughput'), '6.2 Mb/s');
-    expect(valueFor(rows, 'Frames'), '0 dropped - 0 total');
+    expect(valueFor(rows, 'Frames'), '0 dropped this second · 0 since start');
     expect(valueFor(rows, 'Decoder'), 'h264 (vaapi) hardware');
     expect(valueFor(rows, 'Position'), '24:11 / 1:52:40');
   });
@@ -265,7 +265,7 @@ void main() {
 
   test('dropped frames read as a warning only when frames drop', () {
     final clean = statsRows(_sample, _context, StatsDensity.full);
-    expect(valueFor(clean, 'Frames'), '0 dropped - 0 total');
+    expect(valueFor(clean, 'Frames'), '0 dropped this second · 0 since start');
     expect(
       clean.firstWhere((row) => row.id == StatsRowId.frames).tone,
       StatsTone.good,
@@ -281,11 +281,58 @@ void main() {
       _context,
       StatsDensity.full,
     );
-    expect(valueFor(dropping, 'Frames'), '142 dropped - 1402 total');
+    expect(
+      valueFor(dropping, 'Frames'),
+      '142 dropped this second · 1402 since start',
+    );
     expect(
       dropping.firstWhere((row) => row.id == StatsRowId.frames).tone,
       StatsTone.warn,
     );
+  });
+
+  // Linux's video output publishes which path it took. Software rendering
+  // stutters while mpv's drop counters stay near zero, so it is the case
+  // the row exists to flag.
+  test('the rendering row flags a software fallback', () {
+    StatsRow? renderingRow(bool? software, StatsDensity density) => statsRows(
+      StatsSample(
+        bufferedAhead: const Duration(seconds: 6),
+        position: const Duration(minutes: 1),
+        softwareRendering: software,
+      ),
+      _context,
+      density,
+    ).where((row) => row.id == StatsRowId.rendering).firstOrNull;
+
+    final software = renderingRow(true, StatsDensity.full);
+    expect(software, isNotNull);
+    expect(_en.statsValue(software!.value), 'CPU (software)');
+    expect(software.tone, StatsTone.warn);
+
+    final gpu = renderingRow(false, StatsDensity.full);
+    expect(_en.statsValue(gpu!.value), 'GPU');
+    expect(gpu.tone, StatsTone.normal);
+
+    // Unknown everywhere but Linux, and off the tv panel's measured rows.
+    expect(renderingRow(null, StatsDensity.full), isNull);
+    expect(renderingRow(true, StatsDensity.compact), isNull);
+  });
+
+  test('the clipboard names the render path when known', () {
+    String copied(bool? software) => statsClipboardText(
+      StatsSample(
+        bufferedAhead: const Duration(seconds: 4),
+        position: const Duration(seconds: 90),
+        softwareRendering: software,
+      ),
+      _context,
+      appVersion: '1.4.2',
+    );
+
+    expect(copied(true), contains('Rendering: CPU (software)'));
+    expect(copied(false), contains('Rendering: GPU'));
+    expect(copied(null), isNot(contains('Rendering:')));
   });
 
   test('a relayed link reads as a warning', () {
@@ -318,7 +365,10 @@ void main() {
       text,
       contains('Detail: decodeTooSlow: 47 drops in last 10s (limit 12)'),
     );
-    expect(text, contains('Frames: 0 dropped this second, 0 total'));
+    expect(
+      text,
+      contains('Frames: 0 dropped this second, 0 dropped since start'),
+    );
     expect(text, contains('Buffer: 18.4 s ahead'));
     expect(text, contains('Throughput: 6.2 Mb/s'));
     expect(text, contains('Link: direct p2p - 1 peer'));
@@ -341,7 +391,7 @@ void main() {
 
     expect(text, isNot(contains('0 dropped this second')));
     expect(text, isNot(contains('dropped this second')));
-    expect(text, contains('Frames: 12 total'));
+    expect(text, contains('Frames: 12 dropped since start'));
   });
 
   test('the clipboard omits what it does not know', () {

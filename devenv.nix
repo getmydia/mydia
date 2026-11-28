@@ -574,14 +574,22 @@ in
       name = "dart format";
       entry = "dart format --set-exit-if-changed --line-length 80";
       files = "\\.dart$";
-      excludes = [ "\\.(g|freezed)\\.dart$" ];
+      # player/packages/media_kit_video is vendored upstream source, kept
+      # byte-identical apart from its documented patch.
+      excludes = [
+        "\\.(g|freezed)\\.dart$"
+        "^player/packages/media_kit_video/"
+      ];
     };
     dart-analyze = {
       enable = true;
       name = "dart analyze";
       entry = "dart analyze --fatal-infos";
       files = "\\.dart$";
-      excludes = [ "\\.(g|freezed)\\.dart$" ];
+      excludes = [
+        "\\.(g|freezed)\\.dart$"
+        "^player/packages/media_kit_video/"
+      ];
       pass_filenames = false;
     };
     # Recomputes the fetchNpmDeps hashes in nix/packages/flake-module.nix

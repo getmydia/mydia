@@ -504,6 +504,7 @@ extension AppFormatters on AppLocalizations {
     StatsRowId.color => statsRowColor,
     StatsRowId.display => statsRowDisplay,
     StatsRowId.decoder => statsRowDecoder,
+    StatsRowId.rendering => statsRowRendering,
     StatsRowId.audio => statsRowAudio,
     StatsRowId.frames => statsRowFrames,
     StatsRowId.buffer => statsRowBuffer,
@@ -594,6 +595,8 @@ extension AppFormatters on AppLocalizations {
       true => statsDecoderHardware(label),
       false => statsDecoderSoftware(label),
     },
+    StatsRenderingValue(:final software) =>
+      software ? statsRenderingSoftware : statsRenderingGpu,
     StatsFramesValue(:final dropped, :final total) => statsFramesDropped(
       dropped,
       total,

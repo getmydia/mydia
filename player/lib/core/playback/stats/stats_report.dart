@@ -32,6 +32,7 @@ enum StatsRowId {
   color,
   display,
   decoder,
+  rendering,
   audio,
   frames,
   buffer,
@@ -132,6 +133,13 @@ class StatsDecoderValue extends StatsValue {
   final bool? hardware;
 }
 
+/// The Rendering row: whether the video output draws frames on the GPU or
+/// fell back to the CPU.
+class StatsRenderingValue extends StatsValue {
+  const StatsRenderingValue({required this.software});
+  final bool software;
+}
+
 class StatsFramesValue extends StatsValue {
   const StatsFramesValue({required this.dropped, required this.total});
   final int dropped;
@@ -213,6 +221,15 @@ List<StatsRow> statsRows(
         id: StatsRowId.decoder,
         value: StatsDecoderValue(context.decoderLabel!, context.hardwareDecode),
       ),
+    // Desktop panel only, like Color and Display. Linux is the one platform
+    // that reports it, and software rendering is the case worth flagging:
+    // it stutters while mpv's drop counters stay near zero.
+    if (sample.softwareRendering case final software? when full)
+      StatsRow(
+        id: StatsRowId.rendering,
+        value: StatsRenderingValue(software: software),
+        tone: software ? StatsTone.warn : StatsTone.normal,
+      ),
     if (!compact && context.audioLabel != null)
       StatsRow(id: StatsRowId.audio, value: StatsText(context.audioLabel!)),
     if (sample.droppedFrames != null && sample.droppedFramesTotal != null)
@@ -282,12 +299,14 @@ String statsClipboardText(
     if (_displayValue(context) case final display?)
       'Display: ${english.statsValue(display)}',
     if (context.decoderLabel != null) 'Decoder: ${_decoder(context)}',
+    if (sample.softwareRendering case final software?)
+      'Rendering: ${software ? 'CPU (software)' : 'GPU'}',
     if (context.audioLabel != null) 'Audio: ${context.audioLabel}',
     if (sample.droppedFrames != null && sample.droppedFramesTotal != null)
       'Frames: ${sample.droppedFrames} dropped this second, '
-          '${sample.droppedFramesTotal} total'
+          '${sample.droppedFramesTotal} dropped since start'
     else if (sample.droppedFramesTotal != null)
-      'Frames: ${sample.droppedFramesTotal} total',
+      'Frames: ${sample.droppedFramesTotal} dropped since start',
     'Buffer: ${_seconds(sample.bufferedAhead)}',
     if (context.mode != PlaybackMode.localFile && sample.throughputKbps != null)
       'Throughput: ${formatBitrate(sample.throughputKbps!)}',

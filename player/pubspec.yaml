@@ -118,6 +118,11 @@ dependencies:
 dependency_overrides:
   media_kit_libs_macos_video:
     path: packages/media_kit_libs_macos_video_hdr
+  # media_kit_video 2.0.1 with a Linux fix: under Flutter 3.50 it found no
+  # current EGL context and fell back to CPU rendering on the GTK thread. See
+  # packages/media_kit_video/MYDIA_PATCHES.md.
+  media_kit_video:
+    path: packages/media_kit_video
 
 dev_dependencies:
   flutter_test:

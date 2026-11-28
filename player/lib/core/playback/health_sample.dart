@@ -84,7 +84,13 @@ class FrameStats {
     this.colormatrix,
     this.sourceColor,
     this.outputColor,
+    this.softwareRendering,
   });
+
+  /// Whether the video output fell back to drawing frames on the CPU, for
+  /// the stats panel. Null where the platform does not say, which is every
+  /// platform but Linux (see `packages/media_kit_video/MYDIA_PATCHES.md`).
+  final bool? softwareRendering;
 
   /// The decoded source's colour, for the stats panel. Null when unset.
   final ColorParams? sourceColor;

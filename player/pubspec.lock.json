@@ -1294,11 +1294,10 @@
     "media_kit_video": {
       "dependency": "direct main",
       "description": {
-        "name": "media_kit_video",
-        "sha256": "afaa509e7b7e0bf247557a3a740cde903a52c34ace9810f94500e127bd7b043d",
-        "url": "https://pub.dev"
+        "path": "packages/media_kit_video",
+        "relative": true
       },
-      "source": "hosted",
+      "source": "path",
       "version": "2.0.1"
     },
     "meta": {

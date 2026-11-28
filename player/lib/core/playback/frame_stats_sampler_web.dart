@@ -9,7 +9,7 @@ import 'package:web/web.dart' as web;
 import 'frame_stats_sampler.dart';
 import 'health_sample.dart';
 
-FrameStatsSampler samplerFor(Player player, {bool hdr = false}) {
+FrameStatsSampler samplerFor(Player player, {bool panel = false}) {
   final platform = player.platform;
   if (platform is! WebPlayer) return const NoFrameStatsSampler();
   // `WebPlayer.element` exists on the web `real.dart`; `dart analyze`

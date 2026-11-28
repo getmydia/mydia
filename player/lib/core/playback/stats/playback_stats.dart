@@ -52,8 +52,13 @@ class StatsSample {
     this.colormatrix,
     this.sourceColor,
     this.outputColor,
+    this.softwareRendering,
     this.history = const [],
   });
+
+  /// Whether frames are drawn on the CPU rather than the GPU. Null where
+  /// the platform does not say (only Linux does).
+  final bool? softwareRendering;
 
   /// The decoded source's colour (`video-params`). Null off native or
   /// before the first frame.
@@ -75,7 +80,7 @@ class StatsSample {
   /// a source, and null wherever the engine reports no counters.
   final int? droppedFrames;
 
-  /// Frames dropped since this source opened.
+  /// Frames dropped since this source opened. Not a count of frames shown.
   final int? droppedFramesTotal;
 
   /// Measured delivery throughput. Null off native, null for a local file,

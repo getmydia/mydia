@@ -1,0 +1,5 @@
+# MYDIA PATCH: vendored upstream source, not held to the player's lints and
+# not resolvable on its own (no pub get runs in this directory).
+analyzer:
+  exclude:
+    - "**"
