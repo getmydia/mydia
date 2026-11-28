@@ -80,7 +80,9 @@ queued redraw runs once more (with `destroyed` still false, against a live
 render context), and the whole of dispose, not just the freeing of memory,
 then runs from the idle source's destroy notify on the GTK thread. So
 `mpv_render_context_free` can happen after `VideoOutputManager.Dispose` has
-returned, one GTK main-loop iteration later.
+returned, usually one GTK main-loop iteration later. Each queued redraw holds
+its own reference, though, so redraws queued back to back postpone dispose
+until the first iteration with none left queued.
 
 That is safe only while the mpv core outlives that delay. media_kit 1.2.6's
 `NativePlayer.dispose` (`lib/src/player/native/player/real.dart`) calls

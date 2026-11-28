@@ -3,9 +3,10 @@ name: CI / Player Desktop
 # The player jobs Nix CI does not cover: the Windows and macOS builds, the
 # macOS native tests and the Flatpak checks. Test / Player, Build / Web,
 # Build / Linux, Check / Web icons and Build / Android live in ci.yml
-# (.github/ci.md, "ci.yml: the flake-check graph"), so nothing here is a required context and a path filter is safe:
-# a workflow the filter skips reports nothing, which would leave a required
-# check pending forever, and none of these is required.
+# (.github/ci.md, "ci.yml: the flake-check graph"), so nothing here is a
+# required context and a path filter is safe: a workflow the filter skips
+# reports nothing, which would leave a required check pending forever, and
+# none of these is required.
 #
 # The paths are what these builds read:
 #

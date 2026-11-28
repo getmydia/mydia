@@ -267,8 +267,10 @@ pkgs.testers.nixosTest {
         client.wait_for_unit("multi-user.target", timeout=left())
 
         with subtest("player integration tests"):
-            # The suite takes about 150 s after a few minutes of app build;
-            # a hang costs 20 minutes, not an hour.
+            # Locally (2026-11-28) this subtest took 250 s: about 85 s of app
+            # build, then about 165 s of `flutter test` (run-tests.sh's 600 s
+            # watchdog covers that part). Hosted runners are slower. A hang
+            # costs 20 minutes, not an hour.
             rc, _ = client.execute("${clientRunLogged}", timeout=1200)
             assert rc == 0, f"player integration tests failed (exit {rc})"
     except Exception:

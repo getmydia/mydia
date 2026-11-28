@@ -39,7 +39,7 @@ pull request that touches `player/**`. One PR.
 
 1. Linux: a real-playback test file inside the existing `player-e2e` VM test.
    Blocking, through `Test / Player E2E`.
-2. macOS: an `Integration / macOS` job in `ci-player.yml` that runs
+2. macOS: a `Test / macOS native` job in `ci-player.yml` that runs
    `RunnerTests`. Not a required context, and it plays no video (see below).
 
 Windows, Android, iOS and screenshot goldens are out of scope. Goldens were
@@ -87,15 +87,15 @@ never mounts, fails the test. The early `return`s in the old "Player can
 navigate to video and start playback" test are gone: it now taps through to
 the player screen and back, and asserts each step.
 
-## macOS: `Integration / macOS` in `ci-player.yml`
+## macOS: `Test / macOS native` in `ci-player.yml`
 
-The spec planned to run `mac_surface_test.dart` and `RunnerTests`. GitHub's
+The job runs `RunnerTests` only, not `mac_surface_test.dart`. GitHub's
 hosted macOS runner is a virtual machine whose only GPU is Apple's paravirtual
 device, and both video outputs kill the app on it: gpu-next segfaults in
 MoltenVK on its first texture upload, and media_kit's texture path traps in
-the OpenGL pixel format helper. So the job runs `RunnerTests` through
-`xcodebuild test` and nothing else, on the same image and Xcode as the macOS
-build leg.
+the OpenGL pixel format helper. So `RunnerTests` runs through
+`xcodebuild test`, on the same image and Xcode as the macOS build leg, and no
+video plays.
 
 `mac_surface_test.dart` is not run in CI. It stays a test to run on a Mac, and
 it now skips every case on a paravirtual GPU (and the HDR10 case on a screen
@@ -118,9 +118,8 @@ macOS, since no playback test runs there.
    surfaceless context and publishes `sw`. The fallback assertion is used.
 2. **Does fullscreen work under Xvfb with no window manager?** No. `openbox`
    is added, and the Xvfb screen is 1920x1080.
-3. **Can a hosted macOS runner play video?** No. The job is reduced to
-   `RunnerTests`, as this spec said it would be if the display link never
-   fired.
+3. **Can a hosted macOS runner play video?** No. Neither video output can
+   start on its paravirtual GPU, so the job runs `RunnerTests` only.
 
 ## Found along the way
 
@@ -150,11 +149,17 @@ wrapped in a retry.
 ## Verification
 
 - `./dev player e2e` green locally with the new file.
-- Each Linux assertion shown to fail on the commit before its fix.
+- Shown to fail without their fix: the EGL display assertion (with
+  upstream's display lookup restored in `video_output.cc`), the subtitle
+  font assertion (with `kAppFontFamily` dropped from `subtitle_size.dart`) and
+  the stats sampler assertion (with the quoted render path no longer
+  matched), each in the VM. The chrome notification fix was shown red by its
+  widget test. The fullscreen, closing and decode tests were not run against
+  a pre-fix build.
 - The count guard shown to fail when a test is skipped.
 
 ## Docs
 
 `player/docs/testing.md` describes the Linux playback test and the count
 guard. `player/docs/playback.md` says why the macOS test is not in CI.
-`.github/ci.md` describes the `Integration / macOS` job.
+`.github/ci.md` describes the `Test / macOS native` job.

@@ -913,6 +913,31 @@ so nothing in the test resolves a host name. If a lookup failure comes back,
 something new is resolving a name: find it in the client log before
 rerunning.
 
+**`no frame within 0:00:10 for ...`** failing a `playback` test. Thrown by
+`pumpBounded` in `player/integration_test/helpers/playback_rig.dart`, which
+every pump in the playback tests goes through: the pump it wraps did not
+complete within 10 s. It guards a flutter_test race. When test code lands a
+pump between the engine's `beginFrame` and `drawFrame`, the live test binding
+skips the frame but leaves the scheduler believing one is still scheduled,
+so every later `scheduleFrame()` is a no-op and the pump would wait forever.
+`pumpBounded` starts each pump from a timer turn, which cannot run inside that
+gap, so a hit means something else stopped frames. The message names the step
+and carries the scheduler's lifecycle, `framesEnabled`, `hasScheduledFrame`
+and phase, then the last 20 mpv log lines: read those before rerunning. Not
+seen in CI yet; written down so there is something to look up.
+
+**`flutter test still running after 600s; native stacks of the app`**, then
+gdb backtraces and exit 137. The watchdog in `scripts/e2e/run-tests.sh`: the
+app froze in a way no Dart timeout can catch (a blocked GTK thread stops Dart
+timers too), so it printed every thread of `bundle/mydia-player` and killed
+it. Look first at the main thread's stack. A `g_mutex_lock` inside
+`video_output.cc`'s software redraw is the use-after-free that
+`MYDIA_PATCHES.md` (in `player/packages/media_kit_video/`) says is fixed,
+come back. For a native crash or freeze during a playback teardown, the first
+suspect is the `TextureSW` bare-pointer hazard that same file documents: the
+raster thread can copy pixels from a buffer dispose has already freed. Not
+seen in CI yet; written down so there is something to look up.
+
 ## Player (`Test / Player`)
 
 ### A Hive test times out after 30 seconds, and only in CI
