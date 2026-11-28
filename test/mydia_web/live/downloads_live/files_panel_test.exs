@@ -13,6 +13,9 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
   alias Mydia.Downloads.Client.Registry
   alias Mydia.Downloads.Structs.TorrentFile
 
+  @folder "The.Lantern.Keepers.S02"
+  @tree "#download-files-tree"
+
   defmodule StubAdapter do
     @behaviour Mydia.Downloads.Client
 
@@ -95,14 +98,22 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
       config: struct!(BuiltIn.Config, [])
     })
 
-    StubAdapter.put_files([
-      %TorrentFile{
-        index: 0,
-        path: "Fictional.Marsh.S01E01/marsh.s01e01.mkv",
-        size: 1_500_000_000
-      },
-      %TorrentFile{index: 1, path: "Fictional.Marsh.S01E01/marsh.s01e01.srt", size: 40_000}
-    ])
+    StubAdapter.put_files(
+      for {index, name, included?} <- [
+            {0, "E01.mkv", true},
+            {1, "E02.mkv", true},
+            {2, "E03.mkv", true},
+            {3, "E04.mkv", false},
+            {4, "E05.srt", true}
+          ] do
+        %TorrentFile{
+          index: index,
+          path: "#{@folder}/#{name}",
+          size: 1_000_000,
+          included?: included?
+        }
+      end
+    )
 
     on_exit(fn ->
       BuiltIn.clear_runtime()
@@ -129,31 +140,109 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     download_fixture(Map.merge(%{download_client: BuiltIn.name()}, attrs))
   end
 
-  test "lists files with checkboxes", %{conn: conn} do
+  defp folder_id, do: "#{@tree}-folder-#{:erlang.phash2(@folder)}"
+  defp toggle_file(view, index), do: view |> element("#{@tree}-file-#{index}") |> render_click()
+  defp save(view), do: view |> form("#download-files-form") |> render_submit()
+
+  test "renders the files as a tree", %{conn: conn} do
     view = open(conn, built_in_download())
 
-    assert has_element?(view, "#download-files-form input[type=checkbox][value='0']")
-    assert has_element?(view, "#download-files-form input[type=checkbox][value='1']")
+    assert has_element?(view, "#{folder_id()}[data-state=partial]")
+    assert has_element?(view, "#{@tree}-file-0")
+    assert has_element?(view, "#{@tree}-file-3[data-state=none]")
     assert has_element?(view, "#download-files-save")
+  end
+
+  test "a folder row shows its selected size and labels its checkbox", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    sizes =
+      "#{MydiaWeb.Formatters.format_file_size(4_000_000)} of " <>
+        MydiaWeb.Formatters.format_file_size(5_000_000)
+
+    assert has_element?(view, "#download-files-tree summary", sizes)
+
+    assert has_element?(
+             view,
+             "#{folder_id()}[aria-labelledby='#{String.trim_leading(folder_id(), "#")}-name']"
+           )
+
+    assert has_element?(view, "#{folder_id()}-name", @folder)
+  end
+
+  test "folder details keep client-set open state across patches", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    html = view |> element("#download-files-tree details") |> render()
+    assert html =~ "ignore_attrs"
+  end
+
+  test "a malformed toggle payload is ignored", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    panel = with_target(view, "#download-files-component")
+    render_click(panel, "toggle_files", %{"index" => "abc"})
+    render_click(panel, "toggle_files", %{"index" => "-1"})
+    render_click(panel, "toggle_files", %{"nothing" => "1"})
+
+    assert has_element?(view, "#{@tree}-file-0[data-state=all]")
+    assert has_element?(view, "#download-files-form")
   end
 
   test "saving submits the selection", %{conn: conn} do
     download = built_in_download()
     view = open(conn, download)
 
-    view |> form("#download-files-form", %{"files" => ["0"]}) |> render_submit()
+    toggle_file(view, 4)
+    save(view)
 
-    assert StubAdapter.selections() == [{download.download_client_id, [0]}]
+    assert StubAdapter.selections() == [{download.download_client_id, [0, 1, 2]}]
 
     assert %{"source" => "manual"} =
              Downloads.get_download!(download.id).metadata["file_selection"]
   end
 
-  test "shows the inline error when no video file is kept", %{conn: conn} do
+  test "toggling a folder then saving sends that selection", %{conn: conn} do
     download = built_in_download()
     view = open(conn, download)
 
-    view |> form("#download-files-form", %{"files" => ["1"]}) |> render_submit()
+    view |> element(folder_id()) |> render_click()
+    save(view)
+
+    assert [{client_id, [0, 1, 2, 3, 4]} | _] = StubAdapter.selections()
+    assert client_id == download.download_client_id
+  end
+
+  test "select all clears a fully selected torrent", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    view |> element("#{@tree}-all") |> render_click()
+    assert has_element?(view, "#{@tree}-all[data-state=all]")
+
+    view |> element("#{@tree}-all") |> render_click()
+    assert has_element?(view, "#{@tree}-all[data-state=none]")
+
+    save(view)
+    assert has_element?(view, "#download-files-error", "Keep at least one video file.")
+    assert StubAdapter.selections() == []
+  end
+
+  test "shows unsaved changes until saved", %{conn: conn} do
+    view = open(conn, built_in_download())
+    refute has_element?(view, "#download-files-unsaved")
+
+    toggle_file(view, 4)
+    assert has_element?(view, "#download-files-unsaved")
+
+    save(view)
+    refute has_element?(view, "#download-files-unsaved")
+  end
+
+  test "shows the inline error when no video file is kept", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    for index <- [0, 1, 2], do: toggle_file(view, index)
+    save(view)
 
     assert has_element?(view, "#download-files-error", "Keep at least one video file.")
     assert StubAdapter.selections() == []
@@ -164,9 +253,22 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     view = open(conn, built_in_download())
     StubAdapter.selection_fails!()
 
-    view |> form("#download-files-form", %{"files" => ["0"]}) |> render_submit()
+    toggle_file(view, 4)
+    save(view)
 
     assert has_element?(view, "#download-files-error", "Couldn't update the file selection.")
+  end
+
+  test "a failed save keeps the operator's choice", %{conn: conn} do
+    view = open(conn, built_in_download())
+    StubAdapter.selection_fails!()
+
+    view |> element(folder_id()) |> render_click()
+    assert has_element?(view, "#{folder_id()}[data-state=all]")
+    save(view)
+
+    assert has_element?(view, "#download-files-error")
+    assert has_element?(view, "#{folder_id()}[data-state=all]")
   end
 
   test "saving an imported download shows why and turns the panel read-only", %{conn: conn} do
@@ -175,7 +277,7 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
 
     # The checkboxes are disabled, so submit the event directly, as a stale
     # page would.
-    view |> element("#download-files-form") |> render_submit(%{"files" => ["0"]})
+    view |> element("#download-files-form") |> render_submit()
 
     assert has_element?(view, "#download-files-error", "This download was already imported.")
     refute has_element?(view, "#download-files-save")
@@ -186,6 +288,7 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     view = open(conn, built_in_download(%{imported_at: DateTime.utc_now()}))
 
     assert has_element?(view, "#download-files-form input[type=checkbox][disabled]")
+    refute has_element?(view, "#{@tree} input[type=checkbox]:not([disabled])")
     refute has_element?(view, "#download-files-save")
   end
 
@@ -203,8 +306,8 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     StubAdapter.put_files(files)
     view |> element("#download-files-refresh") |> render_click()
 
-    assert has_element?(view, "#download-files-form input[type=checkbox][value='0']")
-    assert has_element?(view, "#download-files-form input[type=checkbox][value='1']")
+    assert has_element?(view, "#{@tree}-file-0")
+    assert has_element?(view, "#{@tree}-file-1")
     refute has_element?(view, "#download-files-refresh")
   end
 
@@ -217,7 +320,7 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     :persistent_term.erase({StubAdapter, :files_down})
     view |> element("#download-files-refresh") |> render_click()
 
-    assert has_element?(view, "#download-files-form input[type=checkbox][value='0']")
+    assert has_element?(view, "#{@tree}-file-0")
   end
 
   test "is absent for a client without file selection", %{conn: conn} do
