@@ -21,6 +21,54 @@ defmodule MydiaWeb.SidebarComponents do
     statics: MydiaWeb.static_paths()
 
   @doc """
+  The fatal health alert banner shown to admins above the navigation.
+
+  One alert links to the page that fixes it; several collapse into a count
+  that links to the home dashboard, which lists them all. Renders nothing for
+  an empty list.
+  """
+  attr :alerts, :list, required: true, doc: "`Mydia.Health.Alert` structs"
+  attr :now, :any, default: nil, doc: "the time durations are measured to (default: now)"
+
+  def health_alert_banner(%{alerts: []} = assigns), do: ~H""
+
+  def health_alert_banner(assigns) do
+    assigns = assign(assigns, :now, assigns.now || DateTime.utc_now())
+
+    ~H"""
+    <div id="sidebar-health-alert" class="px-2 pt-3">
+      <%= case @alerts do %>
+        <% [alert] -> %>
+          <.link
+            navigate={alert.fix_path}
+            class="alert alert-error alert-soft items-start gap-2 p-3 text-sm hover:brightness-95 transition"
+          >
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+            <span class="flex flex-col gap-0.5">
+              <span class="font-semibold leading-snug">{MydiaWeb.HealthAlertText.title(alert)}</span>
+              <span class="opacity-70">{MydiaWeb.HealthAlertText.duration(alert, @now)}</span>
+            </span>
+          </.link>
+        <% alerts -> %>
+          <.link
+            navigate={~p"/"}
+            class="alert alert-error alert-soft items-center gap-2 p-3 text-sm hover:brightness-95 transition"
+          >
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
+            <span class="font-semibold leading-snug">
+              {ngettext(
+                "%{count} problem needs attention",
+                "%{count} problems need attention",
+                length(alerts)
+              )}
+            </span>
+          </.link>
+      <% end %>
+    </div>
+    """
+  end
+
+  @doc """
   Whether `path` is the current page. With `exact` only the path itself counts;
   otherwise any sub-path does too, so `/movies/42` highlights Movies.
   """

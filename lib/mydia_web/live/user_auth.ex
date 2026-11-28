@@ -141,6 +141,7 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:show_feedback_modal, false)
       |> assign(:feedback_form, build_feedback_form(%{}))
       |> assign_changelog_notice()
+      |> assign_health_alerts()
       |> assign_preference_state(session)
       |> attach_hook(:changelog_hook, :handle_event, &handle_changelog_event/3)
       |> attach_hook(:theme_hook, :handle_event, &handle_theme_event/3)
@@ -211,6 +212,29 @@ defmodule MydiaWeb.Live.UserAuth do
   defp handle_jobs_status(_msg, socket) do
     {:cont, socket}
   end
+
+  # Fatal health alerts are for admins only: everyone else gets an empty list
+  # and is never subscribed.
+  defp assign_health_alerts(socket) do
+    if Authorization.has_role?(socket.assigns[:current_user], :admin) do
+      socket =
+        if connected?(socket) do
+          Mydia.Health.Alerts.subscribe()
+          attach_hook(socket, :health_alerts_hook, :handle_info, &handle_health_alerts/2)
+        else
+          socket
+        end
+
+      assign(socket, :health_alerts, Mydia.Health.Alerts.current())
+    else
+      assign(socket, :health_alerts, [])
+    end
+  end
+
+  defp handle_health_alerts({:health_alerts, alerts}, socket),
+    do: {:halt, assign(socket, :health_alerts, alerts)}
+
+  defp handle_health_alerts(_msg, socket), do: {:cont, socket}
 
   defp handle_feedback_event("open_feedback_modal", _params, socket) do
     {:halt, assign(socket, :show_feedback_modal, true)}
