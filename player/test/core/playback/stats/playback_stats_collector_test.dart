@@ -97,6 +97,41 @@ void main() {
     });
   });
 
+  // The panel words the delta as "this second". After an unreadable tick
+  // the next reading spans two intervals, so it carries no delta; the total
+  // stays on screen throughout.
+  test('a reading after an unreadable tick has a total but no delta', () {
+    fakeAsync((async) {
+      final s = _Signals();
+      final collector = PlaybackStatsCollector(
+        signals: s.signals,
+        sampler: _ScriptedSampler([
+          const FrameStats(droppedFrames: 10),
+          null,
+          const FrameStats(droppedFrames: 16),
+          const FrameStats(droppedFrames: 17),
+        ]),
+      );
+      addTearDown(collector.dispose);
+      collector.start();
+
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(collector.samples.value!.droppedFrames, isNull);
+      expect(collector.samples.value!.droppedFramesTotal, 10);
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(collector.samples.value!.droppedFrames, isNull);
+      expect(collector.samples.value!.droppedFramesTotal, 16);
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(collector.samples.value!.droppedFrames, 1);
+      expect(collector.samples.value!.droppedFramesTotal, 17);
+    });
+  });
+
   test('the render path passes through to the sample', () {
     fakeAsync((async) {
       final s = _Signals();

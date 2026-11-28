@@ -46,6 +46,7 @@ class PlaybackStatsCollector {
   Duration _position = Duration.zero;
   Duration _buffer = Duration.zero;
   int? _lastTotal;
+  int? _deltaBaseline;
   int? _lastThroughput;
   int _unreadableTicks = 0;
   bool _sampling = false;
@@ -78,6 +79,7 @@ class PlaybackStatsCollector {
     _position = Duration.zero;
     _buffer = Duration.zero;
     _lastTotal = null;
+    _deltaBaseline = null;
     _lastThroughput = null;
     _unreadableTicks = 0;
     _samples.value = null;
@@ -92,9 +94,13 @@ class PlaybackStatsCollector {
       // A rebind or disposal during the read makes this reading stale.
       if (_disposed || generation != _generation) return;
 
-      final previous = _lastTotal;
+      // The delta is diffed against the previous tick's reading only. After
+      // an unreadable tick the next reading would span two intervals, and the
+      // panel words the delta as "this second", so it is withheld for a tick.
+      final previous = _deltaBaseline;
       final total = stats?.droppedFrames;
       final delta = total == null || previous == null ? null : total - previous;
+      _deltaBaseline = total;
       if (total != null) _lastTotal = total;
 
       final throughput = _updateThroughput(stats);

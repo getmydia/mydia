@@ -334,6 +334,24 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
     g_printerr("media_kit: VideoOutput: S/W rendering.\n");
     // H/W rendering failed. Fallback to S/W rendering.
     self->pixel_buffer = g_new0(guint8, SW_RENDERING_PIXEL_BUFFER_SIZE);
+    // MYDIA PATCH: release a half-built H/W backend (texture registered, but
+    // mpv_render_context_create failed) instead of leaking it. Upstream only
+    // reached this rarely; resolving the platform display makes the H/W
+    // attempt the norm.
+    if (self->texture_gl != NULL) {
+      fl_texture_registrar_unregister_texture(texture_registrar,
+                                              FL_TEXTURE(self->texture_gl));
+      g_object_unref(self->texture_gl);
+    }
+    if (self->egl_context != EGL_NO_CONTEXT) {
+      // texture_gl_dispose makes it current and cannot restore "nothing".
+      if (eglGetCurrentContext() == self->egl_context) {
+        eglMakeCurrent(self->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                       EGL_NO_CONTEXT);
+      }
+      eglDestroyContext(self->egl_display, self->egl_context);
+      self->egl_context = EGL_NO_CONTEXT;
+    }
     self->texture_gl = NULL;
     self->texture_sw = texture_sw_new(self);
     if (fl_texture_registrar_register_texture(texture_registrar,

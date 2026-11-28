@@ -2444,7 +2444,7 @@
             }
         }
     },
-    "statsFramesDropped": "{dropped} испуштено ове секунде · {total} од почетка",
+    "statsFramesDropped": "{dropped} испуштено – {total} укупно",
     "@statsFramesDropped": {
         "description": "Stats panel frames value: video frames dropped in the last second, then since playback started.",
         "placeholders": {
