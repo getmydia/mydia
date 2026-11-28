@@ -39,12 +39,33 @@ if [ ! -f "$TEST_TARGET" ]; then
     exit 1
 fi
 
+# The clips integration_test/playback_test.dart plays, written fresh each run:
+# the VM has no network to fetch fixtures from. The subtitle clip is the same
+# video with one English SRT cue over its whole length.
+CLIPS_DIR=$(mktemp -d)
+echo "Generating playback clips in ${CLIPS_DIR}..."
+ffmpeg -hide_banner -loglevel error -y \
+    -f lavfi -i testsrc2=duration=10:size=1280x720:rate=24 \
+    -f lavfi -i sine=frequency=440:duration=10 \
+    -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+    -c:a aac -b:a 128k \
+    -shortest \
+    "${CLIPS_DIR}/e2e_sdr.mp4"
+printf '1\n00:00:00,000 --> 00:00:10,000\nMydia playback subtitle check\n' \
+    > "${CLIPS_DIR}/e2e_subs.srt"
+ffmpeg -hide_banner -loglevel error -y \
+    -i "${CLIPS_DIR}/e2e_sdr.mp4" -i "${CLIPS_DIR}/e2e_subs.srt" \
+    -map 0:v -map 0:a -map 1:s -c:v copy -c:a copy -c:s srt \
+    -metadata:s:s:0 language=eng \
+    "${CLIPS_DIR}/e2e_subs.mkv"
+
 # The dart-defines every build below shares. The claim code is added only to
 # `flutter test`'s.
 dart_defines=(
     "--dart-define=MYDIA_URL=${MYDIA_URL}"
     "--dart-define=RELAY_URL=${RELAY_URL}"
     --dart-define=E2E_MODE=true
+    "--dart-define=MYDIA_E2E_CLIPS=${CLIPS_DIR}"
 )
 
 # Build the Linux debug app for the test target before minting the claim

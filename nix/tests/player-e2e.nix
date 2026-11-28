@@ -53,7 +53,8 @@ let
     name = "player-e2e-client-env";
     nativeBuildInputs = [ ciPlayer.flutterShim ciPlayer.flutter ]
       ++ ciPlayer.linuxBuildInputs
-      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run ];
+      # ffmpeg writes the clips playback_test.dart plays.
+      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run pkgs.ffmpeg ];
     buildCommand = ''
       envFile=$out
       unset HOME TMPDIR TMP TEMP TEMPDIR NIX_BUILD_TOP NIX_BUILD_CORES \
