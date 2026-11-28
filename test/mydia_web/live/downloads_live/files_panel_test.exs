@@ -153,6 +153,25 @@ defmodule MydiaWeb.DownloadsLive.FilesPanelTest do
     assert has_element?(view, "#download-files-save")
   end
 
+  test "folder details keep client-set open state across patches", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    html = view |> element("#download-files-tree details") |> render()
+    assert html =~ "ignore_attrs"
+  end
+
+  test "a malformed toggle payload is ignored", %{conn: conn} do
+    view = open(conn, built_in_download())
+
+    panel = with_target(view, "#download-files-component")
+    render_click(panel, "toggle_files", %{"index" => "abc"})
+    render_click(panel, "toggle_files", %{"index" => "-1"})
+    render_click(panel, "toggle_files", %{"nothing" => "1"})
+
+    assert has_element?(view, "#{@tree}-file-0[data-state=all]")
+    assert has_element?(view, "#download-files-form")
+  end
+
   test "saving submits the selection", %{conn: conn} do
     download = built_in_download()
     view = open(conn, download)

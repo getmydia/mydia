@@ -35,13 +35,13 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
   def handle_event("refresh", _params, socket), do: {:noreply, load(socket)}
 
   def handle_event("toggle_files", params, socket) do
-    target =
-      case params do
-        %{"folder" => path} -> {:folder, path}
-        %{"index" => index} -> {:file, String.to_integer(index)}
-      end
+    case toggle_target(params) do
+      nil ->
+        {:noreply, socket}
 
-    {:noreply, change_selection(socket, &FileTree.toggle(&1, socket.assigns.files, target))}
+      target ->
+        {:noreply, change_selection(socket, &FileTree.toggle(&1, socket.assigns.files, target))}
+    end
   end
 
   def handle_event("toggle_all_files", _params, socket) do
@@ -69,6 +69,17 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
         {:noreply, reload_after_error(socket, gettext("Couldn't update the file selection."))}
     end
   end
+
+  defp toggle_target(%{"folder" => path}) when is_binary(path), do: {:folder, path}
+
+  defp toggle_target(%{"index" => index}) do
+    case Integer.parse(to_string(index)) do
+      {index, ""} when index >= 0 -> {:file, index}
+      _ -> nil
+    end
+  end
+
+  defp toggle_target(_params), do: nil
 
   defp change_selection(%{assigns: %{editable: false}} = socket, _fun), do: socket
 
@@ -116,7 +127,7 @@ defmodule MydiaWeb.DownloadsLive.FilesPanel do
   @impl true
   def render(assigns) do
     ~H"""
-    <div>
+    <div id="download-files-component">
       <fieldset :if={@supported} id="download-files-panel" class="fieldset">
         <legend class="fieldset-legend">{gettext("Files")}</legend>
         <div :if={@files == []} class="flex items-center gap-3">

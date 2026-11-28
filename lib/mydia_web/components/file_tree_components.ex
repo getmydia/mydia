@@ -8,6 +8,7 @@ defmodule MydiaWeb.FileTreeComponents do
   the owner updates the selection with `Mydia.Downloads.FileTree`.
   """
   use Phoenix.Component
+  alias Phoenix.LiveView.JS
   use Gettext, backend: MydiaWeb.Gettext
 
   import MydiaWeb.CoreComponents, only: [icon: 1]
@@ -87,7 +88,11 @@ defmodule MydiaWeb.FileTreeComponents do
 
   defp tree_node(%{node: %Folder{}} = assigns) do
     ~H"""
-    <details open={@node.path == @root_path} class="group">
+    <details
+      open={@node.path == @root_path}
+      phx-mounted={JS.ignore_attributes(["open"])}
+      class="group"
+    >
       <summary class="flex items-center gap-3 text-sm cursor-pointer list-none py-1">
         <.icon
           name="hero-chevron-right"
