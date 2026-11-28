@@ -18,7 +18,7 @@ import 'package:media_kit/media_kit.dart' show SubtitleTrack;
 import 'package:media_kit_video/media_kit_video.dart'
     show defaultExitNativeFullscreen;
 import 'package:player/core/playback/frame_stats_sampler_native.dart'
-    show renderPathProperty;
+    show renderPathProperty, samplerFor;
 import 'package:player/core/theme/app_theme.dart' show kAppFontFamily;
 import 'package:player/core/window/native_window_host.dart';
 import 'package:player/core/window/window_controller_native.dart';
@@ -223,6 +223,42 @@ void main() {
     );
     expect(find.text('after close'), findsOneWidget);
   });
+
+  // libmpv returns the render path JSON-quoted (`"sw"`), and the sampler
+  // once matched only the bare word, so the stats panel never reported
+  // software rendering.
+  testWidgets(
+    'the stats sampler reports the Linux render path',
+    (tester) async {
+      final rig = await pumpPlayerScreen(tester, sdrClip);
+      // The render path is published while the output is set up, before
+      // mpv has the frame counters a reading needs.
+      await waitFor(
+        tester,
+        'time-pos past 1 s',
+        () async => (double.tryParse(await rig.prop('time-pos')) ?? 0) > 1.0,
+      );
+      await waitFor(
+        tester,
+        'render path published',
+        () async => (await rig.prop(renderPathProperty)).isNotEmpty,
+      );
+      final stats = await samplerFor(rig.player, panel: true).sample();
+      expect(stats, isNotNull, reason: 'mpv counters did not parse');
+      expect(
+        stats?.softwareRendering,
+        isNotNull,
+        reason:
+            '$renderPathProperty is '
+            '${await rig.prop(renderPathProperty)}, and the sampler did not '
+            'recognise it',
+      );
+      await rig.close(tester);
+    },
+    // `testWidgets` takes no reason: the render path is published on Linux
+    // only.
+    skip: !Platform.isLinux,
+  );
 }
 
 /// Hovers the fullscreen button with [mouse], which reveals the chrome if it

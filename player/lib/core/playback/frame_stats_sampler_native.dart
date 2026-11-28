@@ -69,10 +69,13 @@ class NativeFrameStatsSampler implements FrameStatsSampler {
   }
 
   /// True for `sw`, false for `hw`, null when unset or unrecognised.
+  ///
+  /// libmpv hands a `user-data/` string back JSON-encoded, quotes included
+  /// (`"sw"`), so both forms are matched.
   Future<bool?> _softwareRendering() async =>
       switch (await _optional(renderPathProperty)) {
-        'sw' => true,
-        'hw' => false,
+        'sw' || '"sw"' => true,
+        'hw' || '"hw"' => false,
         _ => null,
       };
 
