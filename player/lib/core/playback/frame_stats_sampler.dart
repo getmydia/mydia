@@ -27,8 +27,9 @@ class NoFrameStatsSampler implements FrameStatsSampler {
 /// The sampler for [player]'s engine, or [NoFrameStatsSampler] when the
 /// engine is not one this build knows how to read.
 ///
-/// [hdr] adds mpv's output transfer and color matrix to each reading, for
-/// the stats panel's HDR row. Off for the playback monitor, which reads
-/// only the counters every second of every playback.
-FrameStatsSampler frameStatsSamplerFor(Player player, {bool hdr = false}) =>
-    platform.samplerFor(player, hdr: hdr);
+/// [panel] adds what only the stats panel shows to each reading: mpv's
+/// output transfer and color matrix for the HDR row, and the render path.
+/// Off for the playback monitor, which reads only the counters every second
+/// of every playback.
+FrameStatsSampler frameStatsSamplerFor(Player player, {bool panel = false}) =>
+    platform.samplerFor(player, panel: panel);

@@ -120,6 +120,7 @@ class PlaybackStatsCollector {
         colormatrix: stats?.colormatrix,
         sourceColor: stats?.sourceColor,
         outputColor: stats?.outputColor,
+        softwareRendering: stats?.softwareRendering,
         history: List.unmodifiable(_history),
       );
     } finally {

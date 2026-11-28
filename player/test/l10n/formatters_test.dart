@@ -517,7 +517,7 @@ void main() {
       );
       expect(
         en.statsValue(const StatsFramesValue(dropped: 3, total: 40)),
-        '3 dropped - 40 total',
+        '3 dropped this second · 40 since start',
       );
       expect(
         en.statsValue(const StatsDecoderValue('h264', true)),

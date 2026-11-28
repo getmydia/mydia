@@ -505,7 +505,7 @@
   "statsPillTranscode": "TRANSCODIFICADO",
   "statsDecoderHardware": "{decoder} por hardware",
   "statsDecoderSoftware": "{decoder} por software",
-  "statsFramesDropped": "{dropped} perdidos - {total} en total",
+  "statsFramesDropped": "{dropped} perdidos este segundo · {total} desde el inicio",
   "statsBufferAhead": "{seconds} s de margen",
   "loginPairStepLookingUp": "Buscando el código de vinculación...",
   "loginPairStepValidatingQr": "Validando el código QR...",

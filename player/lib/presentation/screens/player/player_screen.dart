@@ -2898,7 +2898,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!(ref.read(statsOverlayEnabledProvider).value ?? false)) return;
     final collector = PlaybackStatsCollector(
       signals: PlayerSignals.of(player),
-      sampler: frameStatsSamplerFor(player, hdr: true),
+      sampler: frameStatsSamplerFor(player, panel: true),
     );
     _statsCollector = collector;
     collector.start();

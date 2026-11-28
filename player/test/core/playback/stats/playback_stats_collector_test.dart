@@ -97,6 +97,25 @@ void main() {
     });
   });
 
+  test('the render path passes through to the sample', () {
+    fakeAsync((async) {
+      final s = _Signals();
+      final collector = PlaybackStatsCollector(
+        signals: s.signals,
+        sampler: _ScriptedSampler([
+          const FrameStats(droppedFrames: 0, softwareRendering: true),
+        ]),
+      );
+      addTearDown(collector.dispose);
+      collector.start();
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+
+      expect(collector.samples.value!.softwareRendering, isTrue);
+    });
+  });
+
   test('a negative buffer reads as zero, never as a negative number', () {
     fakeAsync((async) {
       final s = _Signals();

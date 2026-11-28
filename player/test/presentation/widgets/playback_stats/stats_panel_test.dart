@@ -28,6 +28,7 @@ StatsSample sampleWithHistory() => StatsSample(
   droppedFrames: 0,
   droppedFramesTotal: 0,
   throughputKbps: 6200,
+  softwareRendering: true,
   sourceColor: const ColorParams(
     primaries: 'bt.2020',
     gamma: 'pq',
