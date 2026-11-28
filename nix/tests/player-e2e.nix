@@ -54,8 +54,9 @@ let
     nativeBuildInputs = [ ciPlayer.flutterShim ciPlayer.flutter ]
       ++ ciPlayer.linuxBuildInputs
       # ffmpeg writes the clips playback_test.dart plays; openbox is the
-      # window manager its fullscreen test needs under Xvfb.
-      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run pkgs.ffmpeg pkgs.openbox ];
+      # window manager its fullscreen test needs under Xvfb; gdb prints the
+      # app's native stacks if run-tests.sh's watchdog finds it hung.
+      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run pkgs.ffmpeg pkgs.openbox pkgs.gdb ];
     buildCommand = ''
       envFile=$out
       unset HOME TMPDIR TMP TEMP TEMPDIR NIX_BUILD_TOP NIX_BUILD_CORES \

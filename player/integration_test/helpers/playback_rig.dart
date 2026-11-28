@@ -20,6 +20,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
@@ -240,7 +241,11 @@ class PlaybackRig {
 
   /// Unmounts the screen and waits for every player it made to be disposed.
   Future<void> close(WidgetTester tester) async {
-    await tester.pumpWidget(const SizedBox());
+    await pumpBounded(
+      tester,
+      'a frame while unmounting the screen',
+      () => tester.pumpWidget(const SizedBox()),
+    );
     await waitFor(
       tester,
       'players disposed',
@@ -275,28 +280,42 @@ Future<PlaybackRig> pumpPlayerScreen(WidgetTester tester, String clip) async {
     appVersion: '0.0.0-playback-it',
   );
   addTearDown(container.dispose);
+  // Runs before the container goes (tear-downs run last in, first out): a
+  // test that fails with the screen still up must not leave it mounted on a
+  // disposed container, where its next player event reads a dead provider.
+  addTearDown(
+    () => pumpBounded(
+      tester,
+      'a frame while unmounting the screen after the test',
+      () => tester.pumpWidget(const SizedBox()),
+    ),
+  );
   final rig = PlaybackRig._(Platform.isLinux ? _StderrCapture.start() : null);
   // A test that fails before `close` still gets stderr back.
   addTearDown(rig._stopStderr);
-  await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        localizationsDelegates: appLocalizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        builder: toastLayerBuilder,
-        home: PlayerScreen(
-          mediaId: 'movie-1',
-          mediaType: 'movie',
-          fileId: 'file-1',
-          title: 'The Lantern Field',
-          session: _LocalSession(clipPath(clip)),
-          createPlayer: rig._create,
+  await pumpBounded(
+    tester,
+    'a frame while mounting the screen',
+    () => tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: toastLayerBuilder,
+          home: PlayerScreen(
+            mediaId: 'movie-1',
+            mediaType: 'movie',
+            fileId: 'file-1',
+            title: 'The Lantern Field',
+            session: _LocalSession(clipPath(clip)),
+            createPlayer: rig._create,
+          ),
         ),
       ),
     ),
   );
-  await tester.pump();
+  await pumpBounded(tester, 'the first frame of the screen', tester.pump);
   await waitFor(tester, 'a player for $clip', () => rig._players.isNotEmpty);
   return rig;
 }
@@ -312,14 +331,62 @@ Future<void> waitFor(
   final deadline = DateTime.now().add(timeout);
   while (!await condition()) {
     if (DateTime.now().isAfter(deadline)) {
-      final tail = _mpvLog.length > 20
-          ? _mpvLog.sublist(_mpvLog.length - 20)
-          : _mpvLog;
-      fail(
-        'timed out after $timeout waiting for $what; last mpv log lines:\n'
-        '${tail.join('\n')}',
-      );
+      fail('timed out after $timeout waiting for $what; ${_mpvTail()}');
     }
-    await tester.pump(const Duration(milliseconds: 100));
+    await pumpBounded(
+      tester,
+      'a frame while waiting for $what',
+      () => tester.pump(const Duration(milliseconds: 100)),
+    );
   }
+}
+
+/// The longest one pump may take. A pump waits for the engine to draw a
+/// frame, and nothing else bounds that wait.
+const _frameLimit = Duration(seconds: 10);
+
+/// Runs [pump] from an event-loop turn of its own, and fails with [what] and
+/// the scheduler's state if no frame arrives within [_frameLimit].
+///
+/// The turn of its own is the fix for a frame stall this rig used to hit
+/// about one run in five. The engine runs microtasks between a frame's
+/// beginFrame and its drawFrame, and test code resumed by a microtask can
+/// land in that gap. Under the live binding's default frame policy
+/// (`fadePointers`) a frame no pump asked for is skipped at beginFrame, and
+/// a skipped beginFrame leaves the scheduler's "frame scheduled" flag set. A
+/// pump issued in the gap was then completed by that skipped frame, with
+/// nothing drawn and no new frame requested, and every later scheduleFrame
+/// was a no-op: no frame came again. A trace of frame and pump events caught
+/// exactly that sequence. A zero delay is a timer, and a timer never runs
+/// inside the gap. Every pump this file and playback_test.dart make goes
+/// through here.
+Future<void> pumpBounded(
+  WidgetTester tester,
+  String what,
+  Future<void> Function() pump,
+) async {
+  await Future<void>.delayed(Duration.zero);
+  final stalled = Completer<void>();
+  final timer = Timer(_frameLimit, stalled.complete);
+  try {
+    await Future.any([pump(), stalled.future]);
+  } finally {
+    timer.cancel();
+  }
+  if (stalled.isCompleted) {
+    final scheduler = SchedulerBinding.instance;
+    fail(
+      'no frame within $_frameLimit for $what (lifecycle '
+      '${scheduler.lifecycleState}, framesEnabled ${scheduler.framesEnabled}, '
+      'hasScheduledFrame ${scheduler.hasScheduledFrame}, phase '
+      '${scheduler.schedulerPhase}); ${_mpvTail()}',
+    );
+  }
+}
+
+String _mpvTail() {
+  final tail = _mpvLog.length > 20
+      ? _mpvLog.sublist(_mpvLog.length - 20)
+      : _mpvLog;
+  return 'last mpv log lines:\n${tail.join('\n')}';
 }

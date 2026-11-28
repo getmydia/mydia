@@ -39,6 +39,13 @@ if [ ! -f "$TEST_TARGET" ]; then
     exit 1
 fi
 
+# Started in the background below, where a missing binary would only show as
+# a fullscreen test that times out, so check for it up front.
+if ! command -v openbox >/dev/null 2>&1; then
+    echo "ERROR: openbox is not on PATH; the playback tests need it as the Xvfb window manager" >&2
+    exit 1
+fi
+
 # The clips integration_test/playback_test.dart plays, written fresh each run:
 # the VM has no network to fetch fixtures from. The subtitle clip is the same
 # video with one English SRT cue over its whole length.
@@ -140,8 +147,32 @@ test_exit=0
 # the window inside the screen, and xvfb-run's default screen is 640x480,
 # which would push the login screen's Connect button out of the window: the
 # screen is sized for a desktop instead.
+#
+# Every wait inside the suite has a deadline, but those are Dart timers, and a
+# frozen GTK thread stops them along with the rest of the app (the media_kit
+# software redraw that once locked a freed mutex did exactly that). So the run
+# itself gets one: past it, the app's native stacks are printed and the app is
+# killed, which fails the run with something to read instead of a silent
+# timeout of the whole VM test. The suite takes a few minutes; this leaves the
+# VM test's own limit room for the app build before it.
+suite_limit=600
+(
+    waited=0
+    while [ "$waited" -lt "$suite_limit" ]; do
+        sleep 5 </dev/null >/dev/null 2>&1
+        waited=$((waited + 5))
+    done
+    echo "ERROR: flutter test still running after ${suite_limit}s; native stacks of the app:" >&2
+    for pid in $(pgrep -f 'bundle/mydia-player' || true); do
+        timeout 90 gdb -p "$pid" -batch -ex "thread apply all bt 40" 2>&1 \
+            | grep -v '^\[New LWP' >&2 || true
+    done
+    pkill -KILL -f 'bundle/mydia-player' || true
+) &
+watchdog=$!
 xvfb-run -a -s "-screen 0 1920x1080x24" \
     sh -c 'openbox & exec "$@"' sh "${flutter_cmd[@]}" || test_exit=$?
+kill "$watchdog" 2>/dev/null || true
 
 echo ""
 echo "Skipped tests across all of integration_test/ (static grep, not scoped to E2E_TEST_TARGET; see each skip reason):"

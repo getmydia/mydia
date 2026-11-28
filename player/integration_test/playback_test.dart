@@ -215,10 +215,14 @@ void main() {
       () async => (double.tryParse(await rig.prop('time-pos')) ?? 0) > 1.0,
     );
     await rig.close(tester);
-    await tester.pumpWidget(
-      const Directionality(
-        textDirection: TextDirection.ltr,
-        child: Text('after close'),
+    await pumpBounded(
+      tester,
+      'a frame after closing',
+      () => tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text('after close'),
+        ),
       ),
     );
     expect(find.text('after close'), findsOneWidget);
@@ -279,5 +283,5 @@ Future<void> _clickFullscreen(WidgetTester tester, TestGesture mouse) async {
   );
   await mouse.down(center);
   await mouse.up();
-  await tester.pump();
+  await pumpBounded(tester, 'a frame after the click', tester.pump);
 }
