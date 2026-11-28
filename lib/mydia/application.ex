@@ -292,6 +292,7 @@ defmodule Mydia.Application do
       cardigann_engine_children() ++
       media_server_health_children() ++
       plugin_instance_health_children() ++
+      health_alerts_children() ++
       oban_children(oban_config) ++
       oidc_children() ++
       [
@@ -329,6 +330,16 @@ defmodule Mydia.Application do
         {DynamicSupervisor, name: Mydia.Downloads.BuiltIn.Instances, strategy: :one_for_one},
         Mydia.Downloads.BuiltIn.Manager
       ]
+    else
+      []
+    end
+  end
+
+  # Reads the caches the health monitors above fill, so it starts after them
+  # and is gated the same way.
+  defp health_alerts_children do
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      [Mydia.Health.Alerts]
     else
       []
     end

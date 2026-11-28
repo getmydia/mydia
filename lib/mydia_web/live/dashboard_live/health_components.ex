@@ -12,6 +12,68 @@ defmodule MydiaWeb.DashboardLive.HealthComponents do
   alias MydiaWeb.AdminNav
   alias MydiaWeb.StatusLabels
 
+  @doc """
+  The fatal health alerts card at the top of the home dashboard: every alert
+  with its detail, how long it has lasted and a link to the page that fixes
+  it. Renders nothing for an empty list. Admins only; `@health_alerts` is
+  empty for everyone else.
+  """
+  attr :alerts, :list, required: true, doc: "`Mydia.Health.Alert` structs"
+  attr :now, :any, default: nil, doc: "the time durations are measured to (default: now)"
+
+  def fatal_alerts_card(%{alerts: []} = assigns), do: ~H""
+
+  def fatal_alerts_card(assigns) do
+    assigns = assign(assigns, :now, assigns.now || DateTime.utc_now())
+
+    ~H"""
+    <section
+      id="home-health-alerts"
+      class="card bg-base-100 border border-error/40 shadow-sm mb-6 md:mb-8"
+      aria-labelledby="home-health-alerts-title"
+    >
+      <div class="card-body gap-3 p-4 md:p-6">
+        <h2
+          id="home-health-alerts-title"
+          class="flex items-center gap-2 text-lg font-semibold text-error"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          {ngettext(
+            "%{count} problem is stopping Mydia from working",
+            "%{count} problems are stopping Mydia from working",
+            length(@alerts)
+          )}
+        </h2>
+        <ul class="divide-y divide-base-content/10">
+          <li
+            :for={{alert, index} <- Enum.with_index(@alerts)}
+            id={"home-health-alert-#{index}"}
+            class="flex flex-col sm:flex-row sm:items-center gap-3 py-3 first:pt-0 last:pb-0"
+          >
+            <div class="flex-1 min-w-0">
+              <p class="font-medium">
+                {MydiaWeb.HealthAlertText.title(alert)}
+                <span class="text-sm font-normal text-base-content/60">
+                  · {MydiaWeb.HealthAlertText.duration(alert, @now)}
+                </span>
+              </p>
+              <p :if={alert.detail} class="text-sm text-base-content/70 break-words">
+                {alert.detail}
+              </p>
+            </div>
+            <.link
+              navigate={alert.fix_path}
+              class="btn btn-sm btn-error btn-outline self-start sm:self-center shrink-0"
+            >
+              {gettext("Fix")} <.icon name="hero-arrow-right" class="w-4 h-4" />
+            </.link>
+          </li>
+        </ul>
+      </div>
+    </section>
+    """
+  end
+
   @doc "Renders the full System Health widget section."
   attr :clients_rollup, :map, required: true
   attr :indexers_rollup, :map, required: true

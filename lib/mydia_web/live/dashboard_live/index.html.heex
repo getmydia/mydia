@@ -15,6 +15,8 @@
     </button>
   </div>
 
+  <HealthComponents.fatal_alerts_card alerts={@health_alerts} now={@health_alerts_now} />
+
   <!-- Player CTA Banner -->
   <div
     :if={!@hide_player and !@player_banner_dismissed}
