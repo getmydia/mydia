@@ -110,6 +110,22 @@ defmodule Mydia.Downloads.BuiltIn.VpnTest do
     assert_receive {:engine_stop, {:vpn_down, "ERROR [vpn] auth failed"}}, 1_000
   end
 
+  test "a failing OpenVPN handshake is shown, though gluetun logs it as a warning", ctx do
+    File.write!(
+      Path.join(ctx.dir, "gluetun.log"),
+      "2026-11-27T19:46:55-05:00 WARN [openvpn] TLS Error: TLS key negotiation failed to occur within 60 seconds (check your network connectivity)\n" <>
+        "2026-11-27T19:46:55-05:00 INFO [vpn] retrying in 15s\n"
+    )
+
+    gluetun(ctx.bypass, "stopped", 0)
+    start_vpn(ctx, :ok)
+
+    assert_receive {:engine_stop,
+                    {:vpn_down,
+                     "WARN [openvpn] TLS Error: TLS key negotiation failed to occur within 60 seconds (check your network connectivity)"}},
+                   1_000
+  end
+
   test "a preflight problem is reported without calling gluetun", ctx do
     File.write!(Path.join(ctx.dir, "preflight"), "net_admin=missing\ntun=ok\n")
     start_vpn(ctx, :ok)

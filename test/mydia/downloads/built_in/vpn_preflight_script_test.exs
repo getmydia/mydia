@@ -94,6 +94,13 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
     end
 
     # gluetun dereferences nil without these; upstream's image sets them as ENV.
+    test "refreshes the server list daily unless the operator overrides it" do
+      assert last_value(gluetun_env([]), "UPDATER_PERIOD") == "24h"
+
+      assert last_value(gluetun_env([{"MYDIA_VPN_UPDATER_PERIOD", "0"}]), "UPDATER_PERIOD") ==
+               "0"
+    end
+
     test "sets the pprof rates gluetun has no code default for" do
       lines = gluetun_env([{"MYDIA_VPN_SERVICE_PROVIDER", "mullvad"}])
 
@@ -295,6 +302,223 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
       assert action("1", "1", "a", "b") == "restart"
       assert action("1", "0", "a", "b") == "stop"
       assert action("0", "0", "", "a") == "none"
+    end
+  end
+
+  describe "vpn_provider" do
+    @describetag :tmp_dir
+
+    defp provider(settings, vars) do
+      {out, 0} = sh(~s(vpn_provider "$2"), [settings], vars)
+      out
+    end
+
+    test "a non-blank env provider wins, else the file's last line", %{tmp_dir: dir} do
+      path =
+        settings_file(
+          dir,
+          "VPN_SERVICE_PROVIDER=mullvad\nVPN_SERVICE_PROVIDER=private internet access\n"
+        )
+
+      assert provider(path, []) == "private internet access"
+      assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "surfshark"}]) == "surfshark"
+      assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "  "}]) == "private internet access"
+      assert provider(Path.join(dir, "missing"), []) == ""
+      assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "PIA"}]) == "private internet access"
+      assert provider(path, [{"MYDIA_VPN_SERVICE_PROVIDER", "Mullvad"}]) == "mullvad"
+    end
+  end
+
+  describe "servers_update_due" do
+    @describetag :tmp_dir
+
+    defp due(stamp, provider, now) do
+      {out, 0} = sh(~s(servers_update_due "$2" "$3" "$4"), [stamp, provider, to_string(now)])
+      out
+    end
+
+    test "refreshes daily after a success, hourly after a failure", %{tmp_dir: dir} do
+      stamp = Path.join(dir, "servers-updated")
+      pia = "private internet access"
+
+      assert due(stamp, pia, 1_000) == "1"
+
+      File.write!(stamp, "1000 ok #{pia}\n")
+      assert due(stamp, pia, 1_000 + 86_399) == "0"
+      assert due(stamp, pia, 1_000 + 86_400) == "1"
+      assert due(stamp, "mullvad", 1_001) == "1"
+
+      File.write!(stamp, "1000 failed #{pia}\n")
+      assert due(stamp, pia, 1_000 + 3_599) == "0"
+      assert due(stamp, pia, 1_000 + 3_600) == "1"
+
+      File.write!(stamp, "garbage\n")
+      assert due(stamp, pia, 1_000) == "1"
+    end
+
+    test "never for providers without an updater it can run", %{tmp_dir: dir} do
+      stamp = Path.join(dir, "servers-updated")
+      assert due(stamp, "", 1_000) == "0"
+      assert due(stamp, "custom", 1_000) == "0"
+      assert due(stamp, "protonvpn", 1_000) == "0"
+    end
+  end
+
+  describe "update_servers" do
+    @describetag :tmp_dir
+
+    # A stand-in for gluetun that prints its arguments and exits with `exit_code`.
+    defp fake_gluetun(dir, exit_code) do
+      bin = Path.join(dir, "gluetun")
+      File.write!(bin, "#!/bin/sh\necho \"fake gluetun $*\"\nexit #{exit_code}\n")
+      File.chmod!(bin, 0o755)
+      bin
+    end
+
+    defp update(dir, bin, provider) do
+      runner =
+        ~s(gluetun_bin="$2"; dir="$3"; run="$3"; log="$3/gluetun.log"; ) <>
+          ~s(servers_stamp="$3/servers-updated"; servers_json="$3/servers.json"; ) <>
+          ~s(hash=h; dropped=; invalid=0; ) <>
+          ~s(update_servers "$4")
+
+      {_, 0} = sh(runner, [bin, dir, provider])
+      :ok
+    end
+
+    test "runs gluetun's updater for the provider and stamps the result", %{tmp_dir: dir} do
+      update(dir, fake_gluetun(dir, 0), "private internet access")
+
+      log = File.read!(Path.join(dir, "gluetun.log"))
+      assert log =~ "fake gluetun update -enduser -providers private internet access"
+      assert File.read!(Path.join(dir, "loop-status")) =~ "hash=h"
+
+      assert [_now, "ok", "private", "internet", "access"] =
+               dir |> Path.join("servers-updated") |> File.read!() |> String.split()
+
+      # Fresh now, so a restart does not run it again.
+      File.rm!(Path.join(dir, "gluetun.log"))
+      update(dir, fake_gluetun(dir, 0), "private internet access")
+      refute File.exists?(Path.join(dir, "gluetun.log"))
+    end
+
+    test "a failed refresh is logged and stamped, never fatal", %{tmp_dir: dir} do
+      File.write!(Path.join(dir, "servers.json"), "previous list")
+      bin = Path.join(dir, "gluetun")
+
+      # Truncates the list, as gluetun's writer does, then fails.
+      File.write!(bin, "#!/bin/sh\n: > \"$(dirname \"$0\")/servers.json\"\nexit 1\n")
+      File.chmod!(bin, 0o755)
+      update(dir, bin, "mullvad")
+
+      assert File.read!(Path.join(dir, "servers.json")) == "previous list"
+      refute File.exists?(Path.join(dir, "servers.json.bak"))
+
+      assert File.read!(Path.join(dir, "gluetun.log")) =~ "Server list refresh failed"
+
+      assert [_now, "failed", "mullvad"] =
+               dir |> Path.join("servers-updated") |> File.read!() |> String.split()
+    end
+  end
+
+  describe "update_servers without a backup" do
+    @describetag :tmp_dir
+
+    test "skips the refresh and leaves the list alone", %{tmp_dir: dir} do
+      work = Path.join(dir, "work")
+      File.mkdir_p!(work)
+      File.write!(Path.join(work, "servers.json"), "good list")
+      bin = Path.join(dir, "gluetun")
+      File.write!(bin, "#!/bin/sh\necho ran >> \"$1.ran\"\nexit 1\n")
+      File.chmod!(bin, 0o755)
+      # A failing cp, like one a full disk stops partway, leaving a partial copy.
+      runner =
+        ~s(gluetun_bin="$2"; dir="$3"; run="$3"; log="$3/gluetun.log"; ) <>
+          ~s(servers_stamp="$3/servers-updated"; servers_json="$4/servers.json"; ) <>
+          ~s(hash=h; dropped=; invalid=0; ) <>
+          ~s(cp\(\) { printf partial > "$3"; return 1; }; update_servers mullvad)
+
+      {_, 0} = sh(runner, [bin, dir, work])
+
+      assert File.read!(Path.join(work, "servers.json")) == "good list"
+      assert File.read!(Path.join(dir, "gluetun.log")) =~ "Could not back up the server list"
+      refute File.exists?(Path.join(dir, "update.log"))
+      refute File.exists?(Path.join(work, "servers.json.bak"))
+
+      assert [_now, "failed", "mullvad"] =
+               dir |> Path.join("servers-updated") |> File.read!() |> String.split()
+    end
+  end
+
+  describe "restore_servers and persist_servers" do
+    @describetag :tmp_dir
+
+    defp servers(dir, fun) do
+      {_, 0} =
+        sh(~s(dir="$2"; servers_json="$2/work/servers.json"; #{fun}), [dir])
+
+      :ok
+    end
+
+    test "a new container starts from the list in the config dir", %{tmp_dir: dir} do
+      File.write!(Path.join(dir, "servers.json"), ~s({\n  "version": 1\n}\n))
+
+      servers(dir, "restore_servers")
+
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({\n  "version": 1\n}\n)
+    end
+
+    test "an existing whole working copy is kept, and nothing persisted is a no-op", %{
+      tmp_dir: dir
+    } do
+      File.mkdir_p!(Path.join(dir, "work"))
+      File.write!(Path.join(dir, "work/servers.json"), ~s({\n  "newer": 1\n}\n))
+      File.write!(Path.join(dir, "servers.json"), ~s({\n  "older": 1\n}\n))
+
+      servers(dir, "restore_servers")
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({\n  "newer": 1\n}\n)
+
+      File.rm!(Path.join(dir, "work/servers.json"))
+      File.rm!(Path.join(dir, "servers.json"))
+      servers(dir, "restore_servers")
+      refute File.exists?(Path.join(dir, "work/servers.json"))
+    end
+
+    test "a truncated working copy is replaced by the persisted list", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "work"))
+      # Cut right after an inner object's closing brace.
+      File.write!(
+        Path.join(dir, "work/servers.json"),
+        ~s({\n  "version": 1,\n  "private internet access": {\n    "version": 1,\n    "timestamp": 0\n  }\n)
+      )
+
+      File.write!(Path.join(dir, "servers.json"), ~s({\n  "version": 1\n}\n))
+
+      servers(dir, "restore_servers")
+
+      assert File.read!(Path.join(dir, "work/servers.json")) == ~s({\n  "version": 1\n}\n)
+    end
+
+    test "a truncated list is never restored or persisted", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "work"))
+      File.write!(Path.join(dir, "work/servers.json"), ~s({"cut":))
+      File.write!(Path.join(dir, "servers.json"), ~s({"also cut))
+
+      servers(dir, "restore_servers")
+      refute File.exists?(Path.join(dir, "work/servers.json"))
+
+      File.write!(Path.join(dir, "work/servers.json"), ~s({"cut":))
+      servers(dir, "persist_servers")
+      assert File.read!(Path.join(dir, "servers.json")) == ~s({"also cut)
+    end
+
+    test "persist copies the working list back to the config dir", %{tmp_dir: dir} do
+      File.mkdir_p!(Path.join(dir, "work"))
+      File.write!(Path.join(dir, "work/servers.json"), ~s({\n  "fresh": 1\n}\n))
+
+      servers(dir, "persist_servers")
+
+      assert File.read!(Path.join(dir, "servers.json")) == ~s({\n  "fresh": 1\n}\n)
     end
   end
 

@@ -291,7 +291,22 @@ gluetun in a loop, every 2 seconds:
    stripped, so env wins), then Mydia's own values.
 2. The loop idles while neither `VPN_ENABLED=true` in the file nor
    `MYDIA_VPN_SERVICE_PROVIDER` enables the VPN.
-3. After each start or stop it writes `/config/gluetun/loop-status`:
+3. Before each start it refreshes the provider's server list with
+   `gluetun update -enduser`. The list persists in
+   `/config/gluetun/servers.json`. Gluetun only reads `/gluetun/servers.json`
+   (the updater hardcodes it) and root never opens a path under `/config`, so
+   that file is a root-owned working copy: restored from the config dir as
+   mydia when missing and copied back as mydia before each start. Gluetun
+   prefers it over its built-in list when newer. Gluetun's built-in list is frozen at its release, and providers
+   retire servers: PIA renumbered Montreal and gluetun retried the dead
+   addresses forever with `TLS key negotiation failed`. The updater runs
+   before gluetun joins the split group, so it reaches the provider while the
+   tunnel is down. It is skipped for a day after a success and an hour after
+   a failure (stamp in `/run/mydia-vpn/servers-updated`), and never for
+   `custom` or `protonvpn` (whose updater needs account credentials). A
+   failure only logs; gluetun starts on the list it has. `UPDATER_PERIOD=24h`
+   keeps the list fresh while gluetun runs, through the tunnel.
+4. After each start or stop it writes `/config/gluetun/loop-status`:
    `hash=<sha256 hex or none>`, `dropped=<comma-separated keys outside the
    allowlist>` and, only when nonzero, `invalid=<n>`, the count of lines that
    are not `KEY=value` with an upper-case key. Invalid lines are counted and
