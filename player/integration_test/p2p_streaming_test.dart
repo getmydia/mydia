@@ -564,10 +564,16 @@ void main() {
         of: find.byType(HeroPlayControl),
         matching: find.byType(PrimaryPlayButton),
       );
+      // Play mounts disabled: SmartPlayButton picks its file asynchronously
+      // and only then gives the button an onPressed. A tap before that does
+      // nothing, so the player never opens; wait for the enabled button.
       await _pumpUntil(
         tester,
-        "the movie page's Play button",
-        () => playButton.evaluate().isNotEmpty,
+        "the movie page's enabled Play button",
+        () =>
+            playButton.evaluate().isNotEmpty &&
+            tester.widget<PrimaryPlayButton>(playButton.first).onPressed !=
+                null,
       );
       await tester.tap(playButton.first);
 
