@@ -176,12 +176,16 @@ void main() {
       'build', (tester) async {
     final controller = ChromeVisibilityController();
     addTearDown(controller.dispose);
-    var builds = 0;
+    // What the ancestor saw the last time it built. It rebuilds during the
+    // pause's own pumpWidget too (a new widget), but that runs before the
+    // chrome's didUpdateWidget and sees `false`: only the deferred
+    // notification can make it build again and see `true`.
+    bool? seenByAncestor;
     Widget host({required bool playing}) => MaterialApp(
       home: ListenableBuilder(
         listenable: controller,
         builder: (context, child) {
-          builds++;
+          seenByAncestor = controller.visible;
           return child!;
         },
         child: Scaffold(
@@ -201,7 +205,7 @@ void main() {
     controller.hide();
     await tester.pumpAndSettle();
     expect(controller.visible, isFalse);
-    final buildsWhileHidden = builds;
+    expect(seenByAncestor, isFalse);
 
     // Pausing shows the chrome from didUpdateWidget.
     await tester.pumpWidget(host(playing: false));
@@ -210,9 +214,11 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(controller.visible, isTrue);
     expect(
-      builds,
-      greaterThan(buildsWhileHidden),
-      reason: 'the ancestor listener has to rebuild for the shown chrome',
+      seenByAncestor,
+      isTrue,
+      reason:
+          'the ancestor has to be told about the shown chrome after the '
+          'build, or its canPop stays stale',
     );
   });
 }
