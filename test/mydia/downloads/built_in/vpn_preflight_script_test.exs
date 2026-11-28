@@ -431,20 +431,19 @@ defmodule Mydia.Downloads.BuiltIn.VpnPreflightScriptTest do
       bin = Path.join(dir, "gluetun")
       File.write!(bin, "#!/bin/sh\necho ran >> \"$1.ran\"\nexit 1\n")
       File.chmod!(bin, 0o755)
-      # A read-only directory makes the backup copy fail.
-      File.chmod!(work, 0o555)
-      on_exit(fn -> File.chmod(work, 0o755) end)
-
+      # A failing cp, like one a full disk stops partway, leaving a partial copy.
       runner =
         ~s(gluetun_bin="$2"; dir="$3"; run="$3"; log="$3/gluetun.log"; ) <>
           ~s(servers_stamp="$3/servers-updated"; servers_json="$4/servers.json"; ) <>
-          ~s(hash=h; dropped=; invalid=0; update_servers mullvad)
+          ~s(hash=h; dropped=; invalid=0; ) <>
+          ~s(cp\(\) { printf partial > "$3"; return 1; }; update_servers mullvad)
 
       {_, 0} = sh(runner, [bin, dir, work])
 
       assert File.read!(Path.join(work, "servers.json")) == "good list"
       assert File.read!(Path.join(dir, "gluetun.log")) =~ "Could not back up the server list"
       refute File.exists?(Path.join(dir, "update.log"))
+      refute File.exists?(Path.join(work, "servers.json.bak"))
 
       assert [_now, "failed", "mullvad"] =
                dir |> Path.join("servers-updated") |> File.read!() |> String.split()
