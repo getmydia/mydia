@@ -194,10 +194,11 @@ Adding a playback test means raising that constant at the top of
 runs only that file through `run-tests.sh`, and so does plain
 `flutter test integration_test/playback_test.dart -d linux
 --dart-define=MYDIA_E2E_CLIPS=<dir>` with clips you generated yourself. Outside
-`all_tests.dart` the tests have no `playback` group in front of their names, so
-the guard's `playback ` prefix matches none of them and it fails with zero
-passed. That is expected for a single-file run: read the test results, not the
-guard.
+`all_tests.dart` the tests have no `playback` group in front of their names,
+so `run-tests.sh` runs the guard only when the target is
+`integration_test/all_tests.dart` and prints a one-line notice that it skipped
+it otherwise. A single-file run passes or fails on its test results alone.
+`nix/tests/player-e2e.nix` pins `all_tests.dart`, so CI always runs the guard.
 
 ### A failure named `simple` is usually not from `simple`
 

@@ -200,9 +200,16 @@ echo "Skipped tests across all of integration_test/ (static grep, not scoped to 
 grep -rn "skip:" integration_test/ || echo "  none"
 
 echo ""
-echo "Passed playback tests (minimum ${PLAYBACK_MIN_PASSED}):"
+# Only all_tests.dart puts the `playback` group in front of the names, and
+# only the full suite should hold the pinned count. nix/tests/player-e2e.nix
+# pins that target, so CI always runs the guard.
 count_exit=0
-bash "$ASSERT_TEST_COUNT" "$REPORT_FILE" "$PLAYBACK_MIN_PASSED" "playback " || count_exit=$?
+if [ "$TEST_TARGET" = "integration_test/all_tests.dart" ]; then
+    echo "Passed playback tests (minimum ${PLAYBACK_MIN_PASSED}):"
+    bash "$ASSERT_TEST_COUNT" "$REPORT_FILE" "$PLAYBACK_MIN_PASSED" "playback " || count_exit=$?
+else
+    echo "Playback test count guard skipped: it runs only for integration_test/all_tests.dart, not ${TEST_TARGET}"
+fi
 
 if [ "$test_exit" -ne 0 ]; then
     exit "$test_exit"
