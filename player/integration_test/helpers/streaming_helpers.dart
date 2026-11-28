@@ -18,9 +18,12 @@ class StreamingTestHelper {
   final String _mydiaUrl;
 
   /// Media IDs discovered during tests
-  // ignore: unused_field
   String? _testMediaItemId;
   String? _testMediaFileId;
+
+  /// The seeded movie's media item id, once [getTestMediaFileId] has found
+  /// it. The app keys the movie's poster with it.
+  String? get testMediaItemId => _testMediaItemId;
 
   StreamingTestHelper({required this._api, required this._mydiaUrl});
 
@@ -105,17 +108,7 @@ class StreamingTestHelper {
         }
       }
 
-      // If no E2E test video found, use the first available
-      final firstMovie = edges.first.object('node');
-      if (firstMovie.field<Object?>('files') != null) {
-        final files = firstMovie.list('files');
-        if (files.isNotEmpty) {
-          _testMediaItemId = firstMovie.field<String>('id');
-          _testMediaFileId = files.first.field<String>('id');
-          return _testMediaFileId;
-        }
-      }
-
+      // The seed creates E2E Test Movie, so no other movie stands in for it.
       return null;
     } catch (e) {
       return null;

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -392,12 +393,34 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
   void Function(bool hidden) get _setWindowButtonsHidden =>
       widget.onWindowButtonsHidden ?? setWindowButtonsHidden;
 
+  /// Tells the controller's listeners about a transition.
+  ///
+  /// One declared while the tree is building (a pause reaching
+  /// [didUpdateWidget] shows the chrome) waits for the end of the frame. The
+  /// player screen listens from a `ListenableBuilder` above this widget, and
+  /// marking that ancestor dirty mid-build asserts in debug and leaves its
+  /// back-press `canPop` stale in release.
+  void _notifyController() {
+    final controller = widget.controller;
+    if (controller == null) return;
+    final scheduler = SchedulerBinding.instance;
+    if (scheduler.schedulerPhase != SchedulerPhase.persistentCallbacks) {
+      controller._notify();
+      return;
+    }
+    scheduler.addPostFrameCallback((_) {
+      if (mounted && identical(widget.controller, controller)) {
+        controller._notify();
+      }
+    });
+  }
+
   void _show() {
     widget.onActivity?.call();
     if (!_visible) {
       setState(() => _visible = true);
       _setWindowButtonsHidden(false);
-      widget.controller?._notify();
+      _notifyController();
     }
     _controller.forward();
     _restartTimer();
@@ -408,7 +431,7 @@ class _ChromeVisibilityState extends State<ChromeVisibility>
     if (_visible) {
       setState(() => _visible = false);
       _setWindowButtonsHidden(true);
-      widget.controller?._notify();
+      _notifyController();
     }
     _controller.reverse();
   }

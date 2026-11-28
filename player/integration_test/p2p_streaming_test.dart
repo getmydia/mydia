@@ -1,11 +1,43 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/widgets/hero_play_control.dart';
+import 'package:player/presentation/widgets/primary_play_button.dart';
 
 import 'helpers/e2e_api_client.dart';
 import 'helpers/login_helpers.dart';
+import 'helpers/playback_rig.dart' show pumpBounded;
 import 'helpers/streaming_helpers.dart';
 import 'helpers/test_bootstrap.dart';
+
+/// Why a test fails when the server has no file for the seeded movie.
+const _noSeededFile =
+    'No media file for E2E Test Movie: scripts/e2e/seed.sh seeds it, so '
+    'the server or the seed is broken';
+
+/// Pumps frames until [condition] holds, and fails naming [what] once
+/// [timeout] passes without it.
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  String what,
+  FutureOr<bool> Function() condition, {
+  Duration timeout = const Duration(seconds: 30),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!await condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('Timed out after $timeout waiting for $what');
+    }
+    await pumpBounded(
+      tester,
+      'a frame while waiting for $what',
+      () => tester.pump(const Duration(milliseconds: 250)),
+    );
+  }
+}
 
 /// E2E integration tests for P2P streaming functionality.
 ///
@@ -116,42 +148,6 @@ void main() {
     expect(success, isTrue, reason: 'Device pairing failed');
   }
 
-  /// Wait for the media library to load.
-  /// Returns true if loaded, false if timed out.
-  Future<bool> waitForMediaLibrary(
-    WidgetTester tester, {
-    int maxSeconds = 60,
-  }) async {
-    debugPrint('[P2P Streaming Test] Waiting for media library...');
-    for (var i = 0; i < maxSeconds; i++) {
-      await tester.pump(const Duration(seconds: 1));
-
-      // Look for movie grid, known empty-state messages, or any media content
-      final movieGrid = find.byType(GridView);
-      final noMoviesText = find.text('No movies yet');
-      final noShowsText = find.text('No TV shows yet');
-      final emptyLibraryMessage = find.text(
-        'Add content to your library to see it here',
-      );
-      final testMovieText = find.textContaining('E2E Test');
-
-      if (movieGrid.evaluate().isNotEmpty ||
-          noMoviesText.evaluate().isNotEmpty ||
-          noShowsText.evaluate().isNotEmpty ||
-          emptyLibraryMessage.evaluate().isNotEmpty ||
-          testMovieText.evaluate().isNotEmpty) {
-        debugPrint(
-          '[P2P Streaming Test] Media library loaded after $i seconds',
-        );
-        return true;
-      }
-    }
-    debugPrint(
-      '[P2P Streaming Test] Media library not loaded after $maxSeconds seconds',
-    );
-    return false;
-  }
-
   group('P2P Streaming E2E', () {
     testWidgets('Direct HTTP streaming works', (WidgetTester tester) async {
       debugPrint('[P2P Streaming Test] Starting direct HTTP streaming test');
@@ -168,14 +164,7 @@ void main() {
 
       // Get test media file ID
       final fileId = await streaming.getTestMediaFileId();
-      if (fileId == null) {
-        debugPrint(
-          '[P2P Streaming Test] Skipping direct streaming assertions: no media file found in E2E library',
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 100));
-        return;
-      }
+      if (fileId == null) fail(_noSeededFile);
       debugPrint('[P2P Streaming Test] Test media file ID: $fileId');
 
       // Start streaming session via GraphQL
@@ -342,14 +331,7 @@ void main() {
 
       // Get test media item ID
       final fileId = await streaming.getTestMediaFileId();
-      if (fileId == null) {
-        debugPrint(
-          '[P2P Streaming Test] Skipping candidates test: no media file found',
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 100));
-        return;
-      }
+      if (fileId == null) fail(_noSeededFile);
 
       // We need the media item ID, not the file ID.
       // The getTestMediaFileId() also stores the item ID internally,
@@ -511,14 +493,7 @@ void main() {
 
       // Get test media file ID
       final fileId = await streaming.getTestMediaFileId();
-      if (fileId == null) {
-        debugPrint(
-          '[P2P Streaming Test] Skipping direct streaming test: no media file found',
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 100));
-        return;
-      }
+      if (fileId == null) fail(_noSeededFile);
       debugPrint('[P2P Streaming Test] Test media file ID: $fileId');
 
       // Verify direct file stream endpoint works (HTTP path)
@@ -556,89 +531,77 @@ void main() {
       // Complete pairing
       await performPairing(tester);
 
-      // Verify test media exists in backend before asserting UI navigation.
+      // The seeded movie, which the source home must list.
       final streaming = StreamingTestHelper.fromEnvironment();
       await streaming.initialize();
       final fileId = await streaming.getTestMediaFileId();
-      if (fileId == null) {
-        debugPrint(
-          '[P2P Streaming Test] Skipping player navigation assertions: no test media exists',
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 100));
-        return;
-      }
+      if (fileId == null) fail(_noSeededFile);
+      final movieId = streaming.testMediaItemId;
+      if (movieId == null) fail('Found file $fileId but not its movie id');
 
-      final libraryLoaded = await waitForMediaLibrary(tester);
-      if (!libraryLoaded) {
-        debugPrint(
-          '[P2P Streaming Test] Skipping player navigation: media library UI did not render',
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pump(const Duration(milliseconds: 100));
-        return;
-      }
+      // The home list builds its rails lazily, so a rail below the hero
+      // exists only once the list has scrolled to it.
+      final homeList = find.byKey(const Key('home-list'));
+      await _pumpUntil(
+        tester,
+        'the source home',
+        () => homeList.evaluate().isNotEmpty,
+        timeout: const Duration(seconds: 60),
+      );
+      final poster = find.byKey(ValueKey('source-poster-$movieId'));
+      await _pumpUntil(tester, "E2E Test Movie's poster on the home", () async {
+        if (poster.evaluate().isNotEmpty) return true;
+        await tester.drag(homeList, const Offset(0, -300));
+        return false;
+      }, timeout: const Duration(seconds: 60));
+      await tester.ensureVisible(poster.first);
+      await pumpBounded(tester, 'a frame after scrolling to the poster', () {
+        return tester.pump(const Duration(milliseconds: 100));
+      });
+      await tester.tap(poster.first);
 
-      // Find and tap on test movie
-      final testMovieFinder = find.textContaining('E2E Test');
-      if (testMovieFinder.evaluate().isEmpty) {
-        // Try finding any movie
-        debugPrint(
-          '[P2P Streaming Test] E2E Test movie not found, looking for any movie',
-        );
-        final anyMovieCard = find.byType(GridView);
-        expect(anyMovieCard, findsOneWidget);
+      final playButton = find.descendant(
+        of: find.byType(HeroPlayControl),
+        matching: find.byType(PrimaryPlayButton),
+      );
+      // Play mounts disabled: SmartPlayButton picks its file asynchronously
+      // and only then gives the button an onPressed. A tap before that does
+      // nothing, so the player never opens; wait for the enabled button.
+      await _pumpUntil(
+        tester,
+        "the movie page's enabled Play button",
+        () =>
+            playButton.evaluate().isNotEmpty &&
+            tester.widget<PrimaryPlayButton>(playButton.first).onPressed !=
+                null,
+      );
+      await tester.tap(playButton.first);
 
-        // Tap on first item in grid
-        final firstCard = find.descendant(
-          of: anyMovieCard,
-          matching: find.byType(InkWell).first,
-        );
-        if (firstCard.evaluate().isNotEmpty) {
-          await tester.tap(firstCard);
-          await tester.pump(const Duration(seconds: 2));
-        }
-      } else {
-        await tester.tap(testMovieFinder.first);
-        await tester.pump(const Duration(seconds: 2));
-      }
+      final player = find.byType(PlayerScreen);
+      await _pumpUntil(
+        tester,
+        'the player screen',
+        () => player.evaluate().isNotEmpty,
+      );
+      debugPrint('[P2P Streaming Test] Player screen mounted');
 
-      // Wait for movie detail screen
-      await tester.pump(const Duration(seconds: 3));
-
-      // Look for play button
-      final playButton = find.byIcon(Icons.play_arrow);
-      if (playButton.evaluate().isNotEmpty) {
-        debugPrint('[P2P Streaming Test] Found play button, tapping...');
-        await tester.tap(playButton.first);
-        await tester.pump(const Duration(seconds: 2));
-
-        // Wait for player screen to load
-        for (var i = 0; i < 30; i++) {
-          await tester.pump(const Duration(seconds: 1));
-
-          // Look for loading indicator or player controls
-          final loadingIndicator = find.byType(CircularProgressIndicator);
-          if (loadingIndicator.evaluate().isEmpty) {
-            // Player loaded
-            debugPrint(
-              '[P2P Streaming Test] Player loaded after ${i + 1} seconds',
-            );
-            break;
-          }
-        }
-      }
-
-      // Navigate back
-      final backButton = find.byTooltip('Back');
-      if (backButton.evaluate().isNotEmpty) {
-        await tester.tap(backButton);
-        await tester.pump(const Duration(seconds: 1));
-      }
+      // Back to the movie page, which disposes the player.
+      await Navigator.of(tester.element(player)).maybePop();
+      await _pumpUntil(
+        tester,
+        'the movie page after leaving the player',
+        () => player.evaluate().isEmpty && playButton.evaluate().isNotEmpty,
+      );
 
       // Stop app
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 100));
+      await pumpBounded(
+        tester,
+        'a frame while unmounting the app',
+        () => tester.pumpWidget(const SizedBox.shrink()),
+      );
+      await pumpBounded(tester, 'a frame after unmounting the app', () {
+        return tester.pump(const Duration(milliseconds: 100));
+      });
 
       debugPrint('[P2P Streaming Test] Player navigation test completed');
     });

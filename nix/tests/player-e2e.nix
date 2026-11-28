@@ -53,7 +53,10 @@ let
     name = "player-e2e-client-env";
     nativeBuildInputs = [ ciPlayer.flutterShim ciPlayer.flutter ]
       ++ ciPlayer.linuxBuildInputs
-      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run ];
+      # ffmpeg writes the clips playback_test.dart plays; openbox is the
+      # window manager its fullscreen test needs under Xvfb; gdb prints the
+      # app's native stacks if run-tests.sh's watchdog finds it hung.
+      ++ [ pkgs.curl pkgs.jq pkgs.xvfb-run pkgs.ffmpeg pkgs.openbox pkgs.gdb ];
     buildCommand = ''
       envFile=$out
       unset HOME TMPDIR TMP TEMP TEMPDIR NIX_BUILD_TOP NIX_BUILD_CORES \
@@ -92,6 +95,8 @@ let
     export E2E_ADMIN_EMAIL=${adminEmail}
     export E2E_ADMIN_PASSWORD=${adminPassword}
     export E2E_TEST_TARGET=integration_test/all_tests.dart
+    # run-tests.sh fails the run when fewer playback tests pass than it pins.
+    export ASSERT_TEST_COUNT=${../../scripts/ci/assert-test-count.sh}
     exec bash ${e2eScripts}/run-tests.sh
   '';
 
@@ -262,8 +267,10 @@ pkgs.testers.nixosTest {
         client.wait_for_unit("multi-user.target", timeout=left())
 
         with subtest("player integration tests"):
-            # The suite takes about 150 s after a few minutes of app build;
-            # a hang costs 20 minutes, not an hour.
+            # Locally (2026-11-28) this subtest took 250 s: about 85 s of app
+            # build, then about 165 s of `flutter test` (run-tests.sh's 600 s
+            # watchdog covers that part). Hosted runners are slower. A hang
+            # costs 20 minutes, not an hour.
             rc, _ = client.execute("${clientRunLogged}", timeout=1200)
             assert rc == 0, f"player integration tests failed (exit {rc})"
     except Exception:

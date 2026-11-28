@@ -913,6 +913,46 @@ so nothing in the test resolves a host name. If a lookup failure comes back,
 something new is resolving a name: find it in the client log before
 rerunning.
 
+**`Timed out after 0:00:30.000000 waiting for the player screen`** in
+`p2p_streaming ... Player can navigate to video and start playback`. Seen
+once on a hosted runner on 2026-11-28, and reproduced locally with the client
+VM on one core: after the movie page's `MovieDetail` query the log has
+nothing from the player at all (no `StreamingCandidates`, no `LocalProxy`).
+The test tapped Play while it was still disabled: `SmartPlayButton` picks its
+file asynchronously and gives the button its `onPressed` a frame later. The
+test now waits for the enabled button. If it comes back, check first whether
+the tap reached a disabled control again.
+
+**`no frame within 0:00:10.000000 for ...`** failing a `playback` or
+`p2p_streaming` test. Thrown by `pumpBounded` in
+`player/integration_test/helpers/playback_rig.dart`, which every pump in the
+playback tests, and in `p2p_streaming_test.dart`'s waits, goes through: the pump it wraps did not
+complete within 10 s. It guards a flutter_test race. When test code lands a
+pump between the engine's `beginFrame` and `drawFrame`, the live test binding
+skips the frame but leaves the scheduler believing one is still scheduled,
+so every later `scheduleFrame()` is a no-op and the pump would wait forever.
+`pumpBounded` starts each pump from a timer turn, which cannot run inside that
+gap, so a hit means something else stopped frames. The message names the step
+and carries the scheduler's lifecycle, `framesEnabled`, `hasScheduledFrame`
+and phase, then the last 20 mpv log lines: read those before rerunning. Not
+seen in CI yet; written down so there is something to look up.
+
+**`flutter test still running after 600s; native stacks of the app`**, then
+gdb backtraces and exit 137. The watchdog in `scripts/e2e/run-tests.sh`: the
+app froze in a way no Dart timeout can catch (a blocked GTK thread stops Dart
+timers too), so it printed every thread of `bundle/mydia-player` and killed
+it. When no stacks are printed and the next line is `flutter test did not
+exit without its app; killing the run`, there was no app to look at: the
+flutter tool itself hung, in the build or launch before the first test, and
+its own output above is the place to read. Otherwise, look first at the main
+thread's stack. A `g_mutex_lock` inside
+`video_output.cc`'s software redraw is the use-after-free that
+`MYDIA_PATCHES.md` (in `player/packages/media_kit_video/`) says is fixed,
+come back. For a native crash or freeze during a playback teardown, the first
+suspect is the `TextureSW` bare-pointer hazard that same file documents: the
+raster thread can copy pixels from a buffer dispose has already freed. Not
+seen in CI yet; written down so there is something to look up.
+
 ## Player (`Test / Player`)
 
 ### A Hive test times out after 30 seconds, and only in CI

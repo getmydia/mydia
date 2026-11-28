@@ -1,11 +1,12 @@
 name: CI / Player Desktop
 
-# The player jobs Nix CI does not cover: the Windows and macOS builds and the
-# Flatpak checks. Test / Player, Build / Web, Build / Linux, Check / Web icons
-# and Build / Android live in ci.yml (.github/ci.md, "ci.yml: the flake-check
-# graph"), so nothing here is a required context and a path filter is safe:
-# a workflow the filter skips reports nothing, which would leave a required
-# check pending forever, and none of these is required.
+# The player jobs Nix CI does not cover: the Windows and macOS builds, the
+# macOS native tests and the Flatpak checks. Test / Player, Build / Web,
+# Build / Linux, Check / Web icons and Build / Android live in ci.yml
+# (.github/ci.md, "ci.yml: the flake-check graph"), so nothing here is a
+# required context and a path filter is safe: a workflow the filter skips
+# reports nothing, which would leave a required check pending forever, and
+# none of these is required.
 #
 # The paths are what these builds read:
 #
@@ -201,6 +202,101 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
+          retention-days: 7
+
+  # The macOS native tests: RunnerTests (MpvSurfacePlugin, WindowPlugin and
+  # the rest of macos/RunnerTests) through xcodebuild. Not a required
+  # context, like everything in this workflow.
+  #
+  # integration_test/mac_surface_test.dart cannot run here. The hosted
+  # runner is a macOS VM whose only GPU is the Apple Paravirtual device, and
+  # both video outputs kill the app on it: gpu-next segfaults in MoltenVK
+  # (vkBindImageMemory, inside AppleParavirtGPUMetalIOGPUFamily) on its
+  # first texture upload, and media_kit's texture path finds no accelerated
+  # OpenGL pixel format and force-unwraps it. Every case in that file skips
+  # on that GPU, so it stays a run-on-a-Mac test (player/docs/playback.md,
+  # "The integration test").
+  test-macos-native:
+    name: Test / macOS native
+    # The same image and Xcode as the macOS build leg above.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: player/.fvmrc
+          channel: 'stable'
+
+      - name: Cache pub dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ env.PLAYER_PATH }}/.dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run code generation
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: flutter pub run build_runner build
+
+      # --config-only writes macos/Flutter/ephemeral/Flutter-Generated.xcconfig
+      # (target lib/main.dart, the app RunnerTests is hosted in) and installs
+      # the pods, without building. xcodebuild then builds the Debug app,
+      # its Rust core and the test bundle into flutter's own build roots.
+      - name: Run RunnerTests
+        working-directory: ${{ env.PLAYER_PATH }}
+        run: |
+          flutter build macos --debug --config-only
+          build_dir="$PWD/build/macos"
+          xcodebuild test \
+            -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -destination "platform=macOS,arch=$(uname -m)" \
+            -derivedDataPath "$build_dir" \
+            -resultBundlePath "$RUNNER_TEMP/RunnerTests.xcresult" \
+            "OBJROOT=$build_dir/Build/Intermediates.noindex" \
+            "SYMROOT=$build_dir/Build/Products" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            2>&1 | tee "$RUNNER_TEMP/runner-tests.log"
+
+      # The host app's NSLog lines go to the unified log, and a host app that
+      # dies under a test leaves its stack only in a crash report.
+      - name: Collect the app log
+        if: failure()
+        run: |
+          log show --last 45m --style compact \
+            --predicate 'process == "Mydia Player"' \
+            > "$RUNNER_TEMP/mac-app.log" 2>&1 || true
+          mkdir -p "$RUNNER_TEMP/crash-reports"
+          find "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports \
+            -name 'Mydia Player*' -exec cp {} "$RUNNER_TEMP/crash-reports/" \; 2>/dev/null || true
+          ls -l "$RUNNER_TEMP/crash-reports"
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-macos-native-logs
+          path: |
+            ${{ runner.temp }}/mac-app.log
+            ${{ runner.temp }}/crash-reports
+            ${{ runner.temp }}/runner-tests.log
+            ${{ runner.temp }}/RunnerTests.xcresult
+          if-no-files-found: ignore
           retention-days: 7
 
   flatpak-validate:

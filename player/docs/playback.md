@@ -794,7 +794,18 @@ Two more rules follow from the same `DispatchQueue.main.sync`:
 real `Player`, the plugin and the shipped libmpv against local clips:
 HDR10 through `gpu-next` with a PQ target, SDR, fill, text subtitles,
 fullscreen, closing mid-playback, a source switch, ten open-and-close cycles,
-and the escape hatch. It runs on a Mac only and is not part of CI. Prepare
+and the escape hatch. It runs on a Mac only and is not part of CI.
+
+CI has no macOS runner this file can use. The `Test / macOS native` job runs
+on a hosted virtual machine whose only GPU is Apple's paravirtual device, and
+both video outputs kill the app there: gpu-next segfaults inside MoltenVK on
+its first texture upload, and media_kit's texture path finds no accelerated
+OpenGL pixel format and traps in `OpenGLHelpers.createPixelFormat`. The file
+detects that GPU and skips every case, so running it on such a machine is
+harmless and tests nothing. What the job does run is `RunnerTests`
+(`macos/RunnerTests`, through `xcodebuild test`), which covers the surface
+plugin and the window plugin without playing video. Linux playback is the
+only real playback CI covers (`testing.md`, "The playback E2E"). Prepare
 all the fixtures first: the generator writes every clip but `sdr_subs.mkv`,
 which the second step muxes (through `nix shell nixpkgs#ffmpeg-full` when no
 local ffmpeg exists, as the generator does):

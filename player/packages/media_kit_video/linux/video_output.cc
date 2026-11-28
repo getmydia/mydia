@@ -100,6 +100,14 @@ static void video_output_restore_egl_context(VideoOutput* self,
 
 static void video_output_dispose(GObject* object) {
   VideoOutput* self = VIDEO_OUTPUT(object);
+  // MYDIA PATCH: a queued S/W redraw holds a reference (see the update
+  // callback below), so a redraw queued while this runs keeps the object
+  // alive past it and dispose runs again when that redraw lets go. Only the
+  // first run releases anything.
+  if (self->destroyed) {
+    G_OBJECT_CLASS(video_output_parent_class)->dispose(object);
+    return;
+  }
   self->destroyed = TRUE;
   
   // Make sure that no more callbacks are invoked from mpv.
@@ -152,12 +160,19 @@ static void video_output_dispose(GObject* object) {
     }
   }
   
-  g_mutex_clear(&self->mutex);
   G_OBJECT_CLASS(video_output_parent_class)->dispose(object);
+}
+
+// MYDIA PATCH: the mutex outlives dispose, since a queued S/W redraw may
+// still run after it (it returns at once on |destroyed|).
+static void video_output_finalize(GObject* object) {
+  g_mutex_clear(&VIDEO_OUTPUT(object)->mutex);
+  G_OBJECT_CLASS(video_output_parent_class)->finalize(object);
 }
 
 static void video_output_class_init(VideoOutputClass* klass) {
   G_OBJECT_CLASS(klass)->dispose = video_output_dispose;
+  G_OBJECT_CLASS(klass)->finalize = video_output_finalize;
 }
 
 static void video_output_init(VideoOutput* self) {
@@ -365,7 +380,16 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
         mpv_render_context_set_update_callback(
             self->render_context,
             [](void* data) {
-              gdk_threads_add_idle(
+              // MYDIA PATCH: upstream queued the redraw with a bare pointer,
+              // so one still queued when the output was disposed ran on
+              // freed memory: it read |destroyed| from there and could lock
+              // a freed mutex, freezing the GTK thread for good (closing the
+              // player just after opening it hit this). The redraw now owns a
+              // reference until it has run. mpv calls this under the lock
+              // that dispose's mpv_render_context_set_update_callback(NULL)
+              // takes, so it never runs once dispose is past that call.
+              gdk_threads_add_idle_full(
+                  G_PRIORITY_DEFAULT_IDLE,
                   [](gpointer data) -> gboolean {
                     VideoOutput* self = (VideoOutput*)data;
                     if (self->destroyed) {
@@ -392,7 +416,7 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
                     g_mutex_unlock(&self->mutex);
                     return FALSE;
                   },
-                  data);
+                  g_object_ref(data), g_object_unref);
             },
             self);
       }
