@@ -69,7 +69,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
 
       choose_files(view)
       assert has_element?(view, "#file-choice-modal")
-      render_async(view)
+      render_async(view, 2_000)
 
       assert has_element?(view, "#file-choice-modal #file-choice-tree-file-0[checked]")
       assert has_element?(view, "#file-choice-modal #file-choice-tree-file-1[checked]")
@@ -82,7 +82,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
       {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")
       open_with_release(view)
       choose_files(view)
-      render_async(view)
+      render_async(view, 2_000)
 
       # Untick the first season; the second season's episode stays.
       view
@@ -112,7 +112,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
       {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")
       open_with_release(view)
       choose_files(view)
-      render_async(view)
+      render_async(view, 2_000)
 
       # Clear everything, then tick only the .nfo.
       view |> element("#file-choice-tree-all") |> render_click()
@@ -133,7 +133,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
       {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")
       open_with_release(view)
       choose_files(view)
-      render_async(view)
+      render_async(view, 2_000)
 
       view |> element("#file-choice-cancel") |> render_click()
 
@@ -150,7 +150,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
       open_with_release(view)
       choose_files(view)
 
-      capture_log(fn -> render_async(view) end)
+      capture_log(fn -> render_async(view, 2_000) end)
 
       assert has_element?(view, "#file-choice-auto")
       refute has_element?(view, "#file-choice-confirm")
@@ -184,7 +184,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
 
       view |> element("#file-choice-cancel") |> render_click()
 
-      render_async(view)
+      render_async(view, 2_000)
       refute has_element?(view, "#file-choice-modal")
       assert has_element?(view, "#manual-search-modal")
     end
@@ -203,7 +203,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
         })
 
       choose_files(view)
-      capture_log(fn -> render_async(view) end)
+      capture_log(fn -> render_async(view, 2_000) end)
 
       assert has_element?(view, "#file-choice-error", "Already downloading")
       refute has_element?(view, "#file-choice-auto")
@@ -222,7 +222,7 @@ defmodule MydiaWeb.MediaLive.Show.FileChoiceTest do
       {:ok, view, _html} = live(ctx.conn, ~p"/media/#{ctx.show.id}")
       open_with_release(view)
       choose_files(view)
-      render_async(view)
+      render_async(view, 2_000)
 
       # Another grab of the same release starts while the dialog is open.
       {:ok, _other} =
